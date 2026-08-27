@@ -1,0 +1,23 @@
+# Project TODO
+
+- [x] Establish role-aware access for operations lead and team-member workflows, including server-bound profile attribution and a personal task-queue view.
+- [x] Define and apply the relational data model for team members, task templates, daily tasks, task activity, rota shifts, availability, handovers, issues, readiness pulses, and performance notes.
+- [x] Create secure backend procedures with validation for management and team actions.
+- [x] Build a responsive dashboard shell with refined navigation, user context, and accessible mobile behaviour.
+- [x] Build the Today command board with checklist progress, overdue and blocked work, on-call ownership, latest handovers, and team-health summary.
+- [x] Implement reusable daily checklist templates and auditable daily task completion, blocking, comments, and history.
+- [x] Build a weekly rota planner with shifts, leave/unavailability, on-call allocation, cover gaps, and distribution indicators.
+- [x] Build structured handovers with priorities, ownership, deadlines, acknowledgement, resolution, and searchable records.
+- [x] Build the operational issue and escalation log with impact, ownership, next action, resolution, and recurring-cause tracking.
+- [x] Build daily readiness pulses for workload capacity, risks, and support needs.
+- [x] Build staff directory and performance views for completion, timeliness, blocked work, rota/on-call distribution, coaching notes, and recognition.
+- [x] Add management controls for creating and maintaining team members, templates, tasks, shifts, handovers, issues, and performance notes.
+- [x] Provide loading, empty, validation, confirmation, and error states across desktop and mobile interfaces.
+- [x] Keep the workspace free of fabricated operational records, customer reviews, ratings, or testimonials; it opens as a pristine live workspace.
+- [x] Write and run Vitest coverage for core workflow and calculation logic.
+- [x] Verify responsive visual quality and key task flows, resolve identified defects, and create the release checkpoint.
+- [ ] Replace the Manus-specific authentication dependency with external-host-compatible work-email authentication.
+- [ ] Configure the application owner and approved-team work-email policy, starting with bc@swanstravel.com.
+- [ ] Add external-host deployment configuration and environment-variable documentation for Vercel.
+- [ ] Export the production-ready project to the user’s GitHub repository.
+- [ ] Configure and verify the GitHub-connected Vercel deployment.
