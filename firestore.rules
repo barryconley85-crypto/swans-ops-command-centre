@@ -1,0 +1,31 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function lead() { return signedIn() && request.auth.token.email == 'bc@swanstravel.com'; }
+    function approved() { return signedIn() && (lead() || exists(/databases/$(database)/documents/ops_invites/$(request.auth.token.email))); }
+    function member() { return approved() && exists(/databases/$(database)/documents/ops_members/$(request.auth.uid)); }
+    match /ops_invites/{email} {
+      allow get: if signedIn() && (lead() || request.auth.token.email == email);
+      allow list, create, update, delete: if lead();
+    }
+    match /ops_members/{memberId} {
+      allow read: if member() || lead();
+      allow create: if signedIn() && memberId == request.auth.uid && approved() && request.resource.data.userId == request.auth.uid;
+      allow update: if lead() || (member() && memberId == request.auth.uid);
+      allow delete: if lead();
+    }
+    match /ops_tasks/{taskId} {
+      allow read: if member();
+      allow create, delete: if lead();
+      allow update: if lead() || (member() && resource.data.assignedUserId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'blockedReason', 'completedAt', 'updatedAt']));
+    }
+    match /ops_task_activity/{activityId} { allow read: if member(); allow create: if member() && request.resource.data.actorUserId == request.auth.uid; allow update, delete: if false; }
+    match /ops_templates/{templateId} { allow read: if member(); allow write: if lead(); }
+    match /ops_rota/{rotaId} { allow read: if member(); allow write: if lead(); }
+    match /ops_handovers/{handoverId} { allow read, create: if member(); allow update: if member(); allow delete: if lead(); }
+    match /ops_issues/{issueId} { allow read, create: if member(); allow update: if member(); allow delete: if lead(); }
+    match /ops_readiness/{pulseId} { allow read: if member(); allow create, update: if member() && request.resource.data.userId == request.auth.uid; allow delete: if lead(); }
+    match /ops_performance_notes/{noteId} { allow read: if member(); allow write: if lead(); }
+  }
+}
