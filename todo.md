@@ -28,7 +28,7 @@
 - [x] Publish the Firestore rules and live-validate the collaborative operations release on desktop and mobile viewport capture.
 - [ ] Configure a free-tier external email sender by setting `RESEND_API_KEY` and `TASK_EMAIL_FROM` in Vercel to activate task-assignment emails alongside the working in-app alerts.
 - [x] Record the authenticated person who actually completes each task, retaining their name and completion timestamp separately from the original assignee.
-- [ ] Add rota edit and removal controls, including a safeguard and clear recovery flow for duplicate duties on the same person and date.
-- [ ] Investigate and correct the duplicate duty recorded on 4 September without disturbing unrelated rota entries.
+- [x] Add rota edit and removal controls, including a safeguard and clear recovery flow for duplicate duties on the same person and date.
+- [x] Investigate and correct the duplicate duty recorded on 4 September without disturbing unrelated rota entries.
 - [ ] Add an every-day 17:00 end-of-day report showing completed and outstanding tasks for the operations lead.
 - [ ] Configure and validate the no-cost email delivery route for the scheduled end-of-day report.

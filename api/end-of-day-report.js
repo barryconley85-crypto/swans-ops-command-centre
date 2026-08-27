@@ -45,8 +45,8 @@ async function sentAlready(accessToken, workDate) {
   return decodeFields((await response.json()).fields).status === "sent";
 }
 
-async function markSent(accessToken, workDate, totals) {
-  const fields = { reportDate: { stringValue: workDate }, status: { stringValue: "sent" }, sentAt: { integerValue: String(Date.now()) }, completedCount: { integerValue: String(totals.completed) }, outstandingCount: { integerValue: String(totals.outstanding) } };
+async function markSent(accessToken, workDate, totals, emailId) {
+  const fields = { reportDate: { stringValue: workDate }, status: { stringValue: "sent" }, sentAt: { integerValue: String(Date.now()) }, completedCount: { integerValue: String(totals.completed) }, outstandingCount: { integerValue: String(totals.outstanding) }, ...(emailId ? { emailId: { stringValue: emailId } } : {}) };
   const response = await fetch(`${firestoreBaseUrl}/ops_end_of_day_reports/${workDate}`, { method: "PATCH", headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify({ fields }) });
   if (!response.ok) throw new Error("The report-delivery marker could not be saved.");
 }
@@ -74,9 +74,10 @@ export default async function handler(request, response) {
     if (await sentAlready(accessToken, workDate)) return response.status(200).json({ reportStatus: "already_sent", workDate });
     const [tasks, members] = await Promise.all([fetchTasks(accessToken, workDate), fetchMembers(accessToken)]);
     const report = reportContent(workDate, tasks, members);
-    const emailResponse = await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ from: process.env.TASK_EMAIL_FROM, to: [leadEmail], subject: report.subject, text: report.text }) });
+    const emailResponse = await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json", "Idempotency-Key": `swans-eod/${workDate}` }, body: JSON.stringify({ from: process.env.TASK_EMAIL_FROM, to: [leadEmail], subject: report.subject, text: report.text }) });
     if (!emailResponse.ok) throw new Error("The email provider could not accept the end-of-day report.");
-    await markSent(accessToken, workDate, report.totals);
+    const email = await emailResponse.json();
+    await markSent(accessToken, workDate, report.totals, email.id);
     return response.status(200).json({ reportStatus: "sent", workDate, ...report.totals });
   } catch (error) {
     return response.status(502).json({ error: error instanceof Error ? error.message : "The end-of-day report could not be sent." });
