@@ -27,6 +27,8 @@ import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 import { trpc } from "@/lib/trpc";
+import { activePresence } from "@/lib/presence";
+import { InitialsCircle } from "@/components/ColleagueMarker";
 import { toast } from "sonner";
 
 const menuItems = [
@@ -97,6 +99,8 @@ function DashboardLayoutContent({
   setSidebarWidth,
 }: DashboardLayoutContentProps) {
   const { user, logout } = useAuth();
+  const presence = trpc.operations.presence.list.useQuery();
+  const activeTeam = activePresence(presence.data || []);
   const [location, setLocation] = useLocation();
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === "collapsed";
@@ -194,6 +198,7 @@ function DashboardLayoutContent({
           </SidebarContent>
 
           <SidebarFooter className="border-t border-[#E6ECE8] p-3">
+            {!isCollapsed ? <div className="mb-3 rounded-xl bg-[#EEF4F1] px-2.5 py-2"><div className="flex items-center justify-between"><p className="text-[9px] font-bold uppercase tracking-[0.11em] text-[#628176]">Active now</p><span className="text-[10px] font-semibold text-[#3D7460]">{activeTeam.length}</span></div><div className="mt-2 flex -space-x-1.5">{activeTeam.slice(0, 5).map((member: any) => <InitialsCircle key={member.userId} member={member} size="sm" active />)}{activeTeam.length > 5 ? <span className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-[#EEF4F1] bg-[#D9E7E0] text-[8px] font-bold text-[#41675A]">+{activeTeam.length - 5}</span> : null}{!activeTeam.length ? <span className="text-[11px] text-[#718079]">No one active just now</span> : null}</div></div> : null}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="flex items-center gap-3 rounded-lg px-1 py-1 hover:bg-accent/50 transition-colors w-full text-left group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
@@ -213,6 +218,7 @@ function DashboardLayoutContent({
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={() => setLocation("/profile")} className="cursor-pointer"><CircleUserRound className="mr-2 h-4 w-4" /><span>My initials & colour</span></DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={logout}
                   className="cursor-pointer text-destructive focus:text-destructive"

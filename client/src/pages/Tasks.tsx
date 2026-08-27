@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { ColleagueMarker } from "@/components/ColleagueMarker";
 import { trpc } from "@/lib/trpc";
 import { compactTime, dateTitle, labelForStatus, localDateKey, priorityStyle, statusStyle } from "@/lib/operations";
 import { format } from "date-fns";
@@ -66,7 +67,7 @@ function TaskDetail({ task, selectedDate }: { task: TaskRow; selectedDate: strin
           <DialogDescription className="mt-2 text-sm leading-6 text-[#66706D]">{task.detail || "No additional instructions were added to this task."}</DialogDescription>
         </div>
         <div className="grid gap-5 px-6 py-5 sm:grid-cols-3">
-          <div><p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#87918D]">Assignee</p><p className="mt-1.5 text-sm font-medium text-[#28332F]">{task.assignee?.displayName || "Unassigned"}</p></div>
+          <div><p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#87918D]">Assignee</p><div className="mt-1.5"><ColleagueMarker member={task.assignee} /></div></div>
           <div><p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#87918D]">Due</p><p className="mt-1.5 text-sm font-medium text-[#28332F]">{compactTime(task.dueAt)}</p></div>
           <div><p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#87918D]">Progress</p><p className="mt-1.5 text-sm font-medium capitalize text-[#28332F]">{labelForStatus(task.status)}</p></div>
         </div>

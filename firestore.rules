@@ -17,7 +17,7 @@ service cloud.firestore {
     match /ops_members/{memberId} {
       allow read: if member() || lead();
       allow create: if signedIn() && memberId == request.auth.uid && approved() && request.resource.data.userId == request.auth.uid;
-      allow update: if lead() || (member() && memberId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt']));
+      allow update: if lead() || (member() && memberId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['initials', 'colour', 'updatedAt']));
       allow delete: if lead();
     }
     match /ops_tasks/{taskId} {
@@ -45,6 +45,7 @@ service cloud.firestore {
       allow delete: if lead();
     }
     match /ops_shift_prompts/{promptId} { allow read: if member(); allow create, update: if onCallResponder() && request.resource.data.userId == request.auth.uid; allow delete: if lead(); }
+    match /ops_presence/{userId} { allow read: if member(); allow create, update: if member() && userId == request.auth.uid && request.resource.data.userId == request.auth.uid; allow delete: if false; }
     match /ops_report_views/{viewId} { allow read, write: if lead(); }
   }
 }
