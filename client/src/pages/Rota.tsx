@@ -32,7 +32,7 @@ export default function Rota() {
   const create = trpc.operations.rota.create.useMutation({ onSuccess: async () => { await rota.refetch(); setOpen(false); toast.success("Rota assignment saved."); }, onError: error => toast.error(error.message) });
   const remove = trpc.operations.rota.remove.useMutation({ onSuccess: async () => { await rota.refetch(); toast.success("Rota assignment removed."); }, onError: error => toast.error(error.message) });
   const days = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(new Date(`${weekStart}T12:00:00`), index)), [weekStart]);
-  const activeMembers = team.data?.filter(member => member.status === "active") ?? [];
+  const activeMembers = team.data?.filter(member => member.status !== "inactive") ?? [];
   const assignmentFor = (memberId: number, date: Date) => rota.data?.assignments.filter(item => item.teamMemberId === memberId && item.workDate === localDateKey(date)) ?? [];
   const onCallGaps = days.filter(day => !(rota.data?.assignments.some(item => item.workDate === localDateKey(day) && item.assignmentType === "on_call")));
   const shiftGaps = days.filter(day => !(rota.data?.assignments.some(item => item.workDate === localDateKey(day) && ["early", "core", "late"].includes(item.assignmentType))));
