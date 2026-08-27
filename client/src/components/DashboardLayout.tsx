@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { WorkEmailGate } from "@/components/WorkEmailGate";
 import { useIsMobile } from "@/hooks/useMobile";
-import { AlertTriangle, BarChart3, Bell, CalendarDays, CheckCheck, CircleUserRound, ClipboardCheck, HandHeart, Headphones, HeartPulse, LayoutDashboard, LogOut, MessageCircleMore, PanelLeft, Users, Waypoints } from "lucide-react";
+import { AlertTriangle, BarChart3, Bell, CalendarDays, CheckCheck, CircleUserRound, ClipboardCheck, HandHeart, Headphones, HeartPulse, History, LayoutDashboard, LogOut, MessageCircleMore, PanelLeft, Users, Waypoints } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -44,6 +44,7 @@ const menuItems = [
   { icon: BarChart3, label: "Reports", path: "/reports" },
   { icon: MessageCircleMore, label: "Team chat", path: "/chat" },
   { icon: Users, label: "Team & performance", path: "/people" },
+  { icon: History, label: "Activity history", path: "/activity", leadOnly: true },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
@@ -176,7 +177,7 @@ function DashboardLayoutContent({
 
           <SidebarContent className="gap-0">
             <SidebarMenu className="px-2 py-2">
-              {menuItems.map(item => {
+              {menuItems.filter(item => !item.leadOnly || user?.isSuperuser).map(item => {
                 const isActive = location === item.path;
                 return (
                   <SidebarMenuItem key={item.path}>

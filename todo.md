@@ -57,3 +57,9 @@
 - [x] Run a live mobile cross-workflow health audit across the authenticated operational routes and document any remaining responsive or functional defects.
 - [x] Exercise and precisely clean up labelled end-to-end QA records for tasks, handovers, issues, on-call, Help & cover, readiness and chat; confirm the rota add/edit/remove controls against the current and prior validated schedule checks.
 - [x] Check the remaining safe My shift, shift check, quick on-call, reports and people-management controls on desktop and mobile, then append only evidenced outcomes to the QA history.
+- [x] Create a complete owner handover showing the production hosting, source repository, Firebase services, storage locations, security controls and recovery responsibilities.
+- [x] Document the current lead-controlled Firebase Console recovery route and the secure design requirements for a future in-app password-recovery control, without exposing or storing colleagues’ passwords in the application.
+- [x] Compare no-cost daily-report delivery alternatives and document exactly which security configuration each option requires before activating any email automation.
+- [x] Add a transparent, role-respecting operational activity history for logins and material workspace changes, avoiding surveillance-style usage tracking.
+- [ ] Add an in-app lead-only password reset or temporary-password control after a dedicated Firebase Admin service-account credential is stored securely in Vercel.
+- [ ] Select and activate either the existing Vercel email route or a Google-owned scheduled script for the 17:00 end-of-day report.
