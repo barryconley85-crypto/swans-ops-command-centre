@@ -32,3 +32,10 @@
 - [x] Investigate and correct the duplicate duty recorded on 4 September without disturbing unrelated rota entries.
 - [ ] Add an every-day 17:00 end-of-day report showing completed and outstanding tasks for the operations lead.
 - [ ] Configure and validate the no-cost email delivery route for the scheduled end-of-day report.
+- [ ] Build a report centre with productivity, stale-work, task-assurance, handover, issue, readiness, rota, on-call, absence, coverage and performance reports based only on live operational data.
+- [ ] Add lead-only custom report controls for date ranges, report filters, saved views and CSV export without exposing staff data to unauthorised users.
+- [ ] Add a superuser administration area for the lead to create, edit, activate/deactivate and safely remove team-member profiles.
+- [ ] Define and enforce role permissions for lead, operations manager, dispatcher and read-only viewer accounts across the workspace.
+- [ ] Add holiday as a rota availability type with dates, notes and coverage impact.
+- [ ] Add rota coverage and absence insights to highlight unstaffed operational shifts, missing on-call cover and holiday conflicts.
+- [ ] Add a streamlined on-call mobile entry route with minimal fields, rapid issue capture, allocation and clear follow-up status.

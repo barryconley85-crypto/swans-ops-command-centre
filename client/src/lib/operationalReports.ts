@@ -1,0 +1,79 @@
+export type ReportRow = Record<string, string | number>;
+export type OperationalReport = { id: string; label: string; category: string; description: string; columns: string[]; rows: ReportRow[]; emptyMessage: string };
+export type ReportFilter = { rangeStart: string; rangeEnd: string; asOf?: number };
+
+const dateInRange = (date: string | null | undefined, start: string, end: string) => Boolean(date && date >= start && date <= end);
+const titleCase = (value: unknown) => String(value || "not set").replace(/_/g, " ").replace(/\b\w/g, letter => letter.toUpperCase());
+const daysBetween = (start: string, end: string) => { const dates: string[] = []; const date = new Date(`${start}T12:00:00`); const finish = new Date(`${end}T12:00:00`); while (date <= finish) { dates.push(date.toISOString().slice(0, 10)); date.setDate(date.getDate() + 1); } return dates; };
+const daysOld = (updatedAt: number | null | undefined, now: number) => updatedAt ? Math.max(0, Math.floor((now - updatedAt) / 86_400_000)) : "not recorded";
+const unique = <T,>(values: T[]) => values.filter((value, index) => values.indexOf(value) === index);
+
+const definitions = [
+  ["risk-radar", "Leadership risk radar", "Leadership", "Combined operational risk across work, cover, handovers, issues and on-call actions."],
+  ["daily-control", "Daily operational summary", "Daily control", "Completed, open, blocked and overdue work in the selected window."],
+  ["outstanding-work", "Outstanding & overdue work", "Task control", "Outstanding work ordered by risk, owner and deadline."],
+  ["blocked-work", "Blocked-work register", "Task control", "Current recorded blockers and the work they are affecting."],
+  ["completion-evidence", "Completion-evidence exceptions", "Task control", "Completed work that does not yet record the person who completed it."],
+  ["work-by-person", "Recorded completions by person", "Team contribution", "Recorded completions, assignments and overdue work by person. Use as a prompt, not a verdict."],
+  ["low-activity", "Low recorded activity prompt", "Team contribution", "Active colleagues without a recorded completion, rota duty or on-call duty in the selected window."],
+  ["rota-coverage", "Rota & on-call coverage", "Rota", "Dates without named Early, Core, Late or On-call cover."],
+  ["holiday-calendar", "Holiday & availability calendar", "Rota", "Holiday, leave and unavailable entries by colleague and date."],
+  ["duty-distribution", "Duty distribution", "Rota", "Recorded Early, Core, Late and On-call duties by colleague."],
+  ["on-call-open", "Open on-call follow-ups", "On-call", "On-call actions that have not been resolved."],
+  ["on-call-closure", "On-call response & closure", "On-call", "Open, acknowledged and resolved on-call items by priority."],
+  ["handover-ageing", "Handover ageing", "Continuity", "Open or acknowledged handovers ordered by time since update."],
+  ["issue-ageing", "Stale issue register", "Continuity", "Unresolved issues that need an owner review."],
+  ["readiness-gap", "Readiness coverage", "Team support", "Expected colleagues with no readiness pulse for each selected date."],
+  ["data-quality", "Operational data-quality checks", "Assurance", "Records missing a needed owner, due time, completion attribution or closure evidence."],
+] as const;
+
+export const reportDefinitions = definitions.map(([id, label, category, description]) => ({ id, label, category, description }));
+
+export function buildOperationalReport(reportId: string, state: Record<string, any[]>, filter: ReportFilter): OperationalReport {
+  const now = filter.asOf ?? Date.now();
+  const members = (state.members || []).filter(member => member.status !== "invited");
+  const activeMembers = members.filter(member => member.status === "active");
+  const memberName = (id: number | null | undefined) => members.find(member => member.id === id)?.displayName || "Unassigned";
+  const tasks = (state.tasks || []).filter(task => dateInRange(task.workDate, filter.rangeStart, filter.rangeEnd));
+  const rota = (state.rota || []).filter(item => dateInRange(item.workDate, filter.rangeStart, filter.rangeEnd));
+  const onCall = (state.onCallItems || []).filter(item => dateInRange(item.workDate, filter.rangeStart, filter.rangeEnd));
+  const handovers = (state.handovers || []).filter(item => !item.createdAt || dateInRange(new Date(item.createdAt).toISOString().slice(0, 10), filter.rangeStart, filter.rangeEnd));
+  const issues = (state.issues || []).filter(item => !item.createdAt || dateInRange(new Date(item.createdAt).toISOString().slice(0, 10), filter.rangeStart, filter.rangeEnd));
+  const readiness = (state.readiness || []).filter(item => dateInRange(item.pulseDate, filter.rangeStart, filter.rangeEnd));
+  const definition = reportDefinitions.find(item => item.id === reportId) || reportDefinitions[0]!;
+  const base = { id: definition.id, label: definition.label, category: definition.category, description: definition.description };
+  const outstanding = tasks.filter(task => task.status !== "complete");
+  const overdue = outstanding.filter(task => task.dueAt && task.dueAt < now);
+  const blocked = tasks.filter(task => task.status === "blocked");
+  const coverageRows = daysBetween(filter.rangeStart, filter.rangeEnd).map(date => { const day = rota.filter(item => item.workDate === date); return { date, early: day.some(item => item.assignmentType === "early") ? "Covered" : "Missing", core: day.some(item => item.assignmentType === "core") ? "Covered" : "Missing", late: day.some(item => item.assignmentType === "late") ? "Covered" : "Missing", onCall: day.some(item => item.assignmentType === "on_call") ? "Covered" : "Missing" }; });
+  const report = (columns: string[], rows: ReportRow[], emptyMessage: string): OperationalReport => ({ ...base, columns, rows, emptyMessage });
+
+  switch (reportId) {
+    case "daily-control": return report(["Metric", "Count"], [{ Metric: "Completed", Count: tasks.filter(task => task.status === "complete").length }, { Metric: "Open or in progress", Count: tasks.filter(task => ["pending", "in_progress"].includes(task.status)).length }, { Metric: "Blocked", Count: blocked.length }, { Metric: "Overdue", Count: overdue.length }], "No tasks are recorded in this window.");
+    case "outstanding-work": return report(["Task", "Date", "Status", "Priority", "Owner", "Due", "Blocker"], outstanding.sort((a, b) => (a.dueAt || Number.MAX_SAFE_INTEGER) - (b.dueAt || Number.MAX_SAFE_INTEGER)).map(task => ({ Task: task.title, Date: task.workDate, Status: titleCase(task.status), Priority: titleCase(task.priority), Owner: memberName(task.assignedTeamMemberId), Due: task.dueAt ? new Date(task.dueAt).toLocaleString("en-GB", { timeZone: "Europe/London" }) : "Not timed", Blocker: task.blockedReason || "—" })), "No outstanding tasks in this window.");
+    case "blocked-work": return report(["Task", "Date", "Owner", "Priority", "Recorded blocker"], blocked.map(task => ({ Task: task.title, Date: task.workDate, Owner: memberName(task.assignedTeamMemberId), Priority: titleCase(task.priority), "Recorded blocker": task.blockedReason || "No reason recorded" })), "No blocked work in this window.");
+    case "completion-evidence": return report(["Task", "Date", "Completed at", "Completer evidence"], tasks.filter(task => task.status === "complete" && !task.completedByName).map(task => ({ Task: task.title, Date: task.workDate, "Completed at": task.completedAt ? new Date(task.completedAt).toLocaleString("en-GB", { timeZone: "Europe/London" }) : "Not recorded", "Completer evidence": "Missing or completed before attribution was introduced" })), "Every completed task in this window has a recorded completer.");
+    case "work-by-person": return report(["Team member", "Recorded completions", "Assigned tasks", "Outstanding assigned", "Overdue assigned"], activeMembers.map(member => ({ "Team member": member.displayName, "Recorded completions": tasks.filter(task => task.status === "complete" && (task.completedByTeamMemberId === member.id || task.completedByUserId === member.userId || task.completedByName === member.displayName)).length, "Assigned tasks": tasks.filter(task => task.assignedTeamMemberId === member.id).length, "Outstanding assigned": outstanding.filter(task => task.assignedTeamMemberId === member.id).length, "Overdue assigned": overdue.filter(task => task.assignedTeamMemberId === member.id).length })), "No active team members are available for this report.");
+    case "low-activity": return report(["Team member", "Recorded completions", "Rota duties", "On-call duties", "Interpretation"], activeMembers.map(member => ({ member, completions: tasks.filter(task => task.status === "complete" && (task.completedByTeamMemberId === member.id || task.completedByUserId === member.userId || task.completedByName === member.displayName)).length, duties: rota.filter(item => item.teamMemberId === member.id && ["early", "core", "late"].includes(item.assignmentType)).length, onCallDuties: rota.filter(item => item.teamMemberId === member.id && item.assignmentType === "on_call").length })).filter(row => !row.completions && !row.duties && !row.onCallDuties).map(row => ({ "Team member": row.member.displayName, "Recorded completions": row.completions, "Rota duties": row.duties, "On-call duties": row.onCallDuties, Interpretation: "Review context; unlogged work is not a performance finding." })), "Every active colleague has at least one recorded task completion, rota duty or on-call duty in this window.");
+    case "rota-coverage": return report(["Date", "Early", "Core", "Late", "On-call"], coverageRows.filter(row => Object.values(row).includes("Missing")).map(row => ({ Date: row.date, Early: row.early, Core: row.core, Late: row.late, "On-call": row.onCall })), "All selected dates contain each displayed cover type.");
+    case "holiday-calendar": return report(["Date", "Team member", "Availability", "Note"], rota.filter(item => ["holiday", "leave", "unavailable"].includes(item.assignmentType)).map(item => ({ Date: item.workDate, "Team member": memberName(item.teamMemberId), Availability: titleCase(item.assignmentType), Note: item.note || "—" })), "No holiday, leave or unavailable entries in this window.");
+    case "duty-distribution": return report(["Team member", "Early", "Core", "Late", "On-call", "Holiday / leave"], activeMembers.map(member => ({ "Team member": member.displayName, Early: rota.filter(item => item.teamMemberId === member.id && item.assignmentType === "early").length, Core: rota.filter(item => item.teamMemberId === member.id && item.assignmentType === "core").length, Late: rota.filter(item => item.teamMemberId === member.id && item.assignmentType === "late").length, "On-call": rota.filter(item => item.teamMemberId === member.id && item.assignmentType === "on_call").length, "Holiday / leave": rota.filter(item => item.teamMemberId === member.id && ["holiday", "leave"].includes(item.assignmentType)).length })), "No active team members are available for this report.");
+    case "on-call-open": return report(["Date", "Action", "Priority", "Status", "Follow-up owner", "Next action"], onCall.filter(item => item.status !== "resolved").map(item => ({ Date: item.workDate, Action: item.title, Priority: titleCase(item.priority), Status: titleCase(item.status), "Follow-up owner": memberName(item.ownerTeamMemberId), "Next action": item.nextAction || "—" })), "No open or acknowledged on-call follow-ups in this window.");
+    case "on-call-closure": return report(["Priority", "Open", "Acknowledged", "Resolved"], ["critical", "high", "normal", "low"].map(priority => ({ Priority: titleCase(priority), Open: onCall.filter(item => item.priority === priority && item.status === "open").length, Acknowledged: onCall.filter(item => item.priority === priority && item.status === "acknowledged").length, Resolved: onCall.filter(item => item.priority === priority && item.status === "resolved").length })), "No on-call items in this window.");
+    case "handover-ageing": return report(["Handover", "Status", "Owner", "Days since update", "Deadline"], handovers.filter(item => item.status !== "resolved").sort((a, b) => (a.updatedAt || 0) - (b.updatedAt || 0)).map(item => ({ Handover: item.title, Status: titleCase(item.status), Owner: memberName(item.ownerTeamMemberId), "Days since update": daysOld(item.updatedAt || item.createdAt, now), Deadline: item.deadline || "—" })), "No unresolved handovers in this window.");
+    case "issue-ageing": return report(["Issue", "Status", "Owner", "Impact", "Days since update", "Next action"], issues.filter(item => !["resolved", "closed"].includes(item.status)).sort((a, b) => (a.updatedAt || 0) - (b.updatedAt || 0)).map(item => ({ Issue: item.title, Status: titleCase(item.status), Owner: memberName(item.ownerTeamMemberId), Impact: titleCase(item.impact || item.priority), "Days since update": daysOld(item.updatedAt || item.createdAt, now), "Next action": item.nextAction || "—" })), "No unresolved issues in this window.");
+    case "readiness-gap": return report(["Date", "Missing readiness pulse"], daysBetween(filter.rangeStart, filter.rangeEnd).flatMap(date => activeMembers.filter(member => !readiness.some(pulse => pulse.pulseDate === date && pulse.teamMemberId === member.id)).map(member => ({ Date: date, "Missing readiness pulse": member.displayName }))), "Every active colleague has supplied a readiness pulse for each selected date.");
+    case "data-quality": return report(["Record", "Date", "Data-quality prompt"], [...tasks.filter(task => !task.assignedTeamMemberId).map(task => ({ Record: task.title, Date: task.workDate, "Data-quality prompt": "Task has no owner" })), ...tasks.filter(task => task.status !== "complete" && !task.dueAt).map(task => ({ Record: task.title, Date: task.workDate, "Data-quality prompt": "Outstanding task has no due time" })), ...tasks.filter(task => task.status === "complete" && !task.completedByName).map(task => ({ Record: task.title, Date: task.workDate, "Data-quality prompt": "Completed task lacks a completer stamp" })), ...onCall.filter(item => item.status === "resolved" && !item.resolution).map(item => ({ Record: item.title, Date: item.workDate, "Data-quality prompt": "Resolved on-call item lacks closure evidence" }))], "No data-quality prompts in this window.");
+    default: {
+      const risks = [
+        ...overdue.map(task => ({ Category: "Overdue task", Item: task.title, Owner: memberName(task.assignedTeamMemberId), Detail: task.dueAt ? new Date(task.dueAt).toLocaleString("en-GB", { timeZone: "Europe/London" }) : "No due time" })),
+        ...blocked.map(task => ({ Category: "Blocked task", Item: task.title, Owner: memberName(task.assignedTeamMemberId), Detail: task.blockedReason || "No blocker recorded" })),
+        ...coverageRows.filter(row => Object.values(row).includes("Missing")).map(row => ({ Category: "Coverage gap", Item: row.date, Owner: "Rota", Detail: unique(Object.entries(row).filter(([key, value]) => key !== "date" && value === "Missing").map(([key]) => titleCase(key))).join(", ") })),
+        ...onCall.filter(item => item.status !== "resolved" && ["high", "critical"].includes(item.priority)).map(item => ({ Category: "Open on-call action", Item: item.title, Owner: memberName(item.ownerTeamMemberId), Detail: titleCase(item.priority) })),
+        ...handovers.filter(item => item.status !== "resolved").map(item => ({ Category: "Unresolved handover", Item: item.title, Owner: memberName(item.ownerTeamMemberId), Detail: titleCase(item.status) })),
+        ...issues.filter(item => !["resolved", "closed"].includes(item.status)).map(item => ({ Category: "Unresolved issue", Item: item.title, Owner: memberName(item.ownerTeamMemberId), Detail: titleCase(item.status) })),
+      ];
+      return report(["Category", "Item", "Owner", "Detail"], risks, "No leadership risks are recorded in this window.");
+    }
+  }
+}

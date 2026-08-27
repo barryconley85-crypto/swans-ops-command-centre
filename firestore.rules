@@ -4,7 +4,11 @@ service cloud.firestore {
     function signedIn() { return request.auth != null; }
     function lead() { return signedIn() && request.auth.token.email == 'bc@swanstravel.com'; }
     function approved() { return signedIn() && (lead() || exists(/databases/$(database)/documents/ops_invites/$(request.auth.token.email))); }
-    function member() { return approved() && exists(/databases/$(database)/documents/ops_members/$(request.auth.uid)); }
+    function member() { return approved() && exists(/databases/$(database)/documents/ops_members/$(request.auth.uid)) && get(/databases/$(database)/documents/ops_members/$(request.auth.uid)).data.status == 'active'; }
+    function memberRole() { return get(/databases/$(database)/documents/ops_members/$(request.auth.uid)).data.memberRole; }
+    function operationsManager() { return member() && ['lead', 'manager'].hasAny([memberRole()]); }
+    function sharedEditor() { return member() && ['lead', 'manager', 'coordinator'].hasAny([memberRole()]); }
+    function onCallResponder() { return member() && ['lead', 'manager', 'coordinator', 'on_call', 'support'].hasAny([memberRole()]); }
     match /ops_invites/{email} {
       allow get: if signedIn() && (lead() || request.auth.token.email == email);
       allow list, create, update, delete: if lead();
@@ -12,23 +16,24 @@ service cloud.firestore {
     match /ops_members/{memberId} {
       allow read: if member() || lead();
       allow create: if signedIn() && memberId == request.auth.uid && approved() && request.resource.data.userId == request.auth.uid;
-      allow update: if lead() || (member() && memberId == request.auth.uid);
+      allow update: if lead() || (member() && memberId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt']));
       allow delete: if lead();
     }
     match /ops_tasks/{taskId} {
       allow read: if member();
-      allow create, delete: if lead();
-      allow update: if lead() || (member() && resource.data.assignedEmail == request.auth.token.email && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'blockedReason', 'completedAt', 'completedByTeamMemberId', 'completedByUserId', 'completedByName', 'updatedAt']) && ((request.resource.data.status == 'complete' && request.resource.data.completedByUserId == request.auth.uid && request.resource.data.completedByTeamMemberId == get(/databases/$(database)/documents/ops_members/$(request.auth.uid)).data.id && request.resource.data.completedByName == get(/databases/$(database)/documents/ops_members/$(request.auth.uid)).data.displayName) || (request.resource.data.status != 'complete' && request.resource.data.completedAt == null && request.resource.data.completedByTeamMemberId == null && request.resource.data.completedByUserId == null && request.resource.data.completedByName == null)));
+      allow create, delete: if operationsManager();
+      allow update: if operationsManager() || (member() && resource.data.assignedEmail == request.auth.token.email && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'blockedReason', 'completedAt', 'completedByTeamMemberId', 'completedByUserId', 'completedByName', 'updatedAt']) && ((request.resource.data.status == 'complete' && request.resource.data.completedByUserId == request.auth.uid && request.resource.data.completedByTeamMemberId == get(/databases/$(database)/documents/ops_members/$(request.auth.uid)).data.id && request.resource.data.completedByName == get(/databases/$(database)/documents/ops_members/$(request.auth.uid)).data.displayName) || (request.resource.data.status != 'complete' && request.resource.data.completedAt == null && request.resource.data.completedByTeamMemberId == null && request.resource.data.completedByUserId == null && request.resource.data.completedByName == null)));
     }
-    match /ops_task_activity/{activityId} { allow read: if member(); allow create: if member() && request.resource.data.actorUserId == request.auth.uid; allow update, delete: if false; }
-    match /ops_templates/{templateId} { allow read: if member(); allow write: if lead(); }
-    match /ops_rota/{rotaId} { allow read: if member(); allow write: if lead(); }
-    match /ops_handovers/{handoverId} { allow read, create: if member(); allow update: if member(); allow delete: if lead(); }
-    match /ops_issues/{issueId} { allow read, create: if member(); allow update: if member(); allow delete: if lead(); }
-    match /ops_readiness/{pulseId} { allow read: if member(); allow create, update: if member() && request.resource.data.userId == request.auth.uid; allow delete: if lead(); }
+    match /ops_task_activity/{activityId} { allow read: if member(); allow create: if sharedEditor() && request.resource.data.actorUserId == request.auth.uid; allow update, delete: if false; }
+    match /ops_templates/{templateId} { allow read: if member(); allow write: if operationsManager(); }
+    match /ops_rota/{rotaId} { allow read: if member(); allow write: if operationsManager(); }
+    match /ops_handovers/{handoverId} { allow read: if member(); allow create, update: if sharedEditor(); allow delete: if lead(); }
+    match /ops_issues/{issueId} { allow read: if member(); allow create, update: if sharedEditor(); allow delete: if lead(); }
+    match /ops_readiness/{pulseId} { allow read: if member(); allow create, update: if onCallResponder() && request.resource.data.userId == request.auth.uid; allow delete: if lead(); }
     match /ops_performance_notes/{noteId} { allow read: if member(); allow write: if lead(); }
-    match /ops_chat_messages/{messageId} { allow read: if member(); allow create: if member() && request.resource.data.authorUserId == request.auth.uid; allow update: if false; allow delete: if lead(); }
+    match /ops_chat_messages/{messageId} { allow read: if member(); allow create: if onCallResponder() && request.resource.data.authorUserId == request.auth.uid; allow update: if false; allow delete: if lead(); }
     match /ops_notifications/{notificationId} { allow read: if member() && resource.data.recipientEmail == request.auth.token.email; allow create: if lead(); allow update: if member() && resource.data.recipientEmail == request.auth.token.email && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt', 'updatedAt']); allow delete: if lead(); }
-    match /ops_on_call_items/{itemId} { allow read, create: if member(); allow update: if member(); allow delete: if lead(); }
+    match /ops_on_call_items/{itemId} { allow read: if member(); allow create, update: if onCallResponder(); allow delete: if lead(); }
+    match /ops_report_views/{viewId} { allow read, write: if lead(); }
   }
 }

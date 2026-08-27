@@ -92,7 +92,7 @@ export default function Tasks() {
   const [showMine, setShowMine] = useState(false);
   const [taskForm, setTaskForm] = useState({ title: "", detail: "", priority: "normal" as TaskRow["priority"], dueTime: "", assignee: "" });
   const [templateForm, setTemplateForm] = useState({ name: "", description: "", items: "" });
-  const isManager = user?.role === "admin";
+  const isManager = Boolean(user?.canManageOperations);
   const utils = trpc.useUtils();
   const tasksQuery = trpc.operations.tasks.list.useQuery({ date: selectedDate });
   const accessQuery = trpc.operations.access.me.useQuery();
