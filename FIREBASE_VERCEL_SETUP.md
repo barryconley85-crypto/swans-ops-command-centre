@@ -22,3 +22,24 @@ The initial operations lead signs up with `bc@swanstravel.com`. The lead then cr
 ## Data protection
 
 Before inviting the team, apply the `firestore.rules` file in Firebase Console → Firestore → Rules. Those rules use a default-deny policy and allow only authenticated, approved Swans Travel work-email users to access the workspace.
+
+## Collaborative operations collections
+
+The live workspace now uses `ops_chat_messages` for the shared operations channel, `ops_on_call_items` for out-of-hours actions and `ops_notifications` for task-assignment alerts. The notification rule returns only the intended recipient’s alerts, while the operations lead creates assignment notifications when a task is allocated.
+
+To publish the version-controlled rules after a future change, sign in to the Firebase CLI and run:
+
+```bash
+npx firebase-tools deploy --only firestore:rules --project swans-ops-command-centre
+```
+
+## Optional task-assignment email
+
+The application already creates an in-app pop-up and retained alert whenever the operations lead assigns a task. It also calls a secure Vercel endpoint that can send a matching email without exposing a provider credential in the browser. Until the following server-side Vercel environment variables are supplied, the endpoint returns a successful `not_configured` response and the in-app alert remains the delivery channel.
+
+| Variable | Purpose |
+| --- | --- |
+| `RESEND_API_KEY` | Secret key from a free-tier Resend account. |
+| `TASK_EMAIL_FROM` | A Resend-verified sender, such as `Swans Operations <ops@swanstravel.com>`. |
+
+The endpoint accepts only authenticated requests from the configured operations-lead work email and only sends to `@swanstravel.com` recipients.

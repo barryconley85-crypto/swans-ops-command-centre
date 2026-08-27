@@ -28,3 +28,12 @@
 
 - The app’s post-invitation self-service task-update rule, which matches a signed-in team member by `assignedEmail`, has not been tested with a real invited colleague completing first-time sign-in. A fresh real work-email invitation should be used for that operational onboarding check.
 - Direct client Firestore rules intentionally allow members to update handovers and issues for this small internal workspace. Before broader rollout, this should be hardened with field-level ownership constraints or trusted server-side endpoints.
+
+## Collaborative operations release
+
+- **Team chat:** the new authenticated operations channel loaded in production after its Firestore policy was published. A clearly labelled QA message was posted and rendered successfully.
+- **On-call portal:** a high-priority QA item was logged with a named follow-up owner, acknowledged, resolved with closure evidence, and displayed against the named on-call lead sourced from the rota.
+- **Task alerts:** assigning a QA task to the lead created both a live pop-up and a retained recipient-specific notification. The notification could be marked read. A live request also confirmed the optional server-side email endpoint returns `202 not_configured` safely when no external email sender has been set up.
+- **Rota:** the standard shift-pattern controls display the agreed 06:00–15:00, 07:00–16:00 and 09:00–18:00 operating patterns. A QA on-call assignment appeared in a dedicated highlighted grid cell and drove the on-call portal’s coverage card.
+- **Mobile retest:** an initial mobile-capture recovery state was traced to a temporary mismatch between the already-published recipient-only notification rule and the un-deployed filtered subscription. After the matched production release was ready, the 390 × 844 authenticated captures for both team chat and the on-call portal loaded successfully with no runtime events.
+- **Cleanup:** one QA chat message, on-call item, on-call rota record, assigned task and notification were removed after validation (all returned HTTP 200). The production workspace was left clear of this release’s test data.

@@ -16,8 +16,14 @@
 - [x] Keep the workspace free of fabricated operational records, customer reviews, ratings, or testimonials; it opens as a pristine live workspace.
 - [x] Write and run Vitest coverage for core workflow and calculation logic.
 - [x] Verify responsive visual quality and key task flows, resolve identified defects, and create the release checkpoint.
-- [ ] Replace the Manus-specific authentication dependency with external-host-compatible work-email authentication.
-- [ ] Configure the application owner and approved-team work-email policy, starting with bc@swanstravel.com.
-- [ ] Add external-host deployment configuration and environment-variable documentation for Vercel.
-- [ ] Export the production-ready project to the user’s GitHub repository.
-- [ ] Configure and verify the GitHub-connected Vercel deployment.
+- [x] Replace the Manus-specific authentication dependency with external-host-compatible work-email authentication.
+- [x] Configure the application owner and approved-team work-email policy, starting with bc@swanstravel.com.
+- [x] Add external-host deployment configuration and environment-variable documentation for Vercel.
+- [x] Export the production-ready project to the user’s GitHub repository.
+- [x] Configure and verify the GitHub-connected Vercel deployment.
+- [x] Add authenticated real-time team chat, including message history, author context and mobile-friendly composition.
+- [x] Add task-assignment pop-up and notification-centre alerts with recipient-only Firestore access.
+- [x] Add standard 06:00–15:00, 07:00–16:00 and 09:00–18:00 rota patterns plus distinct on-call cell highlighting.
+- [x] Add an on-call portal with structured action capture, named allocation, acknowledgement, resolution and rota-linked coverage.
+- [x] Publish the Firestore rules and live-validate the collaborative operations release on desktop and mobile viewport capture.
+- [ ] Configure a free-tier external email sender by setting `RESEND_API_KEY` and `TASK_EMAIL_FROM` in Vercel to activate task-assignment emails alongside the working in-app alerts.
