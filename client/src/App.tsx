@@ -18,6 +18,7 @@ import Rota from "./pages/Rota";
 import TeamChat from "./pages/TeamChat";
 import Tasks from "./pages/Tasks";
 import MyShift from "./pages/MyShift";
+import ShiftCheck from "./pages/ShiftCheck";
 
 function DashboardPage({ children }: { children: React.ReactNode }) {
   return <DashboardLayout>{children}</DashboardLayout>;
@@ -29,6 +30,7 @@ function Router() {
     <Switch>
       <Route path={"/"} component={() => <DashboardPage><Home /></DashboardPage>} />
       <Route path={"/my-shift"} component={() => <DashboardPage><MyShift /></DashboardPage>} />
+      <Route path={"/shift-check"} component={() => <DashboardPage><ShiftCheck /></DashboardPage>} />
       <Route path={"/help"} component={() => <DashboardPage><HelpRequests /></DashboardPage>} />
       <Route path={"/tasks"} component={() => <DashboardPage><Tasks /></DashboardPage>} />
       <Route path={"/rota"} component={() => <DashboardPage><Rota /></DashboardPage>} />
