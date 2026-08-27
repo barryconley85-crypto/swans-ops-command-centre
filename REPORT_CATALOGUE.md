@@ -38,7 +38,7 @@ All reports use only live workspace data. No sample tasks, absence records, rati
 
 ## Report centre scope
 
-The first report-centre release will make the task, team contribution, rota/absence, on-call, handover, issue, readiness, risk radar and data-assurance families directly runnable. It will provide a shared date window, date-specific coverage view, expandable source rows, CSV export, and lead-owned saved report views. The existing scheduled end-of-day report uses the daily-control report content and remains inactive until its independently documented mail and scheduler credentials are provided.
+The first report-centre release will make the task, team contribution, rota/absence, on-call, handover, issue, readiness, risk radar and data-assurance families directly runnable. Approved report users can choose a date window and export the currently displayed data as CSV. The lead alone can apply person and task-status filters or save reusable report views. The existing scheduled end-of-day report uses the daily-control report content and remains inactive until its independently documented mail and scheduler credentials are provided.
 
 ## Permission model
 
@@ -47,6 +47,7 @@ The first report-centre release will make the task, team contribution, rota/abse
 | **Lead / superuser** | Full access: report views and exports, staff and invitation lifecycle, user levels, rota/holiday and coverage expectations, templates, data deletion and all operating modules. This remains `bc@swanstravel.com`. |
 | **Operations manager** | Can run reports; create and maintain tasks, rota, holidays, templates, handovers, issues and on-call records. They cannot change team access, roles or permanent workspace controls. |
 | **Coordinator** | Can read operational registers; update assigned tasks; create and maintain handovers, issues, readiness and on-call items. They cannot amend rota, templates, reports or access controls. |
+| **Dispatcher** | Has the same shared-register editing scope as a Coordinator, with explicit access to log and maintain issue, handover, task and on-call context. They cannot amend rota, templates, staff access or lead-owned report configuration. |
 | **On-call responder** | Uses the quick on-call route to capture, acknowledge and resolve out-of-hours items, and can read the rota and related operational context. They cannot alter staff, coverage requirements, reports, rota or templates. |
 | **Viewer** | Read-only access to the operational information and approved reports, with no ability to create, edit or delete records. |
 

@@ -7,8 +7,8 @@ service cloud.firestore {
     function member() { return approved() && exists(/databases/$(database)/documents/ops_members/$(request.auth.uid)) && get(/databases/$(database)/documents/ops_members/$(request.auth.uid)).data.status == 'active'; }
     function memberRole() { return get(/databases/$(database)/documents/ops_members/$(request.auth.uid)).data.memberRole; }
     function operationsManager() { return member() && ['lead', 'manager'].hasAny([memberRole()]); }
-    function sharedEditor() { return member() && ['lead', 'manager', 'coordinator'].hasAny([memberRole()]); }
-    function onCallResponder() { return member() && ['lead', 'manager', 'coordinator', 'on_call', 'support'].hasAny([memberRole()]); }
+    function sharedEditor() { return member() && ['lead', 'manager', 'coordinator', 'dispatcher'].hasAny([memberRole()]); }
+    function onCallResponder() { return member() && ['lead', 'manager', 'coordinator', 'dispatcher', 'on_call', 'support'].hasAny([memberRole()]); }
     match /ops_invites/{email} {
       allow get: if signedIn() && (lead() || request.auth.token.email == email);
       allow list, create, update, delete: if lead();
@@ -22,7 +22,7 @@ service cloud.firestore {
     match /ops_tasks/{taskId} {
       allow read: if member();
       allow create, delete: if operationsManager();
-      allow update: if operationsManager() || (member() && resource.data.assignedEmail == request.auth.token.email && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'blockedReason', 'completedAt', 'completedByTeamMemberId', 'completedByUserId', 'completedByName', 'updatedAt']) && ((request.resource.data.status == 'complete' && request.resource.data.completedByUserId == request.auth.uid && request.resource.data.completedByTeamMemberId == get(/databases/$(database)/documents/ops_members/$(request.auth.uid)).data.id && request.resource.data.completedByName == get(/databases/$(database)/documents/ops_members/$(request.auth.uid)).data.displayName) || (request.resource.data.status != 'complete' && request.resource.data.completedAt == null && request.resource.data.completedByTeamMemberId == null && request.resource.data.completedByUserId == null && request.resource.data.completedByName == null)));
+      allow update: if operationsManager() || (onCallResponder() && resource.data.assignedEmail == request.auth.token.email && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'blockedReason', 'completedAt', 'completedByTeamMemberId', 'completedByUserId', 'completedByName', 'updatedAt']) && ((request.resource.data.status == 'complete' && request.resource.data.completedByUserId == request.auth.uid && request.resource.data.completedByTeamMemberId == get(/databases/$(database)/documents/ops_members/$(request.auth.uid)).data.id && request.resource.data.completedByName == get(/databases/$(database)/documents/ops_members/$(request.auth.uid)).data.displayName) || (request.resource.data.status != 'complete' && request.resource.data.completedAt == null && request.resource.data.completedByTeamMemberId == null && request.resource.data.completedByUserId == null && request.resource.data.completedByName == null)));
     }
     match /ops_task_activity/{activityId} { allow read: if member(); allow create: if sharedEditor() && request.resource.data.actorUserId == request.auth.uid; allow update, delete: if false; }
     match /ops_templates/{templateId} { allow read: if member(); allow write: if operationsManager(); }

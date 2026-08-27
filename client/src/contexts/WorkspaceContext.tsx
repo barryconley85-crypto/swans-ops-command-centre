@@ -5,7 +5,7 @@ import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, query,
 import { createUserWithEmailAndPassword, onAuthStateChanged, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signOut, type User } from "firebase/auth";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
-type Member = { id: number; userId: string; displayName: string; email: string; jobTitle: string; memberRole: "lead" | "manager" | "coordinator" | "on_call" | "viewer" | "support"; initials: string; colour: string; status: "active" | "inactive" | "invited" };
+type Member = { id: number; userId: string; displayName: string; email: string; jobTitle: string; memberRole: "lead" | "manager" | "coordinator" | "dispatcher" | "on_call" | "viewer" | "support"; initials: string; colour: string; status: "active" | "inactive" | "invited" };
 type Task = { id: number; workDate: string; title: string; detail: string | null; priority: "low" | "normal" | "high" | "critical"; status: "pending" | "in_progress" | "blocked" | "complete"; dueAt: number | null; assignedTeamMemberId: number | null; blockedReason: string | null; completedAt: number | null; createdAt: number; updatedAt: number };
 type State = Record<string, any[]>;
 

@@ -18,8 +18,10 @@ describe("operational report builder", () => {
   it("finds coverage gaps and records holiday entries without treating them as fabricated data", () => {
     const coverage = buildOperationalReport("rota-coverage", state, filter);
     const holiday = buildOperationalReport("holiday-calendar", state, filter);
+    const conflicts = buildOperationalReport("holiday-conflicts", state, filter);
     expect(coverage.rows[0]).toMatchObject({ Date: "2026-09-04", Core: "Missing", "On-call": "Missing" });
     expect(holiday.rows[0]).toMatchObject({ "Team member": "Coral Hughes", Availability: "Holiday" });
+    expect(conflicts.rows[0]).toMatchObject({ "Unavailable colleague": "Coral Hughes", "Missing required cover": "Core, Late, On-call" });
   });
   it("combines high-priority operational risks for a lead review", () => {
     const report = buildOperationalReport("risk-radar", state, filter);
