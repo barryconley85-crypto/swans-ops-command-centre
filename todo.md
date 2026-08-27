@@ -40,8 +40,8 @@
 - [x] Add holiday as a rota availability type with dates, notes and coverage impact.
 - [x] Add rota coverage and absence insights to highlight unstaffed operational shifts, missing on-call cover and holiday conflicts.
 - [x] Add a streamlined on-call mobile entry route with minimal fields, rapid issue capture, allocation and clear follow-up status.
-- [ ] Identify and prioritise the highest-value, low-friction team workflows that make the Command Centre the fastest place to start a shift, ask for help, hand over and close work.
-- [ ] Add a personal “My shift” action view that shows each colleague’s live tasks, cover/on-call status, unresolved follow-ups and next actions without forcing them to navigate the full workspace.
-- [ ] Add a structured help-and-cover request flow that records urgency, ownership and resolution, so colleagues have a useful alternative to untracked messages or calls.
-- [ ] Add shift-start and shift-close prompts that surface only the essential checklist, handover acknowledgement, risks and next-owner actions for the current duty.
-- [ ] Add practical team adoption guidance and a lead dashboard indicator for missing operational signals, without turning the workspace into a surveillance tool.
+- [x] Identify and prioritise the highest-value, low-friction team workflows that make the Command Centre the fastest place to start a shift, ask for help, hand over and close work.
+- [x] Add a personal “My shift” action view that shows each colleague’s live tasks, cover/on-call status, unresolved follow-ups and next actions without forcing them to navigate the full workspace.
+- [x] Add a structured help-and-cover request flow that records urgency, ownership and resolution, so colleagues have a useful alternative to untracked messages or calls.
+- [x] Add duty-aware shift-start and shift-close prompts that surface only essential checklist items, handover acknowledgement, risk capture and next-owner actions for the current duty.
+- [x] Add practical team adoption guidance and a lead dashboard indicator for missing operational signals, without turning the workspace into a surveillance tool.

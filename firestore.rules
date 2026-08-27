@@ -44,6 +44,7 @@ service cloud.firestore {
       ));
       allow delete: if lead();
     }
+    match /ops_shift_prompts/{promptId} { allow read: if member(); allow create, update: if onCallResponder() && request.resource.data.userId == request.auth.uid; allow delete: if lead(); }
     match /ops_report_views/{viewId} { allow read, write: if lead(); }
   }
 }
