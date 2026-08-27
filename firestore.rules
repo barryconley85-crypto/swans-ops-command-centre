@@ -18,7 +18,7 @@ service cloud.firestore {
     match /ops_tasks/{taskId} {
       allow read: if member();
       allow create, delete: if lead();
-      allow update: if lead() || (member() && resource.data.assignedUserId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'blockedReason', 'completedAt', 'updatedAt']));
+      allow update: if lead() || (member() && resource.data.assignedEmail == request.auth.token.email && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'blockedReason', 'completedAt', 'updatedAt']));
     }
     match /ops_task_activity/{activityId} { allow read: if member(); allow create: if member() && request.resource.data.actorUserId == request.auth.uid; allow update, delete: if false; }
     match /ops_templates/{templateId} { allow read: if member(); allow write: if lead(); }
