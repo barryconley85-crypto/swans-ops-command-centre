@@ -27,3 +27,4 @@
 - [x] Add an on-call portal with structured action capture, named allocation, acknowledgement, resolution and rota-linked coverage.
 - [x] Publish the Firestore rules and live-validate the collaborative operations release on desktop and mobile viewport capture.
 - [ ] Configure a free-tier external email sender by setting `RESEND_API_KEY` and `TASK_EMAIL_FROM` in Vercel to activate task-assignment emails alongside the working in-app alerts.
+- [ ] Record the authenticated person who actually completes each task, retaining their name and completion timestamp separately from the original assignee.
