@@ -8,9 +8,11 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Handovers from "./pages/Handovers";
 import Home from "./pages/Home";
 import Issues from "./pages/Issues";
+import OnCallPortal from "./pages/OnCallPortal";
 import People from "./pages/People";
 import Readiness from "./pages/Readiness";
 import Rota from "./pages/Rota";
+import TeamChat from "./pages/TeamChat";
 import Tasks from "./pages/Tasks";
 
 function DashboardPage({ children }: { children: React.ReactNode }) {
@@ -24,6 +26,8 @@ function Router() {
       <Route path={"/"} component={() => <DashboardPage><Home /></DashboardPage>} />
       <Route path={"/tasks"} component={() => <DashboardPage><Tasks /></DashboardPage>} />
       <Route path={"/rota"} component={() => <DashboardPage><Rota /></DashboardPage>} />
+      <Route path={"/on-call"} component={() => <DashboardPage><OnCallPortal /></DashboardPage>} />
+      <Route path={"/chat"} component={() => <DashboardPage><TeamChat /></DashboardPage>} />
       <Route path={"/handover"} component={() => <DashboardPage><Handovers /></DashboardPage>} />
       <Route path={"/issues"} component={() => <DashboardPage><Issues /></DashboardPage>} />
       <Route path={"/readiness"} component={() => <DashboardPage><Readiness /></DashboardPage>} />

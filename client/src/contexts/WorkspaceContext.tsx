@@ -1,5 +1,6 @@
 import { firebaseAuth, firebaseConfigured, firebaseDb } from "@/lib/firebase";
 import { omitUndefinedFields } from "@/lib/firestorePayload";
+import { buildTaskAssignmentNotification } from "@/lib/collaboration";
 import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, query, setDoc, updateDoc, where } from "firebase/firestore";
 import { createUserWithEmailAndPassword, onAuthStateChanged, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signOut, type User } from "firebase/auth";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
@@ -8,7 +9,7 @@ type Member = { id: number; userId: string; displayName: string; email: string; 
 type Task = { id: number; workDate: string; title: string; detail: string | null; priority: "low" | "normal" | "high" | "critical"; status: "pending" | "in_progress" | "blocked" | "complete"; dueAt: number | null; assignedTeamMemberId: number | null; blockedReason: string | null; completedAt: number | null; createdAt: number; updatedAt: number };
 type State = Record<string, any[]>;
 
-const emptyState: State = { members: [], tasks: [], activities: [], templates: [], rota: [], handovers: [], issues: [], readiness: [], notes: [] };
+const emptyState: State = { members: [], tasks: [], activities: [], templates: [], rota: [], handovers: [], issues: [], readiness: [], notes: [], chatMessages: [], notifications: [], onCallItems: [] };
 const leadEmail = "bc@swanstravel.com";
 
 type WorkspaceContextValue = {
@@ -18,11 +19,23 @@ type WorkspaceContextValue = {
 };
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
-const collectionMap: Record<string, string> = { members: "ops_members", tasks: "ops_tasks", activities: "ops_task_activity", templates: "ops_templates", rota: "ops_rota", handovers: "ops_handovers", issues: "ops_issues", readiness: "ops_readiness", notes: "ops_performance_notes" };
+const collectionMap: Record<string, string> = { members: "ops_members", tasks: "ops_tasks", activities: "ops_task_activity", templates: "ops_templates", rota: "ops_rota", handovers: "ops_handovers", issues: "ops_issues", readiness: "ops_readiness", notes: "ops_performance_notes", chatMessages: "ops_chat_messages", notifications: "ops_notifications", onCallItems: "ops_on_call_items" };
 const safeArray = (value: any) => Array.isArray(value) ? value : [];
 const now = () => Date.now();
 const numericId = () => Date.now() + Math.floor(Math.random() * 1_000);
 const asMember = (value: unknown) => value as Member;
+
+async function queueTaskAssignmentEmail(authUser: User | null, task: Record<string, unknown>) {
+  const recipientEmail = typeof task.assignedEmail === "string" ? task.assignedEmail : "";
+  const taskTitle = typeof task.title === "string" ? task.title : "";
+  if (!authUser || !recipientEmail || !taskTitle) return;
+  try {
+    const idToken = await authUser.getIdToken();
+    await fetch("/api/task-assignment-email", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ recipientEmail, taskTitle, detail: typeof task.detail === "string" ? task.detail : "", dueAt: typeof task.dueAt === "number" ? task.dueAt : null }) });
+  } catch {
+    // In-app notifications remain available even when the optional external email relay is unavailable.
+  }
+}
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [authUser, setAuthUser] = useState<User | null>(null); const [profile, setProfile] = useState<Member | null>(null); const [state, setState] = useState<State>(emptyState); const [memberProfiles, setMemberProfiles] = useState<Member[]>([]); const [invitations, setInvitations] = useState<Member[]>([]); const [loading, setLoading] = useState(true); const [error, setError] = useState<Error | null>(null);
@@ -35,7 +48,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const signUp = useCallback(async (name: string, email: string, password: string) => { if (!firebaseAuth || !firebaseDb) throw new Error("Firebase is not configured yet."); const normalized = email.trim().toLowerCase(); if (!normalized.endsWith("@swanstravel.com")) throw new Error("This workspace is restricted to approved Swans Travel work-email accounts."); const credential = await createUserWithEmailAndPassword(firebaseAuth, normalized, password); const invitation = await getDoc(doc(firebaseDb, "ops_invites", normalized)); const invited = invitation.exists() ? invitation.data() : null; if (normalized !== leadEmail && !invited) { await signOut(firebaseAuth); throw new Error("Your work email has not been invited yet. Ask the operations lead to add you to the team directory first."); } const displayName = invited?.displayName || name.trim(); const memberProfile: Member = { id: invited?.id || now(), userId: credential.user.uid, displayName, email: normalized, jobTitle: invited?.jobTitle || "Operations Lead", memberRole: normalized === leadEmail ? "lead" : invited?.memberRole || "support", initials: invited?.initials || displayName.split(" ").map((part: string) => part[0]).join("").slice(0, 3).toUpperCase(), colour: invited?.colour || "#1D5C63", status: "active" }; await setDoc(doc(firebaseDb, "ops_members", credential.user.uid), { ...memberProfile, createdAt: now(), updatedAt: now() }); setProfile(memberProfile); await sendEmailVerification(credential.user); }, []);
   const resetPassword = useCallback(async (email: string) => { if (!firebaseAuth) throw new Error("Firebase is not configured yet."); await sendPasswordResetEmail(firebaseAuth, email.trim().toLowerCase()); }, []);
   const logout = useCallback(async () => { if (firebaseAuth) await signOut(firebaseAuth); }, []);
-  const add = useCallback(async (collectionName: string, value: Record<string, unknown>) => { if (!firebaseDb) throw new Error("Firebase is not configured yet."); const payload = omitUndefinedFields({ ...value, createdAt: now(), updatedAt: now() }); const result = await addDoc(collection(firebaseDb, collectionMap[collectionName]), payload); return { _docId: result.id, ...payload }; }, []);
+  const add = useCallback(async (collectionName: string, value: Record<string, unknown>) => { if (!firebaseDb) throw new Error("Firebase is not configured yet."); const payload = omitUndefinedFields({ ...value, createdAt: now(), updatedAt: now() }); const result = await addDoc(collection(firebaseDb, collectionMap[collectionName]), payload); if (collectionName === "tasks" && typeof payload.assignedEmail === "string" && payload.assignedEmail) { try { const createdAt = now(); await addDoc(collection(firebaseDb, collectionMap.notifications), buildTaskAssignmentNotification({ id: typeof payload.id === "number" ? payload.id : null, assignedEmail: payload.assignedEmail, title: String(payload.title || "A new task") }, numericId(), createdAt)); } finally { void queueTaskAssignmentEmail(authUser, payload); } } return { _docId: result.id, ...payload }; }, [authUser]);
   const patch = useCallback(async (collectionName: string, id: string, value: Record<string, unknown>) => { if (!firebaseDb) throw new Error("Firebase is not configured yet."); await updateDoc(doc(firebaseDb, collectionMap[collectionName], id), omitUndefinedFields({ ...value, updatedAt: now() })); }, []);
   const remove = useCallback(async (collectionName: string, id: string) => { if (!firebaseDb) throw new Error("Firebase is not configured yet."); await deleteDoc(doc(firebaseDb, collectionMap[collectionName], id)); }, []);
   const createTeamMember = useCallback(async (value: Record<string, unknown>) => { if (!firebaseDb || !profile || profile.memberRole !== "lead") throw new Error("Only the operations lead can add a team member."); const email = String(value.email || "").trim().toLowerCase(); if (!email.endsWith("@swanstravel.com")) throw new Error("Use the colleague’s Swans Travel work email."); const memberId = numericId(); const invitation: Member & { createdAt: number; createdBy: string } = { id: memberId, userId: "", email, displayName: String(value.displayName), jobTitle: String(value.jobTitle), memberRole: value.memberRole as Member["memberRole"], initials: String(value.initials), colour: String(value.colour), status: "invited", createdAt: now(), createdBy: profile.userId }; await setDoc(doc(firebaseDb, "ops_invites", email), invitation); setInvitations(current => [...current.filter(member => member.email !== email), invitation]); return invitation; }, [profile]);

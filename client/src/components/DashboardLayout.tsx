@@ -21,19 +21,23 @@ import {
 } from "@/components/ui/sidebar";
 import { WorkEmailGate } from "@/components/WorkEmailGate";
 import { useIsMobile } from "@/hooks/useMobile";
-import { AlertTriangle, CalendarDays, ClipboardCheck, HeartPulse, LayoutDashboard, LogOut, PanelLeft, Users, Waypoints } from "lucide-react";
+import { AlertTriangle, Bell, CalendarDays, CheckCheck, ClipboardCheck, Headphones, HeartPulse, LayoutDashboard, LogOut, MessageCircleMore, PanelLeft, Users, Waypoints } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Today", path: "/" },
   { icon: ClipboardCheck, label: "Tasks", path: "/tasks" },
   { icon: CalendarDays, label: "Rota & on-call", path: "/rota" },
+  { icon: Headphones, label: "On-call portal", path: "/on-call" },
   { icon: Waypoints, label: "Handovers", path: "/handover" },
   { icon: AlertTriangle, label: "Issue log", path: "/issues" },
   { icon: HeartPulse, label: "Readiness", path: "/readiness" },
+  { icon: MessageCircleMore, label: "Team chat", path: "/chat" },
   { icon: Users, label: "Team & performance", path: "/people" },
 ];
 
@@ -242,8 +246,18 @@ function DashboardLayoutContent({
             </div>
           </div>
         )}
-          <main className="min-h-screen flex-1 bg-[#FCFCFA] p-4 md:p-7">{children}</main>
+          <main className="min-h-screen flex-1 bg-[#FCFCFA] p-4 md:p-7"><div className="mx-auto mb-3 flex max-w-[1500px] justify-end"><NotificationCentre /></div>{children}</main>
       </SidebarInset>
     </>
   );
+}
+
+function NotificationCentre() {
+  const notifications = trpc.operations.notifications.list.useQuery();
+  const markRead = trpc.operations.notifications.markRead.useMutation({ onSuccess: () => void notifications.refetch() });
+  const seenIds = useRef<Set<number>>(new Set());
+  const hydrated = useRef(false);
+  const unread = (notifications.data || []).filter((item: any) => !item.readAt);
+  useEffect(() => { if (notifications.isLoading) return; if (hydrated.current) (notifications.data || []).filter((item: any) => !item.readAt && !seenIds.current.has(item.id)).forEach((item: any) => toast(`${item.title}: ${item.body}`)); (notifications.data || []).forEach((item: any) => seenIds.current.add(item.id)); hydrated.current = true; }, [notifications.data, notifications.isLoading]);
+  return <DropdownMenu><DropdownMenuTrigger asChild><button aria-label="Open notifications" className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-[#E0E7E2] bg-white text-[#4A5A53] shadow-sm transition-colors hover:bg-[#F3F7F5]"><Bell className="h-4 w-4" />{unread.length ? <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#B8473B] px-1 text-[9px] font-bold text-white">{unread.length > 9 ? "9+" : unread.length}</span> : null}</button></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-80 border-[#E0E7E2] p-1"><div className="flex items-center justify-between px-3 py-2"><p className="text-xs font-bold text-[#35443D]">Notifications</p><span className="text-[10px] text-[#7B8781]">{unread.length ? `${unread.length} unread` : "All caught up"}</span></div>{notifications.data?.length ? notifications.data.slice(0, 8).map((item: any) => <DropdownMenuItem key={item.id} onClick={() => !item.readAt && markRead.mutate({ id: item.id })} className={`flex cursor-pointer items-start gap-2 rounded-lg px-3 py-2.5 ${item.readAt ? "opacity-60" : "bg-[#F4F8F5]"}`}><ClipboardCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#2B7865]" /><span className="min-w-0"><span className="block text-xs font-semibold text-[#3A4942]">{item.title}</span><span className="mt-0.5 block truncate text-[11px] text-[#718078]">{item.body}</span></span></DropdownMenuItem>) : <p className="px-3 py-6 text-center text-xs text-[#819089]">New task assignments will appear here.</p>}{unread.length ? <button onClick={() => unread.forEach((item: any) => markRead.mutate({ id: item.id }))} className="flex w-full items-center justify-center gap-1 rounded-lg px-3 py-2 text-[11px] font-semibold text-[#1D5C63] hover:bg-[#F2F7F4]"><CheckCheck className="h-3.5 w-3.5" />Mark all read</button> : null}</DropdownMenuContent></DropdownMenu>;
 }
