@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { ColleagueMarker } from "@/components/ColleagueMarker";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
 import { hasExactRotaDuplicate, standardShiftPatterns } from "@/lib/collaboration";
@@ -62,7 +63,7 @@ export default function Rota() {
         </div>
         {activeMembers.length ? activeMembers.map(member => (
           <div key={member.id} className="grid grid-cols-[200px_repeat(7,minmax(100px,1fr))] border-b border-[#EFF2F0] last:border-0">
-            <div className="flex items-center gap-3 px-5 py-4"><span className="flex h-8 w-8 items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: member.colour }}>{member.initials}</span><div className="min-w-0"><p className="truncate text-sm font-semibold text-[#34413C]">{member.displayName}</p><p className="mt-0.5 truncate text-[10px] uppercase tracking-[0.1em] text-[#7C8882]">{member.memberRole}</p></div></div>
+            <div className="flex items-center gap-3 px-5 py-4"><ColleagueMarker member={member} showRole /></div>
             {days.map(day => {
               const assignments = assignmentFor(member.id, day);
               return <div key={day.toISOString()} className={`min-h-[86px] border-l border-[#EFF2F0] p-2 ${assignments.some(item => item.assignmentType === "on_call") ? "bg-[#FAF9FF]" : localDateKey(day) === localDateKey() ? "bg-[#FBFDFC]" : ""}`}>
@@ -73,7 +74,7 @@ export default function Rota() {
         )) : <EmptyState title="Your rota is ready to be set up" description="Add the six team members first, then build the weekly pattern that reflects how the operation actually runs." />}
       </div>
     </Panel>
-    <section className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_330px]"><Panel><PanelHeading title="Distribution check" description="A light-touch view of shift and on-call fairness across the selected week." /><div className="divide-y divide-[#EEF1EF]">{counts.map(item => <div key={item.member.id} className="flex items-center gap-3 px-5 py-3.5"><span className="flex h-8 w-8 items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: item.member.colour }}>{item.member.initials}</span><p className="flex-1 text-sm font-semibold text-[#35423D]">{item.member.displayName}</p><span className="rounded-full bg-[#EEF4F1] px-2.5 py-1 text-[10px] font-bold text-[#3C7566]">{item.shifts} shifts</span><span className="rounded-full bg-[#F0EFFA] px-2.5 py-1 text-[10px] font-bold text-[#635B93]">{item.onCall} on-call</span></div>)}</div></Panel><div className="rounded-2xl bg-[#1C3732] p-5 text-white"><UserRoundCheck className="h-5 w-5 text-[#B9D3C9]" /><p className="mt-5 text-base font-semibold">Cover is a management promise.</p><p className="mt-2 text-sm leading-6 text-[#C4D9D1]">Use leave and unavailability rather than informal notes. A visible gap is a solvable gap.</p><Button variant="ghost" onClick={() => setWeekStart(isoWeekStart())} className="mt-4 px-0 text-xs text-white hover:bg-transparent hover:text-white"><RotateCcw className="mr-2 h-3.5 w-3.5" />Return to current week</Button></div></section>
+    <section className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_330px]"><Panel><PanelHeading title="Distribution check" description="A light-touch view of shift and on-call fairness across the selected week." /><div className="divide-y divide-[#EEF1EF]">{counts.map(item => <div key={item.member.id} className="flex items-center gap-3 px-5 py-3.5"><ColleagueMarker member={item.member} showRole className="min-w-0 flex-1" /><span className="rounded-full bg-[#EEF4F1] px-2.5 py-1 text-[10px] font-bold text-[#3C7566]">{item.shifts} shifts</span><span className="rounded-full bg-[#F0EFFA] px-2.5 py-1 text-[10px] font-bold text-[#635B93]">{item.onCall} on-call</span></div>)}</div></Panel><div className="rounded-2xl bg-[#1C3732] p-5 text-white"><UserRoundCheck className="h-5 w-5 text-[#B9D3C9]" /><p className="mt-5 text-base font-semibold">Cover is a management promise.</p><p className="mt-2 text-sm leading-6 text-[#C4D9D1]">Use leave and unavailability rather than informal notes. A visible gap is a solvable gap.</p><Button variant="ghost" onClick={() => setWeekStart(isoWeekStart())} className="mt-4 px-0 text-xs text-white hover:bg-transparent hover:text-white"><RotateCcw className="mr-2 h-3.5 w-3.5" />Return to current week</Button></div></section>
   </div>;
 }
 

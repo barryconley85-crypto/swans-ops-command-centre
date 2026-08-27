@@ -45,9 +45,9 @@
 - [x] Add a structured help-and-cover request flow that records urgency, ownership and resolution, so colleagues have a useful alternative to untracked messages or calls.
 - [x] Add duty-aware shift-start and shift-close prompts that surface only essential checklist items, handover acknowledgement, risk capture and next-owner actions for the current duty.
 - [x] Add practical team adoption guidance and a lead dashboard indicator for missing operational signals, without turning the workspace into a surveillance tool.
-- [ ] Add self-service profile controls so each approved colleague can choose their displayed initials and an accessible personal colour.
+- [x] Add self-service profile controls so each approved colleague can choose their displayed initials and an accessible personal colour.
 - [ ] Create a consistent Microsoft-365-style colleague marker that shows initials, colour, name and role where space permits.
 - [ ] Apply colleague markers to visible ownership and responsibility context across tasks, rota, handovers, issues, on-call and support-request workflows.
 - [ ] Validate the identity markers on desktop and phone layouts without changing any existing live team profile.
-- [ ] Add a live team-presence indicator based on current authenticated workspace activity, with clear inactive timeout behaviour and no screen-time monitoring or performance scoring.
-- [ ] Show the lead an at-a-glance active-team presence summary while allowing all approved colleagues to see the same transparent status information.
+- [x] Add a live team-presence indicator based on current authenticated workspace activity, with clear inactive timeout behaviour and no screen-time monitoring or performance scoring.
+- [x] Show the lead an at-a-glance active-team presence summary while allowing all approved colleagues to see the same transparent status information.
