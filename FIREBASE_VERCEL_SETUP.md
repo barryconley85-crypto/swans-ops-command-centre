@@ -43,3 +43,32 @@ The application already creates an in-app pop-up and retained alert whenever the
 | `TASK_EMAIL_FROM` | A Resend-verified sender, such as `Swans Operations <ops@swanstravel.com>`. |
 
 The endpoint accepts only authenticated requests from the configured operations-lead work email and only sends to `@swanstravel.com` recipients.
+
+## Every-day 17:00 end-of-day report
+
+`/api/end-of-day-report` is a server-side endpoint for an unattended report to `bc@swanstravel.com`. It derives the operational date in the **Europe/London** time zone, lists that date’s completed and outstanding tasks, identifies the person who completed each completed task, and stores a private sent-date marker in `ops_end_of_day_reports` to prevent duplicate delivery when a scheduler retries.
+
+It must never receive a Firebase or email-provider secret in the browser or in source control. Add these **server-only** Vercel production environment variables:
+
+| Variable | Purpose |
+| --- | --- |
+| `REPORT_CRON_SECRET` | A newly generated long random value used only in the external scheduler’s `Authorization: Bearer …` header. |
+| `FIREBASE_SERVICE_ACCOUNT_JSON_BASE64` | Base64 encoding of a dedicated Firebase/Google service-account JSON key. Give that service account the minimum necessary Firestore read/write role; do not use a personal account credential. |
+| `RESEND_API_KEY` | Secret key from the free-tier Resend account used to send both report and optional assignment emails. |
+| `TASK_EMAIL_FROM` | A Resend-verified sender, such as `Swans Operations <ops@swanstravel.com>`. |
+
+The report remains safely inactive until all four values are configured: a correctly authenticated request returns `not_configured` rather than sending incomplete email.
+
+### Precise external scheduler configuration
+
+Use a free [cron-job.org](https://cron-job.org/en/) job after the endpoint is deployed. Configure **one active job** as follows:
+
+| Setting | Value |
+| --- | --- |
+| URL | `https://swans-ops-command-centre.vercel.app/api/end-of-day-report` |
+| HTTP method | `GET` |
+| Schedule | Every day at `17:00` |
+| Time zone | `Europe/London` |
+| Custom request header | `Authorization: Bearer <the exact REPORT_CRON_SECRET value>` |
+
+Run the scheduler’s test action once after all secrets are present. A successful first execution returns `reportStatus: "sent"`; a second request for the same operational date returns `reportStatus: "already_sent"` and sends no second email. Do not use the `date` query parameter in the production scheduler; it exists only to support controlled troubleshooting.

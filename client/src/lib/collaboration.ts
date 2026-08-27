@@ -7,3 +7,16 @@ export const standardShiftPatterns = [
 export function buildTaskAssignmentNotification(task: { id?: number | null; assignedEmail: string; title: string }, id: number, createdAt: number) {
   return { id, recipientEmail: task.assignedEmail, kind: "task_assignment", title: "New task assigned", body: task.title, taskId: task.id ?? null, readAt: null, createdAt, updatedAt: createdAt };
 }
+
+export type RotaAssignmentForValidation = {
+  id?: number;
+  workDate: string;
+  teamMemberId: number;
+  assignmentType: string;
+  startTime?: string | null;
+  endTime?: string | null;
+};
+
+export function hasExactRotaDuplicate(assignments: RotaAssignmentForValidation[], candidate: RotaAssignmentForValidation, ignoredId?: number | null) {
+  return assignments.some(assignment => assignment.id !== ignoredId && assignment.workDate === candidate.workDate && assignment.teamMemberId === candidate.teamMemberId && assignment.assignmentType === candidate.assignmentType && (assignment.startTime || null) === (candidate.startTime || null) && (assignment.endTime || null) === (candidate.endTime || null));
+}
