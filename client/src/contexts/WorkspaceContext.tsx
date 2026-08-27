@@ -9,7 +9,7 @@ type Member = { id: number; userId: string; displayName: string; email: string; 
 type Task = { id: number; workDate: string; title: string; detail: string | null; priority: "low" | "normal" | "high" | "critical"; status: "pending" | "in_progress" | "blocked" | "complete"; dueAt: number | null; assignedTeamMemberId: number | null; blockedReason: string | null; completedAt: number | null; createdAt: number; updatedAt: number };
 type State = Record<string, any[]>;
 
-const emptyState: State = { members: [], tasks: [], activities: [], templates: [], rota: [], handovers: [], issues: [], readiness: [], notes: [], chatMessages: [], notifications: [], onCallItems: [], reportViews: [] };
+const emptyState: State = { members: [], tasks: [], activities: [], templates: [], rota: [], handovers: [], issues: [], readiness: [], notes: [], chatMessages: [], notifications: [], onCallItems: [], helpRequests: [], reportViews: [] };
 const leadEmail = "bc@swanstravel.com";
 
 type WorkspaceContextValue = {
@@ -19,7 +19,7 @@ type WorkspaceContextValue = {
 };
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
-const collectionMap: Record<string, string> = { members: "ops_members", tasks: "ops_tasks", activities: "ops_task_activity", templates: "ops_templates", rota: "ops_rota", handovers: "ops_handovers", issues: "ops_issues", readiness: "ops_readiness", notes: "ops_performance_notes", chatMessages: "ops_chat_messages", notifications: "ops_notifications", onCallItems: "ops_on_call_items", reportViews: "ops_report_views" };
+const collectionMap: Record<string, string> = { members: "ops_members", tasks: "ops_tasks", activities: "ops_task_activity", templates: "ops_templates", rota: "ops_rota", handovers: "ops_handovers", issues: "ops_issues", readiness: "ops_readiness", notes: "ops_performance_notes", chatMessages: "ops_chat_messages", notifications: "ops_notifications", onCallItems: "ops_on_call_items", helpRequests: "ops_help_requests", reportViews: "ops_report_views" };
 const safeArray = (value: any) => Array.isArray(value) ? value : [];
 const now = () => Date.now();
 const numericId = () => Date.now() + Math.floor(Math.random() * 1_000);

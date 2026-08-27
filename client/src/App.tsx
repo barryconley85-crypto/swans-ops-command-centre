@@ -7,6 +7,7 @@ import DashboardLayout from "./components/DashboardLayout";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Handovers from "./pages/Handovers";
 import Home from "./pages/Home";
+import HelpRequests from "./pages/HelpRequests";
 import Issues from "./pages/Issues";
 import OnCallPortal from "./pages/OnCallPortal";
 import QuickOnCall from "./pages/QuickOnCall";
@@ -16,6 +17,7 @@ import Reports from "./pages/Reports";
 import Rota from "./pages/Rota";
 import TeamChat from "./pages/TeamChat";
 import Tasks from "./pages/Tasks";
+import MyShift from "./pages/MyShift";
 
 function DashboardPage({ children }: { children: React.ReactNode }) {
   return <DashboardLayout>{children}</DashboardLayout>;
@@ -26,6 +28,8 @@ function Router() {
   return (
     <Switch>
       <Route path={"/"} component={() => <DashboardPage><Home /></DashboardPage>} />
+      <Route path={"/my-shift"} component={() => <DashboardPage><MyShift /></DashboardPage>} />
+      <Route path={"/help"} component={() => <DashboardPage><HelpRequests /></DashboardPage>} />
       <Route path={"/tasks"} component={() => <DashboardPage><Tasks /></DashboardPage>} />
       <Route path={"/rota"} component={() => <DashboardPage><Rota /></DashboardPage>} />
       <Route path={"/on-call"} component={() => <DashboardPage><OnCallPortal /></DashboardPage>} />

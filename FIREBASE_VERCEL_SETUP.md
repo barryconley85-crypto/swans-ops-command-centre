@@ -56,6 +56,7 @@ It must never receive a Firebase or email-provider secret in the browser or in s
 | `FIREBASE_SERVICE_ACCOUNT_JSON_BASE64` | Base64 encoding of a dedicated Firebase/Google service-account JSON key. Give that service account the minimum necessary Firestore read/write role; do not use a personal account credential. |
 | `RESEND_API_KEY` | Secret key from the free-tier Resend account used to send both report and optional assignment emails. |
 | `TASK_EMAIL_FROM` | A Resend-verified sender, such as `Swans Operations <ops@swanstravel.com>`. |
+| `EOD_REPORT_TO` | Optional recipient override. For the approved temporary route, set this to `barryconley85@gmail.com`. Remove it after a verified Swans sender is available to return the report recipient to `bc@swanstravel.com`. |
 
 The report remains safely inactive until all four values are configured: a correctly authenticated request returns `not_configured` rather than sending incomplete email.
 

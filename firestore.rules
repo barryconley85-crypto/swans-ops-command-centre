@@ -9,6 +9,7 @@ service cloud.firestore {
     function operationsManager() { return member() && ['lead', 'manager'].hasAny([memberRole()]); }
     function sharedEditor() { return member() && ['lead', 'manager', 'coordinator', 'dispatcher'].hasAny([memberRole()]); }
     function onCallResponder() { return member() && ['lead', 'manager', 'coordinator', 'dispatcher', 'on_call', 'support'].hasAny([memberRole()]); }
+    function currentMemberId() { return get(/databases/$(database)/documents/ops_members/$(request.auth.uid)).data.id; }
     match /ops_invites/{email} {
       allow get: if signedIn() && (lead() || request.auth.token.email == email);
       allow list, create, update, delete: if lead();
@@ -34,6 +35,15 @@ service cloud.firestore {
     match /ops_chat_messages/{messageId} { allow read: if member(); allow create: if onCallResponder() && request.resource.data.authorUserId == request.auth.uid; allow update: if false; allow delete: if lead(); }
     match /ops_notifications/{notificationId} { allow read: if member() && resource.data.recipientEmail == request.auth.token.email; allow create: if lead(); allow update: if member() && resource.data.recipientEmail == request.auth.token.email && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt', 'updatedAt']); allow delete: if lead(); }
     match /ops_on_call_items/{itemId} { allow read: if member(); allow create, update: if onCallResponder(); allow delete: if lead(); }
+    match /ops_help_requests/{requestId} {
+      allow read: if member();
+      allow create: if onCallResponder() && request.resource.data.requestedByUserId == request.auth.uid;
+      allow update: if sharedEditor() || (onCallResponder() && (
+        (resource.data.status == 'open' && request.resource.data.status == 'acknowledged' && request.resource.data.ownerTeamMemberId == currentMemberId() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'ownerTeamMemberId', 'acknowledgedAt', 'acknowledgedByUserId', 'updatedAt'])) ||
+        (request.resource.data.status == 'resolved' && (resource.data.requestedByUserId == request.auth.uid || resource.data.ownerTeamMemberId == currentMemberId()) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'resolution', 'resolvedAt', 'resolvedByUserId', 'updatedAt']))
+      ));
+      allow delete: if lead();
+    }
     match /ops_report_views/{viewId} { allow read, write: if lead(); }
   }
 }

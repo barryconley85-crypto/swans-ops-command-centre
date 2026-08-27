@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { WorkEmailGate } from "@/components/WorkEmailGate";
 import { useIsMobile } from "@/hooks/useMobile";
-import { AlertTriangle, BarChart3, Bell, CalendarDays, CheckCheck, ClipboardCheck, Headphones, HeartPulse, LayoutDashboard, LogOut, MessageCircleMore, PanelLeft, Users, Waypoints } from "lucide-react";
+import { AlertTriangle, BarChart3, Bell, CalendarDays, CheckCheck, CircleUserRound, ClipboardCheck, HandHeart, Headphones, HeartPulse, LayoutDashboard, LogOut, MessageCircleMore, PanelLeft, Users, Waypoints } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -31,9 +31,11 @@ import { toast } from "sonner";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Today", path: "/" },
+  { icon: CircleUserRound, label: "My shift", path: "/my-shift" },
   { icon: ClipboardCheck, label: "Tasks", path: "/tasks" },
   { icon: CalendarDays, label: "Rota & on-call", path: "/rota" },
   { icon: Headphones, label: "On-call portal", path: "/on-call" },
+  { icon: HandHeart, label: "Help & cover", path: "/help" },
   { icon: Waypoints, label: "Handovers", path: "/handover" },
   { icon: AlertTriangle, label: "Issue log", path: "/issues" },
   { icon: HeartPulse, label: "Readiness", path: "/readiness" },

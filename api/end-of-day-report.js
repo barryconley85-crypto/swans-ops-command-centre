@@ -1,7 +1,7 @@
 import { SignJWT, importPKCS8 } from "jose";
 
 const projectId = "swans-ops-command-centre";
-const leadEmail = "bc@swanstravel.com";
+const defaultReportRecipient = "bc@swanstravel.com";
 const firestoreBaseUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
 
 const dateKey = (value = new Date()) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit" }).format(value);
@@ -74,7 +74,8 @@ export default async function handler(request, response) {
     if (await sentAlready(accessToken, workDate)) return response.status(200).json({ reportStatus: "already_sent", workDate });
     const [tasks, members] = await Promise.all([fetchTasks(accessToken, workDate), fetchMembers(accessToken)]);
     const report = reportContent(workDate, tasks, members);
-    const emailResponse = await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json", "Idempotency-Key": `swans-eod/${workDate}` }, body: JSON.stringify({ from: process.env.TASK_EMAIL_FROM, to: [leadEmail], subject: report.subject, text: report.text }) });
+    const recipient = process.env.EOD_REPORT_TO || defaultReportRecipient;
+    const emailResponse = await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json", "Idempotency-Key": `swans-eod/${workDate}` }, body: JSON.stringify({ from: process.env.TASK_EMAIL_FROM, to: [recipient], subject: report.subject, text: report.text }) });
     if (!emailResponse.ok) throw new Error("The email provider could not accept the end-of-day report.");
     const email = await emailResponse.json();
     await markSent(accessToken, workDate, report.totals, email.id);

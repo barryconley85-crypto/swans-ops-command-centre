@@ -32,6 +32,7 @@
 - [x] Investigate and correct the duplicate duty recorded on 4 September without disturbing unrelated rota entries.
 - [ ] Add an every-day 17:00 end-of-day report showing completed and outstanding tasks for the operations lead.
 - [ ] Configure and validate the no-cost email delivery route for the scheduled end-of-day report.
+- [x] Make the report recipient server-configurable and temporarily direct the scheduled report to `barryconley85@gmail.com` until a Swans Travel sender domain is available.
 - [x] Build a report centre with productivity, stale-work, task-assurance, handover, issue, readiness, rota, on-call, absence, coverage and performance reports based only on live operational data.
 - [x] Provide standard date-range reports and CSV export to approved report users, while keeping custom person/status filters and saved report views lead-only.
 - [x] Add a superuser administration area for the lead to create, edit, activate/deactivate and safely archive team-member profiles without erasing operational history.
@@ -39,3 +40,8 @@
 - [x] Add holiday as a rota availability type with dates, notes and coverage impact.
 - [x] Add rota coverage and absence insights to highlight unstaffed operational shifts, missing on-call cover and holiday conflicts.
 - [x] Add a streamlined on-call mobile entry route with minimal fields, rapid issue capture, allocation and clear follow-up status.
+- [ ] Identify and prioritise the highest-value, low-friction team workflows that make the Command Centre the fastest place to start a shift, ask for help, hand over and close work.
+- [ ] Add a personal “My shift” action view that shows each colleague’s live tasks, cover/on-call status, unresolved follow-ups and next actions without forcing them to navigate the full workspace.
+- [ ] Add a structured help-and-cover request flow that records urgency, ownership and resolution, so colleagues have a useful alternative to untracked messages or calls.
+- [ ] Add shift-start and shift-close prompts that surface only the essential checklist, handover acknowledgement, risks and next-owner actions for the current duty.
+- [ ] Add practical team adoption guidance and a lead dashboard indicator for missing operational signals, without turning the workspace into a surveillance tool.
