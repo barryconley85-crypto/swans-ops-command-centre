@@ -4,7 +4,6 @@ const rolesWith = {
   manageOperations: ["lead", "manager"],
   editSharedWork: ["lead", "manager", "coordinator", "dispatcher"],
   useOnCall: ["lead", "manager", "coordinator", "dispatcher", "on_call", "support"],
-  submitReadiness: ["lead", "manager", "coordinator", "on_call", "support"],
   chat: ["lead", "manager", "coordinator", "dispatcher", "on_call", "support"],
   reports: ["lead", "manager", "coordinator", "dispatcher", "on_call", "viewer", "support"],
 } as const;

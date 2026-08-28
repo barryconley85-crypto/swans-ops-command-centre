@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildOperationalReport } from "../client/src/lib/operationalReports";
+import { buildOperationalReport, reportDefinitions } from "../client/src/lib/operationalReports";
 
 const state = {
   members: [{ id: 1, userId: "barry", displayName: "Barry Conley", status: "active" }, { id: 2, userId: "coral", displayName: "Coral Hughes", status: "active" }],
@@ -26,5 +26,8 @@ describe("operational report builder", () => {
   it("combines high-priority operational risks for a lead review", () => {
     const report = buildOperationalReport("risk-radar", state, filter);
     expect(report.rows.map(row => row.Category)).toEqual(expect.arrayContaining(["Overdue task", "Blocked task", "Coverage gap", "Open on-call action"]));
+  });
+  it("does not offer a report that treats manual readiness pulses as required daily input", () => {
+    expect(reportDefinitions.map(definition => definition.id)).not.toContain("readiness-gap");
   });
 });

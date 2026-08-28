@@ -24,7 +24,6 @@ const definitions = [
   ["on-call-closure", "On-call response & closure", "On-call", "Open, acknowledged and resolved on-call items by priority."],
   ["handover-ageing", "Handover ageing", "Continuity", "Open or acknowledged handovers ordered by time since update."],
   ["issue-ageing", "Stale issue register", "Continuity", "Unresolved issues that need an owner review."],
-  ["readiness-gap", "Readiness coverage", "Team support", "Expected colleagues with no readiness pulse for each selected date."],
   ["data-quality", "Operational data-quality checks", "Assurance", "Records missing a needed owner, due time, completion attribution or closure evidence."],
 ] as const;
 
@@ -40,7 +39,6 @@ export function buildOperationalReport(reportId: string, state: Record<string, a
   const onCall = (state.onCallItems || []).filter(item => dateInRange(item.workDate, filter.rangeStart, filter.rangeEnd) && (!filter.memberId || item.ownerTeamMemberId === filter.memberId));
   const handovers = (state.handovers || []).filter(item => !item.createdAt || dateInRange(new Date(item.createdAt).toISOString().slice(0, 10), filter.rangeStart, filter.rangeEnd));
   const issues = (state.issues || []).filter(item => !item.createdAt || dateInRange(new Date(item.createdAt).toISOString().slice(0, 10), filter.rangeStart, filter.rangeEnd));
-  const readiness = (state.readiness || []).filter(item => dateInRange(item.pulseDate, filter.rangeStart, filter.rangeEnd));
   const definition = reportDefinitions.find(item => item.id === reportId) || reportDefinitions[0]!;
   const base = { id: definition.id, label: definition.label, category: definition.category, description: definition.description };
   const outstanding = tasks.filter(task => task.status !== "complete");
@@ -64,7 +62,6 @@ export function buildOperationalReport(reportId: string, state: Record<string, a
     case "on-call-closure": return report(["Priority", "Open", "Acknowledged", "Resolved"], ["critical", "high", "normal", "low"].map(priority => ({ Priority: titleCase(priority), Open: onCall.filter(item => item.priority === priority && item.status === "open").length, Acknowledged: onCall.filter(item => item.priority === priority && item.status === "acknowledged").length, Resolved: onCall.filter(item => item.priority === priority && item.status === "resolved").length })), "No on-call items in this window.");
     case "handover-ageing": return report(["Handover", "Status", "Owner", "Days since update", "Deadline"], handovers.filter(item => item.status !== "resolved").sort((a, b) => (a.updatedAt || 0) - (b.updatedAt || 0)).map(item => ({ Handover: item.title, Status: titleCase(item.status), Owner: memberName(item.ownerTeamMemberId), "Days since update": daysOld(item.updatedAt || item.createdAt, now), Deadline: item.deadline || "—" })), "No unresolved handovers in this window.");
     case "issue-ageing": return report(["Issue", "Status", "Owner", "Impact", "Days since update", "Next action"], issues.filter(item => !["resolved", "closed"].includes(item.status)).sort((a, b) => (a.updatedAt || 0) - (b.updatedAt || 0)).map(item => ({ Issue: item.title, Status: titleCase(item.status), Owner: memberName(item.ownerTeamMemberId), Impact: titleCase(item.impact || item.priority), "Days since update": daysOld(item.updatedAt || item.createdAt, now), "Next action": item.nextAction || "—" })), "No unresolved issues in this window.");
-    case "readiness-gap": return report(["Date", "Missing readiness pulse"], daysBetween(filter.rangeStart, filter.rangeEnd).flatMap(date => activeMembers.filter(member => !readiness.some(pulse => pulse.pulseDate === date && pulse.teamMemberId === member.id)).map(member => ({ Date: date, "Missing readiness pulse": member.displayName }))), "Every active colleague has supplied a readiness pulse for each selected date.");
     case "data-quality": return report(["Record", "Date", "Data-quality prompt"], [...tasks.filter(task => !task.assignedTeamMemberId).map(task => ({ Record: task.title, Date: task.workDate, "Data-quality prompt": "Task has no owner" })), ...tasks.filter(task => task.status !== "complete" && !task.dueAt).map(task => ({ Record: task.title, Date: task.workDate, "Data-quality prompt": "Outstanding task has no due time" })), ...tasks.filter(task => task.status === "complete" && !task.completedByName).map(task => ({ Record: task.title, Date: task.workDate, "Data-quality prompt": "Completed task lacks a completer stamp" })), ...onCall.filter(item => item.status === "resolved" && !item.resolution).map(item => ({ Record: item.title, Date: item.workDate, "Data-quality prompt": "Resolved on-call item lacks closure evidence" }))], "No data-quality prompts in this window.");
     default: {
       const risks = [

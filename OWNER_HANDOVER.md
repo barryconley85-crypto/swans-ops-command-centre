@@ -32,7 +32,7 @@ Cloud Firestore uses **collections of documents**, rather than relational tables
 | `ops_issues` | Operational exceptions and resolutions | Team reads; authorised editors maintain; lead removes. |
 | `ops_on_call_items` | Out-of-hours follow-up actions | Team reads; on-call-capable roles maintain; lead removes. |
 | `ops_help_requests` | Help and cover request lifecycle | Team reads; authorised roles create/acknowledge/resolve; lead removes. |
-| `ops_readiness` | Daily capacity, risk and support pulses | Team reads; the author submits their own pulse; lead removes. |
+| `ops_readiness` | Historic readiness records from the retired manual check-in workflow | Team may read existing records; all writes are blocked. The collection is retained for history rather than deleted. |
 | `ops_shift_prompts` | Shift-start and shift-close responses | Team reads; the author submits their own response; lead removes. |
 | `ops_chat_messages` | Shared operational chat | Team reads; on-call-capable roles send; lead removes. |
 | `ops_notifications` | Recipient-only task-assignment alerts | Only the recipient reads; lead creates/removes; recipient marks read. |

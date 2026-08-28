@@ -31,7 +31,7 @@ service cloud.firestore {
     match /ops_rota/{rotaId} { allow read: if member(); allow write: if operationsManager(); }
     match /ops_handovers/{handoverId} { allow read: if member(); allow create, update: if sharedEditor(); allow delete: if lead(); }
     match /ops_issues/{issueId} { allow read: if member(); allow create, update: if sharedEditor(); allow delete: if lead(); }
-    match /ops_readiness/{pulseId} { allow read: if member(); allow create, update: if onCallResponder() && request.resource.data.userId == request.auth.uid; allow delete: if lead(); }
+    match /ops_readiness/{pulseId} { allow read: if member(); allow write: if false; }
     match /ops_performance_notes/{noteId} { allow read: if member(); allow write: if lead(); }
     match /ops_chat_messages/{messageId} { allow read: if member(); allow create: if onCallResponder() && request.resource.data.authorUserId == request.auth.uid; allow update: if false; allow delete: if lead(); }
     match /ops_notifications/{notificationId} { allow read: if member() && resource.data.recipientEmail == request.auth.token.email; allow create: if lead(); allow update: if member() && resource.data.recipientEmail == request.auth.token.email && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt', 'updatedAt']); allow delete: if lead(); }

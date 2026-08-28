@@ -68,3 +68,4 @@
 - [x] Resolve the Google Apps Script renewed Firestore-read authorisation path and obtain one completed non-sending report preview before enabling any email send or time trigger.
 - [x] Capture and resolve the exact Apps Script error returned after the owner Google consent attempt; keep the report inactive until a non-sending preview completes successfully.
 - [ ] Verify the first scheduled report email after its 5:00–6:00 p.m. window and confirm the recipient mailbox, sender identity and same-day idempotency behaviour.
+- [x] Retire the manual readiness-pulse/check-in workflow from the operating experience and replace any dashboard dependency with existing task, rota, on-call, handover, issue and help-request signals; preserve historical readiness records without collecting new check-ins.
