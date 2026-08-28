@@ -12,7 +12,7 @@ This is the externally hosted production system for Swans Travel operations. The
 | Identity | Firebase Authentication, project `swans-ops-command-centre` | Firebase console → Authentication | Work-email/password accounts, password-reset messages and account metadata. Passwords are never visible to the app, GitHub or Firestore. |
 | Operational records | Cloud Firestore, project `swans-ops-command-centre`, region `europe-west2` | Firebase console → Firestore Database | Every live operational collection listed below. This is document storage, not SQL tables. |
 | File bucket | Firebase Storage bucket `swans-ops-command-centre.firebasestorage.app` | Firebase console → Storage | The bucket exists with the Firebase project. The current app does not upload operational files or customer documents, so there are no application-created file objects to recover. |
-| Outgoing email | Not active | Vercel environment variables or a separately owned Google automation | The task-assignment and end-of-day email relay is deliberately inactive until a secure sending route is chosen. |
+| Outgoing end-of-day email | Active: owner-controlled Google Apps Script | Google account `barryconley85@gmail.com` → Apps Script project **Swans Operations — Daily 17:00 Report** | Daily completed/outstanding task report to `bc@swanstravel.com`, scheduled in a 5:00–6:00 p.m. Apps Script window. The separate Vercel task-assignment email relay remains inactive. |
 
 > **Important:** the Firebase web API key in the public Vite configuration identifies the Firebase web application; it is not an administrative credential. Firestore rules and Firebase Authentication are the security controls. Never place a Firebase service-account JSON file, a mail-provider key, passwords or recovery codes in GitHub.
 
@@ -40,7 +40,7 @@ Cloud Firestore uses **collections of documents**, rather than relational tables
 | `ops_report_views` | Lead’s saved report views | Lead only. |
 | `ops_performance_notes` | Lead coaching/recognition notes | Lead writes; team reads according to current policy. |
 | `ops_audit_logs` | Append-only activity history: sign-ins and material workspace changes | Any approved colleague can append only their own event; **lead only** reads; no one may edit or delete events through normal app rules. |
-| `ops_end_of_day_reports` | Private sent-date marker used by the deferred daily-report endpoint | Used only if the end-of-day email route is activated. |
+| `ops_end_of_day_reports` | Private sent-date marker reserved for the deferred Vercel report endpoint | The active Google route instead keeps its sent-date marker in private Google Apps Script Properties. |
 
 ## How to avoid losing ownership
 
@@ -68,17 +68,17 @@ This requires a dedicated Firebase service account stored as a **server-only Ver
 
 Until that server credential is configured, you retain the immediate no-code recovery route in Firebase Console → Authentication → Users. This is already lead-controlled through the owner’s Firebase/Google account and requires no new app deployment.
 
-## End-of-day email: secure alternatives
+## End-of-day email: active route and fallback
 
-The existing Vercel endpoint is intentionally inactive because email delivery and service-account access must not be bundled into client code. An email sent directly to `bc@swanstravel.com` still needs a trusted system permitted to send the message and read the tasks. The alternatives are below.
+The active end-of-day automation is the Google-owned script documented in `REPORT_AUTOMATION_STATUS.md`. The existing Vercel endpoint remains intentionally inactive because email delivery and service-account access must not be bundled into client code. An email sent directly to `bc@swanstravel.com` still needs a trusted system permitted to send the message and read the tasks.
 
 | Option | What you manage | Advantages | Limitations |
 | --- | --- | --- | --- |
 | Existing Vercel endpoint with a mail sender | Server-only values in Vercel, an email sender and a small scheduled request | Uses the existing report implementation, idempotency marker and Europe/London report logic. | Requires one-time secure configuration. A verified sending address may be required by the email provider. |
-| Google-owned scheduled script | A script under your Google account with a daily trigger and permission to read Firestore, sending with your Google/Workspace mailbox | No Vercel environment variables; the schedule and mail permissions stay in your Google account. Apps Script supports time-driven triggers and an OAuth token for authorised Google APIs. [2] [3] | Requires your Google account to have suitable Firestore access. It can only send as the mail account you own/control, and it is a separate automation to maintain. |
+| Google-owned scheduled script **(active)** | A script under your Google account with one daily trigger and permission to read Firestore, sending with your Google/Workspace mailbox | No Vercel environment variables; the schedule and mail permissions stay in your Google account. The verified project is owned by `barryconley85@gmail.com`, sends to `bc@swanstravel.com`, and uses a date-specific idempotency marker. [2] [3] | The 5:00–6:00 p.m. trigger is an Apps Script scheduling window, not exact-to-the-second timing. It can only send as the mail account or permitted alias you own/control, so do not assume its From address is `bc@swanstravel.com`. |
 | In-app report only | Nothing further | No credentials and no external delivery route. | You must open the Report centre yourself; it is not a 17:00 email. |
 
-The most straightforward no-Vercel-secret route is a Google-owned scheduled script **if** `bc@swanstravel.com` is a Google Workspace mailbox and your Google account has the required Firebase/Firestore project access. It is not “zero configuration,” but it avoids storing mail or Firebase administrator secrets in Vercel. Do not activate either automated option until you choose the owner account and delivery method.
+The selected no-Vercel-secret route is the Google-owned scheduled script. It has a successful non-sending live-data preview and one verified daily `sendEndOfDayReport` trigger. The first scheduled email should be checked from both the recipient mailbox and Apps Script execution history. To pause it, remove the trigger on the Apps Script Triggers page or run `removeDaily17Report`; to restore a single trigger, run `installDaily17Report`.
 
 ## References
 

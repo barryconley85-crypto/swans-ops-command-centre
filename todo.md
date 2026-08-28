@@ -30,8 +30,8 @@
 - [x] Record the authenticated person who actually completes each task, retaining their name and completion timestamp separately from the original assignee.
 - [x] Add rota edit and removal controls, including a safeguard and clear recovery flow for duplicate duties on the same person and date.
 - [x] Investigate and correct the duplicate duty recorded on 4 September without disturbing unrelated rota entries.
-- [ ] Add an every-day 17:00 end-of-day report showing completed and outstanding tasks for the operations lead.
-- [ ] Configure and validate the no-cost email delivery route for the scheduled end-of-day report.
+- [x] Add an every-day 17:00 end-of-day report showing completed and outstanding tasks for the operations lead.
+- [x] Configure the no-cost Google-owned delivery route and validate its live Firestore preview plus single daily schedule; mailbox delivery verification remains pending.
 - [x] Make the report recipient server-configurable and temporarily direct the scheduled report to `barryconley85@gmail.com` until a Swans Travel sender domain is available.
 - [x] Build a report centre with productivity, stale-work, task-assurance, handover, issue, readiness, rota, on-call, absence, coverage and performance reports based only on live operational data.
 - [x] Provide standard date-range reports and CSV export to approved report users, while keeping custom person/status filters and saved report views lead-only.
@@ -62,4 +62,9 @@
 - [x] Compare no-cost daily-report delivery alternatives and document exactly which security configuration each option requires before activating any email automation.
 - [x] Add a transparent, role-respecting operational activity history for logins and material workspace changes, avoiding surveillance-style usage tracking.
 - [ ] Add an in-app lead-only password reset or temporary-password control after a dedicated Firebase Admin service-account credential is stored securely in Vercel.
-- [ ] Select and activate either the existing Vercel email route or a Google-owned scheduled script for the 17:00 end-of-day report.
+- [x] Select and activate either the existing Vercel email route or a Google-owned scheduled script for the 17:00 end-of-day report.
+- [x] Configure a secure daily 17:00 Europe/London end-of-day report delivery to bc@swanstravel.com without exposing credentials to the browser or source control.
+- [ ] Send one controlled report test, confirm idempotency and document the schedule’s owner, recovery path and pause procedure.
+- [x] Resolve the Google Apps Script renewed Firestore-read authorisation path and obtain one completed non-sending report preview before enabling any email send or time trigger.
+- [x] Capture and resolve the exact Apps Script error returned after the owner Google consent attempt; keep the report inactive until a non-sending preview completes successfully.
+- [ ] Verify the first scheduled report email after its 5:00–6:00 p.m. window and confirm the recipient mailbox, sender identity and same-day idempotency behaviour.
