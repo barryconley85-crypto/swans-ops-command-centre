@@ -113,3 +113,4 @@
 
 - **Focused refinement:** the oversized “Cover is a management promise” panel and its “Return to current week” control were removed at the owner’s request. The current-week navigation remains available in the rota header.
 - **Preserved controls:** the Add cover action, standard shift patterns, on-call and shift-gap alerts, editable weekly rota grid, on-call highlighting and distribution check remain unchanged. A dedicated regression test verifies the removed text is absent and these operational controls remain present.
+- **Live verification:** after the `17e3b60` Vercel production deployment reached `READY`, the authenticated `/rota` page was inspected. The large guidance card was absent; the page showed Add cover, all three shift patterns, both gap cards, the weekly grid and Distribution check with no visual layout regression.
