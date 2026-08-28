@@ -69,3 +69,4 @@
 - [x] Capture and resolve the exact Apps Script error returned after the owner Google consent attempt; keep the report inactive until a non-sending preview completes successfully.
 - [ ] Verify the first scheduled report email after its 5:00–6:00 p.m. window and confirm the recipient mailbox, sender identity and same-day idempotency behaviour.
 - [x] Retire the manual readiness-pulse/check-in workflow from the operating experience and replace any dashboard dependency with existing task, rota, on-call, handover, issue and help-request signals; preserve historical readiness records without collecting new check-ins.
+- [x] Remove the oversized “Cover is a management promise” guidance panel from the Rota & on-call screen without changing rota, leave, on-call or cover-gap functions.

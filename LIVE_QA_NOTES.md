@@ -108,3 +108,8 @@
 - **Operating decision:** the separate capacity/check-in flow was retired because it would create unnecessary daily administration for a small, busy operations team. Daily coordination now relies on information already required to operate the service: assigned and overdue tasks, rota/on-call cover, handovers, issues and Help & cover requests.
 - **Implementation:** Readiness was removed from the sidebar, app route, Today-board metric, continuity card, operational-signal prompt and routine report catalogue. The command board now shows on-call cover plus open handovers and active issues instead of asking colleagues for a separate pulse.
 - **Historical data protection:** existing `ops_readiness` documents were deliberately not deleted. Their Firestore rule now permits reading existing records but blocks all creation, editing and deletion, preventing the retired feature from silently returning as a manual obligation.
+
+## Rota & on-call guidance-card removal
+
+- **Focused refinement:** the oversized “Cover is a management promise” panel and its “Return to current week” control were removed at the owner’s request. The current-week navigation remains available in the rota header.
+- **Preserved controls:** the Add cover action, standard shift patterns, on-call and shift-gap alerts, editable weekly rota grid, on-call highlighting and distribution check remain unchanged. A dedicated regression test verifies the removed text is absent and these operational controls remain present.
