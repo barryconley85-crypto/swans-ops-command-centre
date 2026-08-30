@@ -114,3 +114,11 @@
 - **Focused refinement:** the oversized “Cover is a management promise” panel and its “Return to current week” control were removed at the owner’s request. The current-week navigation remains available in the rota header.
 - **Preserved controls:** the Add cover action, standard shift patterns, on-call and shift-gap alerts, editable weekly rota grid, on-call highlighting and distribution check remain unchanged. A dedicated regression test verifies the removed text is absent and these operational controls remain present.
 - **Live verification:** after the `17e3b60` Vercel production deployment reached `READY`, the authenticated `/rota` page was inspected. The large guidance card was absent; the page showed Add cover, all three shift patterns, both gap cards, the weekly grid and Distribution check with no visual layout regression.
+
+## Rolling rota and task-run workflow
+
+- **Bulk rota planning:** the rota now accepts an inclusive start/end range of up to 21 days for a single duty, creating independent daily assignments. Existing exact duties block the whole operation rather than producing partial duplicates.
+- **Week duplication:** the selected seven-day rota can be copied exactly one week forward. The action is manager-gated, confirms before writing, and refuses to copy if matching destination duties already exist.
+- **Task runs:** ad-hoc tasks and reusable checklist templates support inclusive ranges of up to 21 days. Each day receives a separate task instance, and a manager can override all item owners with one selected team member.
+- **Governance and deletion:** new tasks expose **Team can complete** versus **Lead only**. The client and Firestore rules both enforce the distinction. Managers can remove incomplete task instances; completed task deletion is lead-only. Template deletion is lead-only and never removes tasks already created from that template.
+- **Validation status:** type checking, production build, diff validation and the expanded Vitest suite passed, including three bulk-date helper tests. The updated Firestore rules compiled and were released successfully. Live authenticated workflow verification and the Git-connected Vercel READY deployment remain the final release checks before marking these items complete.

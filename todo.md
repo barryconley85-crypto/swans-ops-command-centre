@@ -70,3 +70,7 @@
 - [ ] Verify the first scheduled report email after its 5:00–6:00 p.m. window and confirm the recipient mailbox, sender identity and same-day idempotency behaviour.
 - [x] Retire the manual readiness-pulse/check-in workflow from the operating experience and replace any dashboard dependency with existing task, rota, on-call, handover, issue and help-request signals; preserve historical readiness records without collecting new check-ins.
 - [x] Remove the oversized “Cover is a management promise” guidance panel from the Rota & on-call screen without changing rota, leave, on-call or cover-gap functions.
+- [ ] Support multi-day rota assignment across the three-week rolling window, including a lead-only duplicate-week action that safely copies duties to a new week without overwriting existing entries.
+- [ ] Make reusable task templates assignable across multiple days and to selected team members, with repeatable daily task creation and clear assignee/completer attribution.
+- [ ] Add safe deletion for assigned task instances and template records where permitted, preserving activity history and protecting completed operational records from accidental removal.
+- [ ] Add lead-controlled task governance so the lead can choose which tasks are team-completable versus lead-controlled, while keeping ordinary team completion available only where allowed.
