@@ -97,8 +97,7 @@ function TaskDetail({
         await activity.refetch();
         toast.success("Comment added to task history.");
       },
-      onError: error =>
-        toast.error(error.message),
+      onError: error => toast.error(error.message),
     });
 
   const statusMutation =
@@ -113,8 +112,7 @@ function TaskDetail({
 
         toast.success("Task status updated.");
       },
-      onError: error =>
-        toast.error(error.message),
+      onError: error => toast.error(error.message),
     });
 
   const setTaskStatus = (
@@ -244,38 +242,28 @@ function TaskDetail({
             </p>
 
             <div className="flex gap-1.5">
-              {task.status !==
-              "in_progress" ? (
+              {task.status !== "in_progress" ? (
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
-                  disabled={
-                    statusMutation.isPending
-                  }
+                  disabled={statusMutation.isPending}
                   onClick={() =>
-                    setTaskStatus(
-                      "in_progress",
-                    )
+                    setTaskStatus("in_progress")
                   }
                 >
                   Start
                 </Button>
               ) : null}
 
-              {task.status !==
-              "complete" ? (
+              {task.status !== "complete" ? (
                 <Button
                   type="button"
                   size="sm"
-                  disabled={
-                    statusMutation.isPending
-                  }
+                  disabled={statusMutation.isPending}
                   className="bg-[#1D5C63] hover:bg-[#164B50]"
                   onClick={() =>
-                    setTaskStatus(
-                      "complete",
-                    )
+                    setTaskStatus("complete")
                   }
                 >
                   <Check className="mr-1 h-3.5 w-3.5" />
@@ -286,13 +274,9 @@ function TaskDetail({
                   type="button"
                   size="sm"
                   variant="outline"
-                  disabled={
-                    statusMutation.isPending
-                  }
+                  disabled={statusMutation.isPending}
                   onClick={() =>
-                    setTaskStatus(
-                      "pending",
-                    )
+                    setTaskStatus("pending")
                   }
                 >
                   Reopen
@@ -309,15 +293,11 @@ function TaskDetail({
                   className="rounded-lg bg-[#F4F6F4] px-3 py-2.5"
                 >
                   <p className="text-xs font-semibold capitalize text-[#45504C]">
-                    {labelForStatus(
-                      item.action,
-                    )}
+                    {labelForStatus(item.action)}
 
                     <span className="ml-1 font-normal text-[#87918D]">
                       {format(
-                        new Date(
-                          item.createdAt,
-                        ),
+                        new Date(item.createdAt),
                         "d MMM, HH:mm",
                       )}
                     </span>
@@ -341,9 +321,7 @@ function TaskDetail({
             <Textarea
               value={comment}
               onChange={event =>
-                setComment(
-                  event.target.value,
-                )
+                setComment(event.target.value)
               }
               placeholder="Add a handover note or update..."
               className="min-h-10 resize-none border-[#DCE3DF] bg-white text-sm"
@@ -446,21 +424,19 @@ export default function Tasks() {
     });
 
   const statusMutation =
-    trpc.operations.tasks.updateStatus.useMutation(
-      {
-        onSuccess: async () => {
-          await utils.operations.tasks.list.invalidate(
-            { date: selectedDate },
-          );
+    trpc.operations.tasks.updateStatus.useMutation({
+      onSuccess: async () => {
+        await utils.operations.tasks.list.invalidate({
+          date: selectedDate,
+        });
 
-          await utils.operations.dashboard.invalidate();
+        await utils.operations.dashboard.invalidate();
 
-          toast.success("Task updated.");
-        },
-        onError: error =>
-          toast.error(error.message),
+        toast.success("Task updated.");
       },
-    );
+      onError: error =>
+        toast.error(error.message),
+    });
 
   const templateMutation =
     trpc.operations.templates.create.useMutation({
@@ -484,40 +460,36 @@ export default function Tasks() {
     });
 
   const applyTemplateMutation =
-    trpc.operations.templates.applyTemplate.useMutation(
-      {
-        onSuccess: async result => {
-          await utils.operations.tasks.list.invalidate(
-            { date: selectedDate },
-          );
+    trpc.operations.templates.applyTemplate.useMutation({
+      onSuccess: async result => {
+        await utils.operations.tasks.list.invalidate({
+          date: selectedDate,
+        });
 
-          setShowApplyForm(false);
+        setShowApplyForm(false);
 
-          toast.success(
-            `${result.created} tasks added across ${result.days} day${
-              result.days === 1 ? "" : "s"
-            }.`,
-          );
-        },
-        onError: error =>
-          toast.error(error.message),
+        toast.success(
+          `${result.created} tasks added across ${result.days} day${
+            result.days === 1 ? "" : "s"
+          }.`,
+        );
       },
-    );
+      onError: error =>
+        toast.error(error.message),
+    });
 
   const removeTemplateMutation =
-    trpc.operations.templates.remove.useMutation(
-      {
-        onSuccess: async () => {
-          await templatesQuery.refetch();
+    trpc.operations.templates.remove.useMutation({
+      onSuccess: async () => {
+        await templatesQuery.refetch();
 
-          toast.success(
-            "Checklist template removed.",
-          );
-        },
-        onError: error =>
-          toast.error(error.message),
+        toast.success(
+          "Checklist template removed.",
+        );
       },
-    );
+      onError: error =>
+        toast.error(error.message),
+    });
 
   const tasks =
     (tasksQuery.data ?? []) as TaskRow[];
@@ -567,16 +539,30 @@ export default function Tasks() {
     );
   };
 
-  const submittingTaskRef = useRef(false);
+  const submittingTaskRef =
+    useRef(false);
 
   const submitTask = async () => {
     if (submittingTaskRef.current) {
       return;
     }
 
-    if (!taskForm.title.trim()) {
+    const title =
+      taskForm.title.trim();
+
+    if (!title) {
       toast.error(
         "Give the task a clear title.",
+      );
+      return;
+    }
+
+    if (
+      !taskForm.startDate ||
+      !taskForm.endDate
+    ) {
+      toast.error(
+        "Choose a start and end date.",
       );
       return;
     }
@@ -596,6 +582,13 @@ export default function Tasks() {
       taskForm.endDate,
     );
 
+    if (!dates.length) {
+      toast.error(
+        "No valid task dates were selected.",
+      );
+      return;
+    }
+
     if (dates.length > 21) {
       toast.error(
         "Choose a task run of up to 21 days.",
@@ -609,9 +602,10 @@ export default function Tasks() {
       for (const workDate of dates) {
         await taskMutation.mutateAsync({
           workDate,
-          title: taskForm.title,
+          title,
           detail:
-            taskForm.detail || undefined,
+            taskForm.detail.trim() ||
+            undefined,
           priority: taskForm.priority,
           dueAt: taskForm.dueTime
             ? new Date(
@@ -625,9 +619,11 @@ export default function Tasks() {
         });
       }
 
-      await utils.operations.tasks.list.invalidate(
-        { date: selectedDate },
-      );
+      await utils.operations.tasks.list.invalidate({
+        date: selectedDate,
+      });
+
+      await utils.operations.dashboard.invalidate();
 
       setShowTaskForm(false);
 
@@ -642,11 +638,9 @@ export default function Tasks() {
       });
 
       toast.success(
-        `${
-          dates.length === 1
-            ? "Task added"
-            : `${dates.length} task days added`
-        } to the control board.`,
+        dates.length === 1
+          ? "Task added to the control board."
+          : `${dates.length} task days added to the control board.`,
       );
     } catch {
       // The mutation's own error handler displays
@@ -688,9 +682,7 @@ export default function Tasks() {
   const openTemplateApply = (
     templateId: number,
   ) => {
-    setSelectedTemplateId(
-      templateId,
-    );
+    setSelectedTemplateId(templateId);
 
     setTemplateApplyForm({
       startDate: selectedDate,
@@ -875,14 +867,10 @@ export default function Tasks() {
                           templateForm.name
                         }
                         onChange={event =>
-                          setTemplateForm(
-                            {
-                              ...templateForm,
-                              name: event
-                                .target
-                                .value,
-                            },
-                          )
+                          setTemplateForm({
+                            ...templateForm,
+                            name: event.target.value,
+                          })
                         }
                         placeholder="Morning control checks"
                       />
@@ -898,15 +886,11 @@ export default function Tasks() {
                           templateForm.description
                         }
                         onChange={event =>
-                          setTemplateForm(
-                            {
-                              ...templateForm,
-                              description:
-                                event
-                                  .target
-                                  .value,
-                            },
-                          )
+                          setTemplateForm({
+                            ...templateForm,
+                            description:
+                              event.target.value,
+                          })
                         }
                         placeholder="What does this make sure is ready?"
                       />
@@ -922,14 +906,10 @@ export default function Tasks() {
                           templateForm.items
                         }
                         onChange={event =>
-                          setTemplateForm(
-                            {
-                              ...templateForm,
-                              items: event
-                                .target
-                                .value,
-                            },
-                          )
+                          setTemplateForm({
+                            ...templateForm,
+                            items: event.target.value,
+                          })
                         }
                         className="min-h-36"
                         placeholder={
@@ -973,281 +953,231 @@ export default function Tasks() {
                 </DialogTrigger>
 
                 <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
-                  <form
-                    onSubmit={event => {
-                      event.preventDefault();
-                      void submitTask();
-                    }}
-                    className="contents"
-                  >
-                    <DialogHeader>
-                      <DialogTitle>
-                        Add a daily task
-                      </DialogTitle>
+                  <DialogHeader>
+                    <DialogTitle>
+                      Add a daily task
+                    </DialogTitle>
 
-                      <DialogDescription>
-                        Give the team an
-                        unambiguous
-                        action, owner and
-                        deadline.
-                      </DialogDescription>
-                    </DialogHeader>
+                    <DialogDescription>
+                      Give the team an
+                      unambiguous
+                      action, owner and
+                      deadline.
+                    </DialogDescription>
+                  </DialogHeader>
 
-                    <div className="space-y-4 py-2">
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-2">
-                          <Label>
-                            From
-                          </Label>
-
-                          <Input
-                            type="date"
-                            value={
-                              taskForm.startDate
-                            }
-                            onChange={event =>
-                              setTaskForm(
-                                {
-                                  ...taskForm,
-                                  startDate:
-                                    event
-                                      .target
-                                      .value,
-                                  endDate:
-                                    taskForm.endDate <
-                                    event
-                                      .target
-                                      .value
-                                      ? event
-                                          .target
-                                          .value
-                                      : taskForm.endDate,
-                                },
-                              )
-                            }
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label>
-                            To
-                          </Label>
-
-                          <Input
-                            type="date"
-                            min={
-                              taskForm.startDate
-                            }
-                            value={
-                              taskForm.endDate
-                            }
-                            onChange={event =>
-                              setTaskForm(
-                                {
-                                  ...taskForm,
-                                  endDate:
-                                    event
-                                      .target
-                                      .value,
-                                },
-                              )
-                            }
-                          />
-                        </div>
-                      </div>
-
+                  <div className="space-y-4 py-2">
+                    <div className="grid gap-4 sm:grid-cols-2">
                       <div className="space-y-2">
                         <Label>
-                          Task
+                          From
                         </Label>
 
                         <Input
+                          type="date"
                           value={
-                            taskForm.title
+                            taskForm.startDate
                           }
                           onChange={event =>
-                            setTaskForm(
-                              {
-                                ...taskForm,
-                                title: event
-                                  .target
-                                  .value,
-                              },
-                            )
+                            setTaskForm({
+                              ...taskForm,
+                              startDate:
+                                event.target.value,
+                              endDate:
+                                taskForm.endDate <
+                                event.target.value
+                                  ? event.target.value
+                                  : taskForm.endDate,
+                            })
                           }
-                          placeholder="Confirm late-cover driver"
                         />
                       </div>
 
                       <div className="space-y-2">
                         <Label>
-                          Notes
+                          To
                         </Label>
 
-                        <Textarea
+                        <Input
+                          type="date"
+                          min={
+                            taskForm.startDate
+                          }
                           value={
-                            taskForm.detail
+                            taskForm.endDate
                           }
                           onChange={event =>
-                            setTaskForm(
-                              {
-                                ...taskForm,
-                                detail:
-                                  event
-                                    .target
-                                    .value,
-                              },
-                            )
+                            setTaskForm({
+                              ...taskForm,
+                              endDate:
+                                event.target.value,
+                            })
                           }
-                          placeholder="Context or completion standard..."
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>
+                        Task
+                      </Label>
+
+                      <Input
+                        value={
+                          taskForm.title
+                        }
+                        onChange={event =>
+                          setTaskForm({
+                            ...taskForm,
+                            title: event.target.value,
+                          })
+                        }
+                        placeholder="Confirm late-cover driver"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>
+                        Notes
+                      </Label>
+
+                      <Textarea
+                        value={
+                          taskForm.detail
+                        }
+                        onChange={event =>
+                          setTaskForm({
+                            ...taskForm,
+                            detail:
+                              event.target.value,
+                          })
+                        }
+                        placeholder="Context or completion standard..."
+                      />
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-3">
+                      <div className="space-y-2">
+                        <Label>
+                          Priority
+                        </Label>
+
+                        <select
+                          value={
+                            taskForm.priority
+                          }
+                          onChange={event =>
+                            setTaskForm({
+                              ...taskForm,
+                              priority:
+                                event.target.value as TaskRow["priority"],
+                            })
+                          }
+                          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        >
+                          <option value="low">
+                            Low
+                          </option>
+
+                          <option value="normal">
+                            Normal
+                          </option>
+
+                          <option value="high">
+                            High
+                          </option>
+
+                          <option value="critical">
+                            Critical
+                          </option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>
+                          Due time
+                        </Label>
+
+                        <Input
+                          type="time"
+                          value={
+                            taskForm.dueTime
+                          }
+                          onChange={event =>
+                            setTaskForm({
+                              ...taskForm,
+                              dueTime:
+                                event.target.value,
+                            })
+                          }
                         />
                       </div>
 
-                      <div className="grid gap-4 sm:grid-cols-3">
-                        <div className="space-y-2">
-                          <Label>
-                            Priority
-                          </Label>
+                      <div className="space-y-2">
+                        <Label>
+                          Owner
+                        </Label>
 
-                          <select
-                            value={
-                              taskForm.priority
-                            }
-                            onChange={event =>
-                              setTaskForm(
+                        <select
+                          value={
+                            taskForm.assignee
+                          }
+                          onChange={event =>
+                            setTaskForm({
+                              ...taskForm,
+                              assignee:
+                                event.target.value,
+                            })
+                          }
+                          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        >
+                          <option value="">
+                            Unassigned
+                          </option>
+
+                          {teamQuery.data
+                            ?.filter(
+                              member =>
+                                member.status ===
+                                "active",
+                            )
+                            .map(member => (
+                              <option
+                                key={
+                                  member.id
+                                }
+                                value={
+                                  member.id
+                                }
+                              >
                                 {
-                                  ...taskForm,
-                                  priority:
-                                    event
-                                      .target
-                                      .value as TaskRow["priority"],
-                                },
-                              )
-                            }
-                            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                          >
-                            <option value="low">
-                              Low
-                            </option>
-
-                            <option value="normal">
-                              Normal
-                            </option>
-
-                            <option value="high">
-                              High
-                            </option>
-
-                            <option value="critical">
-                              Critical
-                            </option>
-                          </select>
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label>
-                            Due time
-                          </Label>
-
-                          <Input
-                            type="time"
-                            value={
-                              taskForm.dueTime
-                            }
-                            onChange={event =>
-                              setTaskForm(
-                                {
-                                  ...taskForm,
-                                  dueTime:
-                                    event
-                                      .target
-                                      .value,
-                                },
-                              )
-                            }
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label>
-                            Owner
-                          </Label>
-
-                          <select
-                            value={
-                              taskForm.assignee
-                            }
-                            onChange={event =>
-                              setTaskForm(
-                                {
-                                  ...taskForm,
-                                  assignee:
-                                    event
-                                      .target
-                                      .value,
-                                },
-                              )
-                            }
-                            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                          >
-                            <option value="">
-                              Unassigned
-                            </option>
-
-                            {teamQuery.data
-                              ?.filter(
-                                member =>
-                                  member.status ===
-                                  "active",
-                              )
-                              .map(
-                                member => (
-                                  <option
-                                    key={
-                                      member.id
-                                    }
-                                    value={
-                                      member.id
-                                    }
-                                  >
-                                    {
-                                      member.displayName
-                                    }
-                                  </option>
-                                ),
-                              )}
-                          </select>
-                        </div>
+                                  member.displayName
+                                }
+                              </option>
+                            ))}
+                        </select>
                       </div>
                     </div>
+                  </div>
 
-                    <div className="mt-2 border-t border-[#E5E9E6] pt-4">
-                      <button
-                        type="submit"
-                        disabled={
-                          taskMutation.isPending
-                        }
-                        onTouchEnd={event => {
-                          event.preventDefault();
-                          event.stopPropagation();
-
-                          if (
-                            !taskMutation.isPending
-                          ) {
-                            void submitTask();
-                          }
-                        }}
-                        onPointerUp={event => {
-                          event.stopPropagation();
-                        }}
-                        className="relative z-[100] flex h-12 w-full touch-manipulation select-none items-center justify-center rounded-md bg-[#1D5C63] px-6 text-base font-medium text-white shadow-sm transition-colors hover:bg-[#164B50] disabled:pointer-events-none disabled:opacity-50"
-                      >
-                        {taskMutation.isPending
-                          ? "Adding..."
-                          : "Add task"}
-                      </button>
-                    </div>
-                  </form>
+                  <DialogFooter className="border-t border-[#E5E9E6] pt-4">
+                    <Button
+                      type="button"
+                      disabled={
+                        taskMutation.isPending ||
+                        submittingTaskRef.current
+                      }
+                      onClick={() => {
+                        void submitTask();
+                      }}
+                      className="w-full bg-[#1D5C63] hover:bg-[#164B50]"
+                    >
+                      {taskMutation.isPending ||
+                      submittingTaskRef.current
+                        ? "Adding..."
+                        : "Add task"}
+                    </Button>
+                  </DialogFooter>
                 </DialogContent>
               </Dialog>
             </>
@@ -1341,12 +1271,10 @@ export default function Tasks() {
                               `Delete the ${template.name} checklist template? Existing tasks will stay.`,
                             )
                           ) {
-                            removeTemplateMutation.mutate(
-                              {
-                                templateId:
-                                  template.id,
-                              },
-                            );
+                            removeTemplateMutation.mutate({
+                              templateId:
+                                template.id,
+                            });
                           }
                         }}
                       >
@@ -1395,20 +1323,16 @@ export default function Tasks() {
                     templateApplyForm.startDate
                   }
                   onChange={event =>
-                    setTemplateApplyForm(
-                      {
-                        ...templateApplyForm,
-                        startDate:
-                          event.target.value,
-                        endDate:
-                          templateApplyForm.endDate <
-                          event.target.value
-                            ? event
-                                .target
-                                .value
-                            : templateApplyForm.endDate,
-                      },
-                    )
+                    setTemplateApplyForm({
+                      ...templateApplyForm,
+                      startDate:
+                        event.target.value,
+                      endDate:
+                        templateApplyForm.endDate <
+                        event.target.value
+                          ? event.target.value
+                          : templateApplyForm.endDate,
+                    })
                   }
                 />
               </div>
@@ -1427,13 +1351,11 @@ export default function Tasks() {
                     templateApplyForm.endDate
                   }
                   onChange={event =>
-                    setTemplateApplyForm(
-                      {
-                        ...templateApplyForm,
-                        endDate:
-                          event.target.value,
-                      },
-                    )
+                    setTemplateApplyForm({
+                      ...templateApplyForm,
+                      endDate:
+                        event.target.value,
+                    })
                   }
                 />
               </div>
@@ -1450,13 +1372,11 @@ export default function Tasks() {
                   templateApplyForm.assignee
                 }
                 onChange={event =>
-                  setTemplateApplyForm(
-                    {
-                      ...templateApplyForm,
-                      assignee:
-                        event.target.value,
-                    },
-                  )
+                  setTemplateApplyForm({
+                    ...templateApplyForm,
+                    assignee:
+                      event.target.value,
+                  })
                 }
               >
                 <option value="">
@@ -1529,29 +1449,22 @@ export default function Tasks() {
             {tasksQuery.isLoading ? (
               <TaskListSkeleton />
             ) : grouped.action.length ? (
-              grouped.action.map(
-                task => (
-                  <TaskItem
-                    key={task.id}
-                    task={task}
-                    selectedDate={
-                      selectedDate
-                    }
-                    onStatus={status =>
-                      statusMutation.mutate(
-                        {
-                          taskId:
-                            task.id,
-                          status,
-                        },
-                      )
-                    }
-                    pending={
-                      statusMutation.isPending
-                    }
-                  />
-                ),
-              )
+              grouped.action.map(task => (
+                <TaskItem
+                  key={task.id}
+                  task={task}
+                  selectedDate={selectedDate}
+                  onStatus={status =>
+                    statusMutation.mutate({
+                      taskId: task.id,
+                      status,
+                    })
+                  }
+                  pending={
+                    statusMutation.isPending
+                  }
+                />
+              ))
             ) : (
               <EmptyTasks
                 isManager={isManager}
@@ -1568,29 +1481,22 @@ export default function Tasks() {
                 Blocked
               </p>
 
-              {grouped.blocked.map(
-                task => (
-                  <TaskItem
-                    key={task.id}
-                    task={task}
-                    selectedDate={
-                      selectedDate
-                    }
-                    onStatus={status =>
-                      statusMutation.mutate(
-                        {
-                          taskId:
-                            task.id,
-                          status,
-                        },
-                      )
-                    }
-                    pending={
-                      statusMutation.isPending
-                    }
-                  />
-                ),
-              )}
+              {grouped.blocked.map(task => (
+                <TaskItem
+                  key={task.id}
+                  task={task}
+                  selectedDate={selectedDate}
+                  onStatus={status =>
+                    statusMutation.mutate({
+                      taskId: task.id,
+                      status,
+                    })
+                  }
+                  pending={
+                    statusMutation.isPending
+                  }
+                />
+              ))}
             </div>
           ) : null}
 
@@ -1600,30 +1506,23 @@ export default function Tasks() {
                 Completed
               </p>
 
-              {grouped.complete.map(
-                task => (
-                  <TaskItem
-                    key={task.id}
-                    task={task}
-                    selectedDate={
-                      selectedDate
-                    }
-                    onStatus={status =>
-                      statusMutation.mutate(
-                        {
-                          taskId:
-                            task.id,
-                          status,
-                        },
-                      )
-                    }
-                    pending={
-                      statusMutation.isPending
-                    }
-                    compact
-                  />
-                ),
-              )}
+              {grouped.complete.map(task => (
+                <TaskItem
+                  key={task.id}
+                  task={task}
+                  selectedDate={selectedDate}
+                  onStatus={status =>
+                    statusMutation.mutate({
+                      taskId: task.id,
+                      status,
+                    })
+                  }
+                  pending={
+                    statusMutation.isPending
+                  }
+                  compact
+                />
+              ))}
             </div>
           ) : null}
         </div>
@@ -1675,26 +1574,24 @@ export default function Tasks() {
 
             <div className="mt-4 space-y-3">
               {grouped.blocked.length ? (
-                grouped.blocked.map(
-                  task => (
-                    <div
-                      key={task.id}
-                      className="rounded-xl bg-[#FFF5F3] px-3 py-3"
-                    >
-                      <TaskDetail
-                        task={task}
-                        selectedDate={
-                          selectedDate
-                        }
-                      />
+                grouped.blocked.map(task => (
+                  <div
+                    key={task.id}
+                    className="rounded-xl bg-[#FFF5F3] px-3 py-3"
+                  >
+                    <TaskDetail
+                      task={task}
+                      selectedDate={
+                        selectedDate
+                      }
+                    />
 
-                      <p className="mt-1 line-clamp-1 text-xs text-[#A4574B]">
-                        {task.blockedReason ||
-                          "Action required"}
-                      </p>
-                    </div>
-                  )
-                )
+                    <p className="mt-1 line-clamp-1 text-xs text-[#A4574B]">
+                      {task.blockedReason ||
+                        "Action required"}
+                    </p>
+                  </div>
+                ))
               ) : (
                 <p className="rounded-xl bg-[#F3F8F5] px-3 py-4 text-center text-xs text-[#4C7665]">
                   Nothing is blocked
@@ -1822,20 +1719,13 @@ function TaskItem({
                 className="flex h-4 w-4 items-center justify-center rounded-full text-[8px] font-bold text-white"
                 style={{
                   backgroundColor:
-                    task.assignee
-                      .colour,
+                    task.assignee.colour,
                 }}
               >
-                {
-                  task.assignee
-                    .initials
-                }
+                {task.assignee.initials}
               </span>
 
-              {
-                task.assignee
-                  .displayName
-              }
+              {task.assignee.displayName}
             </span>
           ) : (
             <span className="text-xs text-[#9AA39F]">
@@ -1849,28 +1739,21 @@ function TaskItem({
         <p
           className={`text-xs font-semibold ${
             task.dueAt &&
-            task.dueAt <
-              Date.now() &&
+            task.dueAt < Date.now() &&
             !done
               ? "text-[#B94336]"
               : "text-[#65716C]"
           }`}
         >
-          {compactTime(
-            task.dueAt,
-          )}
+          {compactTime(task.dueAt)}
         </p>
 
-        {task.status !==
-          "complete" &&
-        task.status !==
-          "in_progress" ? (
+        {task.status !== "complete" &&
+        task.status !== "in_progress" ? (
           <button
             type="button"
             onClick={() =>
-              onStatus(
-                "in_progress",
-              )
+              onStatus("in_progress")
             }
             className="mt-2 text-[11px] font-semibold text-[#31718A] hover:underline"
           >
@@ -1923,14 +1806,12 @@ function EmptyTasks({
 function TaskListSkeleton() {
   return (
     <div className="space-y-4 px-5 py-5">
-      {[1, 2, 3, 4].map(
-        index => (
-          <div
-            className="h-16 animate-pulse rounded-xl bg-[#F2F5F3]"
-            key={index}
-          />
-        ),
-      )}
+      {[1, 2, 3, 4].map(index => (
+        <div
+          className="h-16 animate-pulse rounded-xl bg-[#F2F5F3]"
+          key={index}
+        />
+      ))}
     </div>
   );
 }
