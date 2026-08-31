@@ -39,7 +39,7 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 type TaskRow = {
@@ -137,7 +137,10 @@ function TaskDetail({
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <button className="min-w-0 text-left">
+        <button
+          type="button"
+          className="min-w-0 text-left"
+        >
           <p className="truncate text-[15px] font-semibold text-[#1E2A27] hover:text-[#1D5C63]">
             {task.title}
           </p>
@@ -244,6 +247,7 @@ function TaskDetail({
               {task.status !==
               "in_progress" ? (
                 <Button
+                  type="button"
                   size="sm"
                   variant="outline"
                   disabled={
@@ -262,6 +266,7 @@ function TaskDetail({
               {task.status !==
               "complete" ? (
                 <Button
+                  type="button"
                   size="sm"
                   disabled={
                     statusMutation.isPending
@@ -278,6 +283,7 @@ function TaskDetail({
                 </Button>
               ) : (
                 <Button
+                  type="button"
                   size="sm"
                   variant="outline"
                   disabled={
@@ -344,6 +350,7 @@ function TaskDetail({
             />
 
             <Button
+              type="button"
               disabled={
                 !comment.trim() ||
                 commentMutation.isPending
@@ -560,7 +567,13 @@ export default function Tasks() {
     );
   };
 
+  const submittingTaskRef = useRef(false);
+
   const submitTask = async () => {
+    if (submittingTaskRef.current) {
+      return;
+    }
+
     if (!taskForm.title.trim()) {
       toast.error(
         "Give the task a clear title.",
@@ -589,6 +602,8 @@ export default function Tasks() {
       );
       return;
     }
+
+    submittingTaskRef.current = true;
 
     try {
       for (const workDate of dates) {
@@ -627,11 +642,17 @@ export default function Tasks() {
       });
 
       toast.success(
-        `${dates.length === 1 ? "Task added" : `${dates.length} task days added`} to the control board.`,
+        `${
+          dates.length === 1
+            ? "Task added"
+            : `${dates.length} task days added`
+        } to the control board.`,
       );
     } catch {
       // The mutation's own error handler displays
       // the server error.
+    } finally {
+      submittingTaskRef.current = false;
     }
   };
 
@@ -763,6 +784,7 @@ export default function Tasks() {
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex h-10 items-center rounded-xl border border-[#DFE6E1] bg-white p-1 shadow-sm">
             <Button
+              type="button"
               variant="ghost"
               size="icon"
               className="h-8 w-8"
@@ -778,6 +800,7 @@ export default function Tasks() {
             </span>
 
             <Button
+              type="button"
               variant="ghost"
               size="icon"
               className="h-8 w-8"
@@ -791,6 +814,7 @@ export default function Tasks() {
 
           {personalProfile ? (
             <Button
+              type="button"
               variant="outline"
               className="h-10 border-[#D6E2DE] bg-white"
               onClick={() =>
@@ -815,6 +839,7 @@ export default function Tasks() {
               >
                 <DialogTrigger asChild>
                   <Button
+                    type="button"
                     variant="outline"
                     className="h-10 border-[#D6E2DE] bg-white"
                   >
@@ -916,6 +941,7 @@ export default function Tasks() {
 
                   <DialogFooter>
                     <Button
+                      type="button"
                       onClick={
                         submitTemplate
                       }
@@ -937,268 +963,291 @@ export default function Tasks() {
                 }
               >
                 <DialogTrigger asChild>
-                  <Button className="h-10 bg-[#1D5C63] shadow-sm hover:bg-[#164B50]">
+                  <Button
+                    type="button"
+                    className="h-10 bg-[#1D5C63] shadow-sm hover:bg-[#164B50]"
+                  >
                     <Plus className="mr-2 h-4 w-4" />
                     Add task
                   </Button>
                 </DialogTrigger>
 
                 <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle>
-                      Add a daily task
-                    </DialogTitle>
+                  <form
+                    onSubmit={event => {
+                      event.preventDefault();
+                      void submitTask();
+                    }}
+                    className="contents"
+                  >
+                    <DialogHeader>
+                      <DialogTitle>
+                        Add a daily task
+                      </DialogTitle>
 
-                    <DialogDescription>
-                      Give the team an
-                      unambiguous
-                      action, owner and
-                      deadline.
-                    </DialogDescription>
-                  </DialogHeader>
+                      <DialogDescription>
+                        Give the team an
+                        unambiguous
+                        action, owner and
+                        deadline.
+                      </DialogDescription>
+                    </DialogHeader>
 
-                  <div className="space-y-4 py-2">
-                    <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-4 py-2">
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label>
+                            From
+                          </Label>
+
+                          <Input
+                            type="date"
+                            value={
+                              taskForm.startDate
+                            }
+                            onChange={event =>
+                              setTaskForm(
+                                {
+                                  ...taskForm,
+                                  startDate:
+                                    event
+                                      .target
+                                      .value,
+                                  endDate:
+                                    taskForm.endDate <
+                                    event
+                                      .target
+                                      .value
+                                      ? event
+                                          .target
+                                          .value
+                                      : taskForm.endDate,
+                                },
+                              )
+                            }
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>
+                            To
+                          </Label>
+
+                          <Input
+                            type="date"
+                            min={
+                              taskForm.startDate
+                            }
+                            value={
+                              taskForm.endDate
+                            }
+                            onChange={event =>
+                              setTaskForm(
+                                {
+                                  ...taskForm,
+                                  endDate:
+                                    event
+                                      .target
+                                      .value,
+                                },
+                              )
+                            }
+                          />
+                        </div>
+                      </div>
+
                       <div className="space-y-2">
                         <Label>
-                          From
+                          Task
                         </Label>
 
                         <Input
-                          type="date"
                           value={
-                            taskForm.startDate
+                            taskForm.title
                           }
                           onChange={event =>
                             setTaskForm(
                               {
                                 ...taskForm,
-                                startDate:
-                                  event
-                                    .target
-                                    .value,
-                                endDate:
-                                  taskForm.endDate <
-                                  event
-                                    .target
-                                    .value
-                                    ? event
-                                        .target
-                                        .value
-                                    : taskForm.endDate,
-                              },
-                            )
-                          }
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>
-                          To
-                        </Label>
-
-                        <Input
-                          type="date"
-                          min={
-                            taskForm.startDate
-                          }
-                          value={
-                            taskForm.endDate
-                          }
-                          onChange={event =>
-                            setTaskForm(
-                              {
-                                ...taskForm,
-                                endDate:
-                                  event
-                                    .target
-                                    .value,
-                              },
-                            )
-                          }
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>
-                        Task
-                      </Label>
-
-                      <Input
-                        value={
-                          taskForm.title
-                        }
-                        onChange={event =>
-                          setTaskForm(
-                            {
-                              ...taskForm,
-                              title: event
-                                .target
-                                .value,
-                            },
-                          )
-                        }
-                        placeholder="Confirm late-cover driver"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>
-                        Notes
-                      </Label>
-
-                      <Textarea
-                        value={
-                          taskForm.detail
-                        }
-                        onChange={event =>
-                          setTaskForm(
-                            {
-                              ...taskForm,
-                              detail:
-                                event
+                                title: event
                                   .target
                                   .value,
-                            },
-                          )
-                        }
-                        placeholder="Context or completion standard..."
-                      />
-                    </div>
-
-                    <div className="grid gap-4 sm:grid-cols-3">
-                      <div className="space-y-2">
-                        <Label>
-                          Priority
-                        </Label>
-
-                        <select
-                          value={
-                            taskForm.priority
-                          }
-                          onChange={event =>
-                            setTaskForm(
-                              {
-                                ...taskForm,
-                                priority:
-                                  event
-                                    .target
-                                    .value as TaskRow["priority"],
                               },
                             )
                           }
-                          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                        >
-                          <option value="low">
-                            Low
-                          </option>
-
-                          <option value="normal">
-                            Normal
-                          </option>
-
-                          <option value="high">
-                            High
-                          </option>
-
-                          <option value="critical">
-                            Critical
-                          </option>
-                        </select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>
-                          Due time
-                        </Label>
-
-                        <Input
-                          type="time"
-                          value={
-                            taskForm.dueTime
-                          }
-                          onChange={event =>
-                            setTaskForm(
-                              {
-                                ...taskForm,
-                                dueTime:
-                                  event
-                                    .target
-                                    .value,
-                              },
-                            )
-                          }
+                          placeholder="Confirm late-cover driver"
                         />
                       </div>
 
                       <div className="space-y-2">
                         <Label>
-                          Owner
+                          Notes
                         </Label>
 
-                        <select
+                        <Textarea
                           value={
-                            taskForm.assignee
+                            taskForm.detail
                           }
                           onChange={event =>
                             setTaskForm(
                               {
                                 ...taskForm,
-                                assignee:
+                                detail:
                                   event
                                     .target
                                     .value,
                               },
                             )
                           }
-                          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                        >
-                          <option value="">
-                            Unassigned
-                          </option>
+                          placeholder="Context or completion standard..."
+                        />
+                      </div>
 
-                          {teamQuery.data
-                            ?.filter(
-                              member =>
-                                member.status ===
-                                "active",
-                            )
-                            .map(
-                              member => (
-                                <option
-                                  key={
-                                    member.id
-                                  }
-                                  value={
-                                    member.id
-                                  }
-                                >
-                                  {
-                                    member.displayName
-                                  }
-                                </option>
-                              ),
-                            )}
-                        </select>
+                      <div className="grid gap-4 sm:grid-cols-3">
+                        <div className="space-y-2">
+                          <Label>
+                            Priority
+                          </Label>
+
+                          <select
+                            value={
+                              taskForm.priority
+                            }
+                            onChange={event =>
+                              setTaskForm(
+                                {
+                                  ...taskForm,
+                                  priority:
+                                    event
+                                      .target
+                                      .value as TaskRow["priority"],
+                                },
+                              )
+                            }
+                            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                          >
+                            <option value="low">
+                              Low
+                            </option>
+
+                            <option value="normal">
+                              Normal
+                            </option>
+
+                            <option value="high">
+                              High
+                            </option>
+
+                            <option value="critical">
+                              Critical
+                            </option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>
+                            Due time
+                          </Label>
+
+                          <Input
+                            type="time"
+                            value={
+                              taskForm.dueTime
+                            }
+                            onChange={event =>
+                              setTaskForm(
+                                {
+                                  ...taskForm,
+                                  dueTime:
+                                    event
+                                      .target
+                                      .value,
+                                },
+                              )
+                            }
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>
+                            Owner
+                          </Label>
+
+                          <select
+                            value={
+                              taskForm.assignee
+                            }
+                            onChange={event =>
+                              setTaskForm(
+                                {
+                                  ...taskForm,
+                                  assignee:
+                                    event
+                                      .target
+                                      .value,
+                                },
+                              )
+                            }
+                            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                          >
+                            <option value="">
+                              Unassigned
+                            </option>
+
+                            {teamQuery.data
+                              ?.filter(
+                                member =>
+                                  member.status ===
+                                  "active",
+                              )
+                              .map(
+                                member => (
+                                  <option
+                                    key={
+                                      member.id
+                                    }
+                                    value={
+                                      member.id
+                                    }
+                                  >
+                                    {
+                                      member.displayName
+                                    }
+                                  </option>
+                                ),
+                              )}
+                          </select>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <DialogFooter className="sticky bottom-0 z-50 -mx-6 mt-2 bg-white px-6 pb-2 pt-4">
-                    <Button
-                      type="button"
-                      onClick={submitTask}
-                      disabled={
-                        taskMutation.isPending
-                      }
-                      className="relative z-50 w-full bg-[#1D5C63] hover:bg-[#164B50] touch-manipulation"
-                    >
-                      {taskMutation.isPending
-                        ? "Adding..."
-                        : "Add task"}
-                    </Button>
-                  </DialogFooter>
+                    <div className="mt-2 border-t border-[#E5E9E6] pt-4">
+                      <button
+                        type="submit"
+                        disabled={
+                          taskMutation.isPending
+                        }
+                        onTouchEnd={event => {
+                          event.preventDefault();
+                          event.stopPropagation();
+
+                          if (
+                            !taskMutation.isPending
+                          ) {
+                            void submitTask();
+                          }
+                        }}
+                        onPointerUp={event => {
+                          event.stopPropagation();
+                        }}
+                        className="relative z-[100] flex h-12 w-full touch-manipulation select-none items-center justify-center rounded-md bg-[#1D5C63] px-6 text-base font-medium text-white shadow-sm transition-colors hover:bg-[#164B50] disabled:pointer-events-none disabled:opacity-50"
+                      >
+                        {taskMutation.isPending
+                          ? "Adding..."
+                          : "Add task"}
+                      </button>
+                    </div>
+                  </form>
                 </DialogContent>
               </Dialog>
             </>
@@ -1263,6 +1312,7 @@ export default function Tasks() {
                     className="flex items-center gap-1"
                   >
                     <Button
+                      type="button"
                       variant="outline"
                       size="sm"
                       disabled={
@@ -1280,6 +1330,7 @@ export default function Tasks() {
 
                     {isManager ? (
                       <Button
+                        type="button"
                         variant="ghost"
                         size="icon"
                         aria-label={`Delete ${template.name} template`}
@@ -1403,8 +1454,7 @@ export default function Tasks() {
                     {
                       ...templateApplyForm,
                       assignee:
-                        event.target
-                          .value,
+                        event.target.value,
                     },
                   )
                 }
@@ -1441,6 +1491,7 @@ export default function Tasks() {
 
           <DialogFooter>
             <Button
+              type="button"
               onClick={
                 submitTemplateApply
               }
@@ -1642,7 +1693,7 @@ export default function Tasks() {
                           "Action required"}
                       </p>
                     </div>
-                  ),
+                  )
                 )
               ) : (
                 <p className="rounded-xl bg-[#F3F8F5] px-3 py-4 text-center text-xs text-[#4C7665]">
@@ -1723,6 +1774,7 @@ function TaskItem({
       }`}
     >
       <button
+        type="button"
         disabled={pending}
         aria-label={
           done
@@ -1814,6 +1866,7 @@ function TaskItem({
         task.status !==
           "in_progress" ? (
           <button
+            type="button"
             onClick={() =>
               onStatus(
                 "in_progress",
@@ -1855,6 +1908,7 @@ function EmptyTasks({
 
       {isManager ? (
         <Button
+          type="button"
           onClick={onAdd}
           className="mt-4 bg-[#1D5C63] hover:bg-[#164B50]"
         >
