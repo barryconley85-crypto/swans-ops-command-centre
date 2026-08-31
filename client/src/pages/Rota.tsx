@@ -72,8 +72,6 @@ export default function Rota() {
   const [assignmentPendingRemoval, setAssignmentPendingRemoval] =
     useState<any>(null);
 
-  // No date selected initially.
-  // First tap selects the start date, second tap selects the end date.
   const [dateRange, setDateRange] = useState<DateRange | undefined>(
     undefined,
   );
@@ -93,8 +91,6 @@ export default function Rota() {
 
   const resetForm = (date = weekStart) => {
     setEditingAssignmentId(null);
-
-    // Start with no range selected.
     setDateRange(undefined);
 
     setForm({
@@ -451,7 +447,7 @@ export default function Rota() {
                   </Button>
                 </DialogTrigger>
 
-                <DialogContent className="max-w-lg">
+                <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>
                       {editingAssignmentId
@@ -471,23 +467,27 @@ export default function Rota() {
                       <div className="space-y-2">
                         <Label>Date range</Label>
 
-                        <div className="flex justify-center overflow-hidden rounded-lg border border-input bg-background p-2">
+                        <div className="flex justify-center overflow-hidden rounded-lg border border-input bg-background p-1">
                           <Calendar
                             mode="range"
                             selected={dateRange}
                             onSelect={handleDateRangeChange}
                             defaultMonth={
                               dateRange?.from ??
-                              new Date(`${weekStart}T12:00:00`)
+                              new Date(
+                                `${weekStart}T12:00:00`,
+                              )
                             }
                             numberOfMonths={1}
+                            className="mx-auto"
                           />
                         </div>
 
                         <p className="text-xs text-muted-foreground">
                           {form.startDate &&
                           form.endDate &&
-                          form.startDate !== form.endDate
+                          form.startDate !==
+                            form.endDate
                             ? `Selected: ${format(
                                 new Date(
                                   `${form.startDate}T12:00:00`,
@@ -555,7 +555,9 @@ export default function Rota() {
                           })
                         }
                       >
-                        <option value="">Choose…</option>
+                        <option value="">
+                          Choose…
+                        </option>
 
                         {activeMembers.map((member) => (
                           <option
