@@ -6,6 +6,7 @@ import { protectedProcedure, router } from "../_core/trpc";
 const dateInput = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const priority = z.enum(["low", "normal", "high", "critical"]);
 const teamRole = z.enum(["lead", "coordinator", "support"]);
+
 const assignmentType = z.enum([
   "early",
   "core",
@@ -15,22 +16,29 @@ const assignmentType = z.enum([
   "unavailable",
 ]);
 
-const managerProcedure = protectedProcedure.use(({ ctx, next }) => {
-  if (ctx.user.role !== "admin") {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "Management access is required for this action.",
-    });
-  }
+const managerProcedure = protectedProcedure.use(
+  ({ ctx, next }) => {
+    if (ctx.user.role !== "admin") {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message:
+          "Management access is required for this action.",
+      });
+    }
 
-  return next({ ctx });
-});
+    return next({ ctx });
+  },
+);
 
 const teamMemberProcedure = protectedProcedure.use(
   async ({ ctx, next }) => {
-    const teamMember = await db.resolveTeamMemberForUser(ctx.user);
+    const teamMember =
+      await db.resolveTeamMemberForUser(ctx.user);
 
-    if (!teamMember || teamMember.status !== "active") {
+    if (
+      !teamMember ||
+      teamMember.status !== "active"
+    ) {
       throw new TRPCError({
         code: "FORBIDDEN",
         message:
@@ -49,44 +57,79 @@ const teamMemberProcedure = protectedProcedure.use(
 
 const teamMemberInput = z.object({
   displayName: z.string().min(2).max(120),
-  email: z.string().email().max(320).optional().or(z.literal("")),
+
+  email: z
+    .string()
+    .email()
+    .max(320)
+    .optional()
+    .or(z.literal("")),
+
   jobTitle: z.string().min(2).max(120),
+
   memberRole: teamRole,
+
   initials: z
     .string()
     .min(1)
     .max(4)
-    .transform((value) => value.toUpperCase()),
-  colour: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
+    .transform(value =>
+      value.toUpperCase(),
+    ),
+
+  colour: z.string().regex(
+    /^#[0-9A-Fa-f]{6}$/,
+  ),
 });
 
-function dateKeysBetween(startDate: string, endDate: string) {
+function dateKeysBetween(
+  startDate: string,
+  endDate: string,
+) {
   const dates: string[] = [];
-  const current = new Date(`${startDate}T12:00:00`);
-  const end = new Date(`${endDate}T12:00:00`);
+
+  const current = new Date(
+    `${startDate}T12:00:00`,
+  );
+
+  const end = new Date(
+    `${endDate}T12:00:00`,
+  );
 
   while (current <= end) {
     dates.push(
       `${current.getFullYear()}-${String(
         current.getMonth() + 1,
-      ).padStart(2, "0")}-${String(current.getDate()).padStart(
-        2,
-        "0",
-      )}`,
+      ).padStart(2, "0")}-${String(
+        current.getDate(),
+      ).padStart(2, "0")}`,
     );
 
-    current.setDate(current.getDate() + 1);
+    current.setDate(
+      current.getDate() + 1,
+    );
   }
 
   return dates;
 }
 
 export const operationsRouter = router({
+  /* ---------------------------------------------------------------------- */
+  /* Access                                                                 */
+  /* ---------------------------------------------------------------------- */
+
   access: router({
-    me: protectedProcedure.query(({ ctx }) =>
-      db.resolveTeamMemberForUser(ctx.user),
+    me: protectedProcedure.query(
+      ({ ctx }) =>
+        db.resolveTeamMemberForUser(
+          ctx.user,
+        ),
     ),
   }),
+
+  /* ---------------------------------------------------------------------- */
+  /* Dashboard                                                              */
+  /* ---------------------------------------------------------------------- */
 
   dashboard: protectedProcedure
     .input(
@@ -94,10 +137,20 @@ export const operationsRouter = router({
         date: dateInput,
       }),
     )
-    .query(({ input }) => db.getDashboardSnapshot(input.date)),
+    .query(({ input }) =>
+      db.getDashboardSnapshot(
+        input.date,
+      ),
+    ),
+
+  /* ---------------------------------------------------------------------- */
+  /* Team                                                                    */
+  /* ---------------------------------------------------------------------- */
 
   team: router({
-    list: protectedProcedure.query(() => db.listTeamMembers()),
+    list: protectedProcedure.query(
+      () => db.listTeamMembers(),
+    ),
 
     create: managerProcedure
       .input(teamMemberInput)
@@ -105,7 +158,8 @@ export const operationsRouter = router({
         db.createTeamMember({
           ...input,
           email: input.email || null,
-          createdByUserId: ctx.user.id,
+          createdByUserId:
+            ctx.user.id,
         }),
       ),
 
@@ -113,7 +167,10 @@ export const operationsRouter = router({
       .input(
         teamMemberInput.extend({
           id: z.number().int().positive(),
-          status: z.enum(["active", "inactive"]),
+          status: z.enum([
+            "active",
+            "inactive",
+          ]),
         }),
       )
       .mutation(({ input }) =>
@@ -124,30 +181,56 @@ export const operationsRouter = router({
       ),
   }),
 
+  /* ---------------------------------------------------------------------- */
+  /* Checklist templates                                                    */
+  /* ---------------------------------------------------------------------- */
+
   templates: router({
-    list: protectedProcedure.query(() =>
-      db.listChecklistTemplates(),
+    list: protectedProcedure.query(
+      () =>
+        db.listChecklistTemplates(),
     ),
 
     create: managerProcedure
       .input(
         z.object({
           name: z.string().min(3).max(160),
-          description: z.string().max(2000).optional(),
+
+          description: z
+            .string()
+            .max(2000)
+            .optional(),
+
           items: z
             .array(
               z.object({
-                title: z.string().min(3).max(240),
-                detail: z.string().max(2000).optional(),
-                priority: priority.default("normal"),
-                defaultAssigneeId: z
-                  .number()
-                  .int()
-                  .positive()
+                title: z
+                  .string()
+                  .min(3)
+                  .max(240),
+
+                detail: z
+                  .string()
+                  .max(2000)
                   .optional(),
+
+                priority:
+                  priority.default(
+                    "normal",
+                  ),
+
+                defaultAssigneeId:
+                  z
+                    .number()
+                    .int()
+                    .positive()
+                    .optional(),
+
                 dueTime: z
                   .string()
-                  .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+                  .regex(
+                    /^([01]\d|2[0-3]):[0-5]\d$/,
+                  )
                   .optional(),
               }),
             )
@@ -158,37 +241,132 @@ export const operationsRouter = router({
       .mutation(({ ctx, input }) =>
         db.createChecklistTemplate({
           ...input,
-          createdByUserId: ctx.user.id,
+          createdByUserId:
+            ctx.user.id,
         }),
       ),
 
-    /*
-     * Supports both the original single-date application
-     * and the newer date-range form used by the Tasks page.
-     *
-     * The optional assignee is accepted here so the frontend
-     * does not produce a validation error. Individual task
-     * allocation will be added in the next database/UI step.
-     */
+    update: managerProcedure
+      .input(
+        z.object({
+          templateId:
+            z.number().int().positive(),
+
+          name: z
+            .string()
+            .min(3)
+            .max(160),
+
+          description: z
+            .string()
+            .max(2000)
+            .optional(),
+        }),
+      )
+      .mutation(({ input }) =>
+        db.updateChecklistTemplate(
+          input,
+        ),
+      ),
+
+    updateItem: managerProcedure
+      .input(
+        z.object({
+          itemId:
+            z.number().int().positive(),
+
+          title: z
+            .string()
+            .min(3)
+            .max(240),
+
+          detail: z
+            .string()
+            .max(2000)
+            .optional(),
+
+          priority,
+
+          defaultAssigneeId:
+            z
+              .number()
+              .int()
+              .positive()
+              .nullable()
+              .optional(),
+
+          dueTime: z
+            .string()
+            .regex(
+              /^([01]\d|2[0-3]):[0-5]\d$/,
+            )
+            .nullable()
+            .optional(),
+        }),
+      )
+      .mutation(({ input }) =>
+        db.updateChecklistTemplateItem(
+          input,
+        ),
+      ),
+
+    removeItem: managerProcedure
+      .input(
+        z.object({
+          itemId:
+            z.number().int().positive(),
+        }),
+      )
+      .mutation(({ input }) =>
+        db.removeChecklistTemplateItem(
+          input.itemId,
+        ),
+      ),
+
+    remove: managerProcedure
+      .input(
+        z.object({
+          templateId:
+            z.number().int().positive(),
+        }),
+      )
+      .mutation(({ input }) =>
+        db.removeChecklistTemplate(
+          input.templateId,
+        ),
+      ),
+
     applyTemplate: managerProcedure
       .input(
         z
           .object({
-            templateId: z.number().int().positive(),
-            workDate: dateInput.optional(),
-            startDate: dateInput.optional(),
-            endDate: dateInput.optional(),
-            assignedTeamMemberId: z
-              .number()
-              .int()
-              .positive()
-              .optional(),
+            templateId:
+              z.number().int().positive(),
+
+            workDate:
+              dateInput.optional(),
+
+            startDate:
+              dateInput.optional(),
+
+            endDate:
+              dateInput.optional(),
+
+            assignedTeamMemberId:
+              z
+                .number()
+                .int()
+                .positive()
+                .optional(),
           })
           .refine(
-            (value) =>
+            value =>
               Boolean(
                 value.workDate ||
-                  (value.startDate && value.endDate),
+                  (
+                    value.startDate &&
+                    value.endDate
+                  ),
               ),
             {
               message:
@@ -196,53 +374,65 @@ export const operationsRouter = router({
             },
           ),
       )
-      .mutation(async ({ ctx, input }) => {
-        const startDate =
-          input.startDate ?? input.workDate!;
+      .mutation(
+        async ({ ctx, input }) => {
+          const startDate =
+            input.startDate ??
+            input.workDate!;
 
-        const endDate =
-          input.endDate ?? input.workDate!;
+          const endDate =
+            input.endDate ??
+            input.workDate!;
 
-        if (endDate < startDate) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message:
-              "Choose an end date on or after the start date.",
-          });
-        }
+          if (endDate < startDate) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message:
+                "Choose an end date on or after the start date.",
+            });
+          }
 
-        const dates = dateKeysBetween(
-          startDate,
-          endDate,
-        );
-
-        if (dates.length > 21) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message:
-              "Choose a template run of up to 21 days.",
-          });
-        }
-
-        let created = 0;
-
-        for (const workDate of dates) {
-          const result =
-            await db.applyChecklistTemplate(
-              input.templateId,
-              workDate,
-              ctx.user.id,
+          const dates =
+            dateKeysBetween(
+              startDate,
+              endDate,
             );
 
-          created += result.created;
-        }
+          if (dates.length > 21) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message:
+                "Choose a template run of up to 21 days.",
+            });
+          }
 
-        return {
-          created,
-          days: dates.length,
-        };
-      }),
+          let created = 0;
+
+          for (
+            const workDate of dates
+          ) {
+            const result =
+              await db.applyChecklistTemplate(
+                input.templateId,
+                workDate,
+                ctx.user.id,
+                input.assignedTeamMemberId,
+              );
+
+            created += result.created;
+          }
+
+          return {
+            created,
+            days: dates.length,
+          };
+        },
+      ),
   }),
+
+  /* ---------------------------------------------------------------------- */
+  /* Tasks                                                                   */
+  /* ---------------------------------------------------------------------- */
 
   tasks: router({
     list: protectedProcedure
@@ -252,77 +442,149 @@ export const operationsRouter = router({
         }),
       )
       .query(({ input }) =>
-        db.listDailyTasks(input.date),
+        db.listDailyTasks(
+          input.date,
+        ),
       ),
 
     activity: protectedProcedure
       .input(
         z.object({
-          taskId: z.number().int().positive(),
+          taskId:
+            z.number().int().positive(),
         }),
       )
       .query(({ input }) =>
-        db.listTaskActivity(input.taskId),
+        db.listTaskActivity(
+          input.taskId,
+        ),
       ),
 
     create: managerProcedure
       .input(
         z.object({
           workDate: dateInput,
-          title: z.string().min(3).max(240),
-          detail: z.string().max(2000).optional(),
-          priority: priority.default("normal"),
-          dueAt: z.number().int().positive().optional(),
-          assignedTeamMemberId: z
+
+          title: z
+            .string()
+            .min(3)
+            .max(240),
+
+          detail: z
+            .string()
+            .max(2000)
+            .optional(),
+
+          priority:
+            priority.default(
+              "normal",
+            ),
+
+          dueAt: z
             .number()
             .int()
             .positive()
             .optional(),
+
+          assignedTeamMemberId:
+            z
+              .number()
+              .int()
+              .positive()
+              .optional(),
         }),
       )
       .mutation(({ ctx, input }) =>
         db.createDailyTask({
           ...input,
-          createdByUserId: ctx.user.id,
+          createdByUserId:
+            ctx.user.id,
         }),
+      ),
+
+    /*
+     * Manager-only reassignment of an
+     * individual daily task.
+     *
+     * null removes the current assignee.
+     */
+    updateAssignment: managerProcedure
+      .input(
+        z.object({
+          taskId:
+            z.number().int().positive(),
+
+          assignedTeamMemberId:
+            z
+              .number()
+              .int()
+              .positive()
+              .nullable(),
+        }),
+      )
+      .mutation(({ ctx, input }) =>
+        db.updateDailyTaskAssignment(
+          input.taskId,
+          input.assignedTeamMemberId,
+          ctx.user.id,
+        ),
       ),
 
     updateStatus: teamMemberProcedure
       .input(
         z.object({
-          taskId: z.number().int().positive(),
+          taskId:
+            z.number().int().positive(),
+
           status: z.enum([
             "pending",
             "in_progress",
             "blocked",
             "complete",
           ]),
-          note: z.string().max(2000).optional(),
+
+          note: z
+            .string()
+            .max(2000)
+            .optional(),
         }),
       )
       .mutation(({ ctx, input }) =>
         db.updateDailyTaskStatus({
           ...input,
-          actorTeamMemberId: ctx.teamMember.id,
-          actorUserId: ctx.user.id,
+          actorTeamMemberId:
+            ctx.teamMember.id,
+          actorUserId:
+            ctx.user.id,
         }),
       ),
 
     comment: teamMemberProcedure
       .input(
         z.object({
-          taskId: z.number().int().positive(),
-          body: z.string().min(1).max(2000),
+          taskId:
+            z.number().int().positive(),
+
+          body: z
+            .string()
+            .min(1)
+            .max(2000),
         }),
       )
       .mutation(({ ctx, input }) =>
         db.addTaskComment({
           ...input,
-          actorTeamMemberId: ctx.teamMember.id,
-          actorUserId: ctx.user.id,
+          actorTeamMemberId:
+            ctx.teamMember.id,
+          actorUserId:
+            ctx.user.id,
         }),
       ),
   }),
+
+  /* ---------------------------------------------------------------------- */
+  /* Rota                                                                    */
+  /* ---------------------------------------------------------------------- */
 
   rota: router({
     week: protectedProcedure
@@ -332,49 +594,76 @@ export const operationsRouter = router({
         }),
       )
       .query(({ input }) =>
-        db.getRotaWeek(input.weekStart),
+        db.getRotaWeek(
+          input.weekStart,
+        ),
       ),
 
     create: managerProcedure
       .input(
         z.object({
           workDate: dateInput,
-          teamMemberId: z.number().int().positive(),
+
+          teamMemberId:
+            z.number().int().positive(),
+
           assignmentType,
+
           startTime: z
             .string()
-            .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+            .regex(
+              /^([01]\d|2[0-3]):[0-5]\d$/,
+            )
             .optional(),
+
           endTime: z
             .string()
-            .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+            .regex(
+              /^([01]\d|2[0-3]):[0-5]\d$/,
+            )
             .optional(),
-          note: z.string().max(500).optional(),
+
+          note: z
+            .string()
+            .max(500)
+            .optional(),
         }),
       )
       .mutation(({ ctx, input }) =>
         db.createRotaAssignment({
           ...input,
-          createdByUserId: ctx.user.id,
+          createdByUserId:
+            ctx.user.id,
         }),
       ),
 
     remove: managerProcedure
       .input(
         z.object({
-          id: z.number().int().positive(),
+          id:
+            z.number().int().positive(),
         }),
       )
       .mutation(({ input }) =>
-        db.removeRotaAssignment(input.id),
+        db.removeRotaAssignment(
+          input.id,
+        ),
       ),
   }),
+
+  /* ---------------------------------------------------------------------- */
+  /* Handovers                                                               */
+  /* ---------------------------------------------------------------------- */
 
   handovers: router({
     list: protectedProcedure
       .input(
         z.object({
-          query: z.string().max(160).optional(),
+          query: z
+            .string()
+            .max(160)
+            .optional(),
+
           status: z
             .enum([
               "open",
@@ -384,38 +673,60 @@ export const operationsRouter = router({
             .optional(),
         }),
       )
-      .query(({ input }) => db.listHandovers(input)),
+      .query(({ input }) =>
+        db.listHandovers(input),
+      ),
 
     create: protectedProcedure
       .input(
         z.object({
-          title: z.string().min(3).max(240),
-          detail: z.string().min(3).max(5000),
-          priority: priority.default("normal"),
-          ownerTeamMemberId: z
-            .number()
-            .int()
-            .positive()
-            .optional(),
+          title: z
+            .string()
+            .min(3)
+            .max(240),
+
+          detail: z
+            .string()
+            .min(3)
+            .max(5000),
+
+          priority:
+            priority.default(
+              "normal",
+            ),
+
+          ownerTeamMemberId:
+            z
+              .number()
+              .int()
+              .positive()
+              .optional(),
+
           deadlineAt: z
             .number()
             .int()
             .positive()
             .optional(),
-          decisionRecord: z.string().max(5000).optional(),
+
+          decisionRecord: z
+            .string()
+            .max(5000)
+            .optional(),
         }),
       )
       .mutation(({ ctx, input }) =>
         db.createHandover({
           ...input,
-          createdByUserId: ctx.user.id,
+          createdByUserId:
+            ctx.user.id,
         }),
       ),
 
     acknowledge: protectedProcedure
       .input(
         z.object({
-          id: z.number().int().positive(),
+          id:
+            z.number().int().positive(),
         }),
       )
       .mutation(({ ctx, input }) =>
@@ -428,7 +739,9 @@ export const operationsRouter = router({
     resolve: protectedProcedure
       .input(
         z.object({
-          id: z.number().int().positive(),
+          id:
+            z.number().int().positive(),
+
           decisionRecord: z
             .string()
             .max(5000)
@@ -444,6 +757,10 @@ export const operationsRouter = router({
       ),
   }),
 
+  /* ---------------------------------------------------------------------- */
+  /* Issues                                                                  */
+  /* ---------------------------------------------------------------------- */
+
   issues: router({
     list: protectedProcedure
       .input(
@@ -458,13 +775,19 @@ export const operationsRouter = router({
         }),
       )
       .query(({ input }) =>
-        db.listOperationalIssues(input.status),
+        db.listOperationalIssues(
+          input.status,
+        ),
       ),
 
     create: protectedProcedure
       .input(
         z.object({
-          title: z.string().min(3).max(240),
+          title: z
+            .string()
+            .min(3)
+            .max(240),
+
           category: z.enum([
             "breakdown",
             "customer_concern",
@@ -472,23 +795,34 @@ export const operationsRouter = router({
             "staffing",
             "other",
           ]),
+
           impact: z.enum([
             "low",
             "medium",
             "high",
             "critical",
           ]),
-          ownerTeamMemberId: z
-            .number()
-            .int()
-            .positive()
-            .optional(),
-          nextAction: z.string().min(3).max(5000),
+
+          ownerTeamMemberId:
+            z
+              .number()
+              .int()
+              .positive()
+              .optional(),
+
+          nextAction: z
+            .string()
+            .min(3)
+            .max(5000),
+
           recurringCause: z
             .string()
             .max(240)
             .optional(),
-          detectedAt: z.number().int().positive(),
+
+          detectedAt:
+            z.number().int().positive(),
+
           targetAt: z
             .number()
             .int()
@@ -499,25 +833,35 @@ export const operationsRouter = router({
       .mutation(({ ctx, input }) =>
         db.createOperationalIssue({
           ...input,
-          createdByUserId: ctx.user.id,
+          createdByUserId:
+            ctx.user.id,
         }),
       ),
 
     update: protectedProcedure
       .input(
         z.object({
-          id: z.number().int().positive(),
+          id:
+            z.number().int().positive(),
+
           status: z.enum([
             "open",
             "monitoring",
             "resolved",
           ]),
-          ownerTeamMemberId: z
-            .number()
-            .int()
-            .positive()
-            .optional(),
-          nextAction: z.string().min(3).max(5000),
+
+          ownerTeamMemberId:
+            z
+              .number()
+              .int()
+              .positive()
+              .optional(),
+
+          nextAction: z
+            .string()
+            .min(3)
+            .max(5000),
+
           resolution: z
             .string()
             .max(5000)
@@ -525,9 +869,15 @@ export const operationsRouter = router({
         }),
       )
       .mutation(({ input }) =>
-        db.updateOperationalIssue(input),
+        db.updateOperationalIssue(
+          input,
+        ),
       ),
   }),
+
+  /* ---------------------------------------------------------------------- */
+  /* Readiness                                                               */
+  /* ---------------------------------------------------------------------- */
 
   readiness: router({
     list: protectedProcedure
@@ -537,22 +887,27 @@ export const operationsRouter = router({
         }),
       )
       .query(({ input }) =>
-        db.listReadinessPulses(input.date),
+        db.listReadinessPulses(
+          input.date,
+        ),
       ),
 
     submit: teamMemberProcedure
       .input(
         z.object({
           pulseDate: dateInput,
+
           capacity: z.enum([
             "green",
             "amber",
             "red",
           ]),
+
           riskNote: z
             .string()
             .max(2000)
             .optional(),
+
           supportNeeded: z
             .string()
             .max(2000)
@@ -562,11 +917,16 @@ export const operationsRouter = router({
       .mutation(({ ctx, input }) =>
         db.upsertReadinessPulse({
           ...input,
-          teamMemberId: ctx.teamMember.id,
+          teamMemberId:
+            ctx.teamMember.id,
           submittedAt: Date.now(),
         }),
       ),
   }),
+
+  /* ---------------------------------------------------------------------- */
+  /* Performance                                                             */
+  /* ---------------------------------------------------------------------- */
 
   performance: router({
     overview: managerProcedure
@@ -577,16 +937,16 @@ export const operationsRouter = router({
         }),
       )
       .query(({ input }) =>
-        db.getPerformanceOverview(input),
+        db.getPerformanceOverview(
+          input,
+        ),
       ),
 
     notes: managerProcedure
       .input(
         z.object({
-          teamMemberId: z
-            .number()
-            .int()
-            .positive(),
+          teamMemberId:
+            z.number().int().positive(),
         }),
       )
       .query(({ input }) =>
@@ -598,21 +958,25 @@ export const operationsRouter = router({
     createNote: managerProcedure
       .input(
         z.object({
-          teamMemberId: z
-            .number()
-            .int()
-            .positive(),
+          teamMemberId:
+            z.number().int().positive(),
+
           noteType: z.enum([
             "coaching",
             "recognition",
           ]),
-          note: z.string().min(3).max(4000),
+
+          note: z
+            .string()
+            .min(3)
+            .max(4000),
         }),
       )
       .mutation(({ ctx, input }) =>
         db.createPerformanceNote({
           ...input,
-          recordedByUserId: ctx.user.id,
+          recordedByUserId:
+            ctx.user.id,
           recordedAt: Date.now(),
         }),
       ),
