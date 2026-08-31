@@ -943,7 +943,7 @@ export default function Tasks() {
                   </Button>
                 </DialogTrigger>
 
-                <DialogContent className="max-w-lg">
+                <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>
                       Add a daily task
@@ -1093,12 +1093,15 @@ export default function Tasks() {
                           <option value="low">
                             Low
                           </option>
+
                           <option value="normal">
                             Normal
                           </option>
+
                           <option value="high">
                             High
                           </option>
+
                           <option value="critical">
                             Critical
                           </option>
@@ -1182,17 +1185,18 @@ export default function Tasks() {
                     </div>
                   </div>
 
-                  <DialogFooter>
+                  <DialogFooter className="sticky bottom-0 z-50 -mx-6 mt-2 bg-white px-6 pb-2 pt-4">
                     <Button
-                      onClick={
-                        submitTask
-                      }
+                      type="button"
+                      onClick={submitTask}
                       disabled={
                         taskMutation.isPending
                       }
-                      className="bg-[#1D5C63] hover:bg-[#164B50]"
+                      className="relative z-50 w-full bg-[#1D5C63] hover:bg-[#164B50] touch-manipulation"
                     >
-                      Add task
+                      {taskMutation.isPending
+                        ? "Adding..."
+                        : "Add task"}
                     </Button>
                   </DialogFooter>
                 </DialogContent>
