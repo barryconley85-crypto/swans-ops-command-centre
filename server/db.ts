@@ -28,22 +28,39 @@ export async function getDb() {
       _db = null;
     }
   }
+
   return _db;
 }
 
 async function requireDb() {
   const database = await getDb();
-  if (!database) throw new Error("Database connection is not available.");
+
+  if (!database) {
+    throw new Error("Database connection is not available.");
+  }
+
   return database;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Users                                                                      */
+/* -------------------------------------------------------------------------- */
+
 export async function upsertUser(user: InsertUser): Promise<void> {
-  if (!user.openId) throw new Error("User openId is required for upsert");
+  if (!user.openId) {
+    throw new Error("User openId is required for upsert");
+  }
 
   const database = await getDb();
-  if (!database) return;
 
-  const values: InsertUser = { openId: user.openId };
+  if (!database) {
+    return;
+  }
+
+  const values: InsertUser = {
+    openId: user.openId,
+  };
+
   const updateSet: Record<string, unknown> = {};
 
   (["name", "email", "loginMethod"] as const).forEach(field => {
@@ -67,12 +84,17 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   await database
     .insert(users)
     .values(values)
-    .onDuplicateKeyUpdate({ set: updateSet });
+    .onDuplicateKeyUpdate({
+      set: updateSet,
+    });
 }
 
 export async function getUserByOpenId(openId: string) {
   const database = await getDb();
-  if (!database) return undefined;
+
+  if (!database) {
+    return undefined;
+  }
 
   const result = await database
     .select()
@@ -82,6 +104,10 @@ export async function getUserByOpenId(openId: string) {
 
   return result[0];
 }
+
+/* -------------------------------------------------------------------------- */
+/* Team members                                                               */
+/* -------------------------------------------------------------------------- */
 
 export async function listTeamMembers() {
   const database = await requireDb();
@@ -114,7 +140,9 @@ export async function resolveTeamMemberForUser(user: {
   if (profile && profile.appUserId === null) {
     await database
       .update(teamMembers)
-      .set({ appUserId: user.id })
+      .set({
+        appUserId: user.id,
+      })
       .where(eq(teamMembers.id, profile.id));
 
     return {
@@ -160,7 +188,9 @@ export async function updateTeamMember(input: {
     .set(input)
     .where(eq(teamMembers.id, input.id));
 
-  return { success: true };
+  return {
+    success: true,
+  };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -227,7 +257,9 @@ export async function createChecklistTemplate(input: {
       })),
     );
 
-  return { id: templateId };
+  return {
+    id: templateId,
+  };
 }
 
 export async function updateChecklistTemplate(input: {
@@ -243,9 +275,16 @@ export async function updateChecklistTemplate(input: {
       name: input.name,
       description: input.description ?? null,
     })
-    .where(eq(checklistTemplates.id, input.templateId));
+    .where(
+      eq(
+        checklistTemplates.id,
+        input.templateId,
+      ),
+    );
 
-  return { success: true };
+  return {
+    success: true,
+  };
 }
 
 export async function updateChecklistTemplateItem(input: {
@@ -264,12 +303,20 @@ export async function updateChecklistTemplateItem(input: {
       title: input.title,
       detail: input.detail ?? null,
       priority: input.priority,
-      defaultAssigneeId: input.defaultAssigneeId ?? null,
+      defaultAssigneeId:
+        input.defaultAssigneeId ?? null,
       dueTime: input.dueTime ?? null,
     })
-    .where(eq(checklistTemplateItems.id, input.itemId));
+    .where(
+      eq(
+        checklistTemplateItems.id,
+        input.itemId,
+      ),
+    );
 
-  return { success: true };
+  return {
+    success: true,
+  };
 }
 
 export async function removeChecklistTemplateItem(
@@ -279,9 +326,16 @@ export async function removeChecklistTemplateItem(
 
   await database
     .delete(checklistTemplateItems)
-    .where(eq(checklistTemplateItems.id, itemId));
+    .where(
+      eq(
+        checklistTemplateItems.id,
+        itemId,
+      ),
+    );
 
-  return { success: true };
+  return {
+    success: true,
+  };
 }
 
 export async function removeChecklistTemplate(
@@ -291,14 +345,30 @@ export async function removeChecklistTemplate(
 
   await database
     .delete(checklistTemplateItems)
-    .where(eq(checklistTemplateItems.templateId, templateId));
+    .where(
+      eq(
+        checklistTemplateItems.templateId,
+        templateId,
+      ),
+    );
 
   await database
     .delete(checklistTemplates)
-    .where(eq(checklistTemplates.id, templateId));
+    .where(
+      eq(
+        checklistTemplates.id,
+        templateId,
+      ),
+    );
 
-  return { success: true };
+  return {
+    success: true,
+  };
 }
+
+/* -------------------------------------------------------------------------- */
+/* Applying templates                                                         */
+/* -------------------------------------------------------------------------- */
 
 export async function applyChecklistTemplate(
   templateId: number,
@@ -311,11 +381,22 @@ export async function applyChecklistTemplate(
   const items = await database
     .select()
     .from(checklistTemplateItems)
-    .where(eq(checklistTemplateItems.templateId, templateId))
-    .orderBy(asc(checklistTemplateItems.sortOrder));
+    .where(
+      eq(
+        checklistTemplateItems.templateId,
+        templateId,
+      ),
+    )
+    .orderBy(
+      asc(
+        checklistTemplateItems.sortOrder,
+      ),
+    );
 
   if (!items.length) {
-    return { created: 0 };
+    return {
+      created: 0,
+    };
   }
 
   const offset = new Date(
@@ -337,8 +418,13 @@ export async function applyChecklistTemplate(
         dueAt: item.dueTime
           ? offset +
             (
-              Number(item.dueTime.slice(0, 2)) * 60 +
-              Number(item.dueTime.slice(3))
+              Number(
+                item.dueTime.slice(0, 2),
+              ) *
+                60 +
+              Number(
+                item.dueTime.slice(3),
+              )
             ) *
               60_000
           : null,
@@ -361,6 +447,7 @@ export async function applyChecklistTemplateRange(
   const start = new Date(
     `${startDate}T12:00:00`,
   );
+
   const end = new Date(
     `${endDate}T12:00:00`,
   );
@@ -482,6 +569,10 @@ export async function createDailyTask(input: {
   };
 }
 
+/* -------------------------------------------------------------------------- */
+/* Task assignment                                                            */
+/* -------------------------------------------------------------------------- */
+
 export async function updateDailyTaskAssignment(
   taskId: number,
   assignedTeamMemberId: number | null,
@@ -503,27 +594,53 @@ export async function updateDailyTaskAssignment(
     );
   }
 
+  const previousAssigneeId =
+    task.assignedTeamMemberId;
+
   await database
     .update(dailyTasks)
     .set({
       assignedTeamMemberId,
     })
-    .where(eq(dailyTasks.id, taskId));
+    .where(
+      eq(
+        dailyTasks.id,
+        taskId,
+      ),
+    );
 
+  const message =
+    assignedTeamMemberId === null
+      ? previousAssigneeId
+        ? "Task assignment removed."
+        : "Task left unassigned."
+      : previousAssigneeId === null
+        ? "Task assigned."
+        : "Task assignment changed.";
+
+  /*
+   * The schema's taskActivity enum does not contain
+   * an "assigned" action, so assignment changes are
+   * recorded as comments instead of introducing an
+   * unsupported enum value.
+   */
   await database
     .insert(taskActivity)
     .values({
       taskId,
-      action: "assigned",
+      action: "commented",
+      body: message,
       actorUserId,
-      actorTeamMemberId:
-        assignedTeamMemberId,
     });
 
   return {
     success: true,
   };
 }
+
+/* -------------------------------------------------------------------------- */
+/* Task status                                                                */
+/* -------------------------------------------------------------------------- */
 
 export async function updateDailyTaskStatus(input: {
   taskId: number;
@@ -583,13 +700,18 @@ export async function updateDailyTaskStatus(input: {
       body: input.note,
       actorTeamMemberId:
         input.actorTeamMemberId,
-      actorUserId: input.actorUserId,
+      actorUserId:
+        input.actorUserId,
     });
 
   return {
     success: true,
   };
 }
+
+/* -------------------------------------------------------------------------- */
+/* Task comments                                                              */
+/* -------------------------------------------------------------------------- */
 
 export async function addTaskComment(
   input: {
@@ -621,9 +743,16 @@ export async function listTaskActivity(
   return database
     .select()
     .from(taskActivity)
-    .where(eq(taskActivity.taskId, taskId))
+    .where(
+      eq(
+        taskActivity.taskId,
+        taskId,
+      ),
+    )
     .orderBy(
-      desc(taskActivity.createdAt),
+      desc(
+        taskActivity.createdAt,
+      ),
     );
 }
 
@@ -663,7 +792,12 @@ export async function removeRotaAssignment(
 
   await database
     .delete(rotaAssignments)
-    .where(eq(rotaAssignments.id, id));
+    .where(
+      eq(
+        rotaAssignments.id,
+        id,
+      ),
+    );
 
   return {
     success: true,
@@ -704,7 +838,9 @@ export async function getRotaWeek(
           ),
         )
         .orderBy(
-          asc(rotaAssignments.workDate),
+          asc(
+            rotaAssignments.workDate,
+          ),
         ),
       listTeamMembers(),
     ]);
@@ -815,7 +951,12 @@ export async function acknowledgeHandover(
         userId,
       acknowledgedAt: Date.now(),
     })
-    .where(eq(handovers.id, id));
+    .where(
+      eq(
+        handovers.id,
+        id,
+      ),
+    );
 
   return {
     success: true,
@@ -833,11 +974,17 @@ export async function resolveHandover(
     .update(handovers)
     .set({
       status: "resolved",
-      resolvedByUserId: userId,
+      resolvedByUserId:
+        userId,
       resolvedAt: Date.now(),
       decisionRecord,
     })
-    .where(eq(handovers.id, id));
+    .where(
+      eq(
+        handovers.id,
+        id,
+      ),
+    );
 
   return {
     success: true,
@@ -1008,7 +1155,8 @@ export async function upsertReadinessPulse(
     .onDuplicateKeyUpdate({
       set: {
         capacity: input.capacity,
-        riskNote: input.riskNote,
+        riskNote:
+          input.riskNote,
         supportNeeded:
           input.supportNeeded,
         submittedAt:
@@ -1085,11 +1233,13 @@ export async function getPerformanceOverview(
 
   return members.map(member => ({
     member,
+
     ...calculateMemberPerformance(
       member.id,
       tasks,
       rota,
     ),
+
     notes: notes
       .filter(
         note =>
@@ -1169,7 +1319,9 @@ export async function getDashboardSnapshot(
         ),
       )
       .orderBy(
-        asc(dailyTasks.dueAt),
+        asc(
+          dailyTasks.dueAt,
+        ),
       ),
 
     database
@@ -1230,9 +1382,11 @@ export async function getDashboardSnapshot(
       ownerTeamMemberId?:
         | number
         | null;
+
       assignedTeamMemberId?:
         | number
         | null;
+
       teamMemberId?:
         | number
         | null;
@@ -1241,6 +1395,7 @@ export async function getDashboardSnapshot(
     row: T,
   ) => ({
     ...row,
+
     member:
       members.find(
         member =>
@@ -1256,27 +1411,32 @@ export async function getDashboardSnapshot(
   const completeCount =
     tasks.filter(
       task =>
-        task.status === "complete",
+        task.status ===
+        "complete",
     ).length;
 
   const blockedCount =
     tasks.filter(
       task =>
-        task.status === "blocked",
+        task.status ===
+        "blocked",
     ).length;
 
   const overdueCount =
     tasks.filter(
       task =>
-        task.status !== "complete" &&
+        task.status !==
+          "complete" &&
         task.dueAt &&
-        task.dueAt < Date.now(),
+        task.dueAt <
+          Date.now(),
     ).length;
 
   return {
     members,
 
-    tasks: tasks.map(enrich),
+    tasks:
+      tasks.map(enrich),
 
     readiness:
       readiness.map(enrich),
@@ -1291,12 +1451,18 @@ export async function getDashboardSnapshot(
       rota.map(enrich),
 
     metrics: {
-      totalTasks: tasks.length,
+      totalTasks:
+        tasks.length,
+
       completeCount,
+
       blockedCount,
+
       overdueCount,
+
       readinessSubmitted:
         readiness.length,
+
       activeTeamMembers:
         members.filter(
           member =>
