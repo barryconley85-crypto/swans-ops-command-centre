@@ -24,10 +24,10 @@ Cloud Firestore uses **collections of documents**, rather than relational tables
 | --- | --- | --- |
 | `ops_members` | Approved team profiles, roles, initials and colours | Approved team; lead manages staffing and roles; each colleague can change only their own initials/colour. |
 | `ops_invites` | Pre-approved work-email invitations | Lead only, except an invitee may read their own invitation during sign-up. |
-| `ops_tasks` | Daily task records, owners, status and completion attribution | Team reads; permitted operational roles update team-completable tasks; lead/manager creates, removes, and completes lead-controlled tasks. |
+| `ops_tasks` | Daily task records, owners, status and completion attribution | Team reads; permitted operational roles update; lead/manager creates and removes. |
 | `ops_task_activity` | Immutable task completion/blocking evidence | Team reads; authorised editors append only. |
 | `ops_templates` | Reusable daily task templates | Team reads; lead/manager maintains. |
-| `ops_rota` | Shifts, on-call, holiday, leave and unavailable records | Team reads; lead/manager maintains, including multi-day assignments and week duplication. |
+| `ops_rota` | Shifts, on-call, holiday, leave and unavailable records | Team reads; lead/manager maintains. |
 | `ops_handovers` | Continuity handovers, acknowledgement and resolution | Team reads; authorised editors maintain; lead removes. |
 | `ops_issues` | Operational exceptions and resolutions | Team reads; authorised editors maintain; lead removes. |
 | `ops_on_call_items` | Out-of-hours follow-up actions | Team reads; on-call-capable roles maintain; lead removes. |
@@ -41,18 +41,6 @@ Cloud Firestore uses **collections of documents**, rather than relational tables
 | `ops_performance_notes` | Lead coaching/recognition notes | Lead writes; team reads according to current policy. |
 | `ops_audit_logs` | Append-only activity history: sign-ins and material workspace changes | Any approved colleague can append only their own event; **lead only** reads; no one may edit or delete events through normal app rules. |
 | `ops_end_of_day_reports` | Private sent-date marker reserved for the deferred Vercel report endpoint | The active Google route instead keeps its sent-date marker in private Google Apps Script Properties. |
-
-## Bulk operations and governance
-
-The workspace supports a three-week rolling rota and reusable daily task runs. These are designed to speed up planning without breaking the daily operational record.
-
-| Capability | Boundary |
-| --- | --- |
-| **Multi-day rota assignment** | A single assignment can span up to 21 days. It creates independent daily records, so you can edit or remove one day later without breaking the rest. |
-| **Copy rota to next week** | Copies the currently viewed seven days forward by exactly one week. It will safely block the copy if any exact duplicate duty already exists in the destination week. |
-| **Apply checklist template** | Creates a fresh task run for every day in the selected range (up to 21 days). Existing tasks are not overwritten. You can assign all items to one person or keep the template’s default owners. |
-| **Lead-controlled tasks** | Tasks and template items can be marked as **Lead only**. Only an operations lead or manager can complete them, while team-completable tasks remain open to the assigned colleague or on-call responder. |
-| **Safe deletion** | Only an operations lead or manager can remove a task or rota assignment. Completed tasks are further protected: only the lead can remove a task once it has completion evidence. |
 
 ## How to avoid losing ownership
 
