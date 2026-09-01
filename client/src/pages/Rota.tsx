@@ -39,7 +39,7 @@ export default function Rota() {
   const utils = trpc.useUtils();
   const resetForm = (date = weekStart) => { setEditingAssignmentId(null); setForm({ workDate: date, teamMemberId: "", assignmentType: "core", startTime: "09:00", endTime: "17:00", note: "" }); setSelectedDates([date]); };
   // A single mutation carries every selected date, so a multi-day duty is submitted in one action.
-  const create = trpc.operations.rota.create.useMutation();
+  const create = trpc.operations.rota.create.useMutation({ onSuccess: async () => { await rota.refetch(); setOpen(false); resetForm(); toast.success("Rota assignment saved."); }, onError: error => toast.error(error.message) });
   const update = trpc.operations.rota.update.useMutation({ onSuccess: async () => { await rota.refetch(); setOpen(false); resetForm(); toast.success("Rota assignment updated."); }, onError: error => toast.error(error.message) });
   const remove = trpc.operations.rota.remove.useMutation({ onSuccess: async () => { await rota.refetch(); toast.success("Rota assignment removed."); }, onError: error => toast.error(error.message) });
   const days = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(new Date(`${weekStart}T12:00:00`), index)), [weekStart]);
@@ -81,30 +81,7 @@ export default function Rota() {
 
     if (!datesToCreate.length) return toast.error(targetDates.length > 1 ? "That exact duty is already on this person’s rota for every selected day." : "That exact duty is already on this person’s rota. Edit the existing duty or choose different times.");
 
-    try {
-      await create.mutateAsync({ workDates: datesToCreate, ...basePayload });
-      await rota.refetch();
-  setOpen(false);
-  resetForm();
-
-  if (duplicateDates.length) {
-    toast.success(
-      `Saved ${datesToCreate.length} day${datesToCreate.length === 1 ? "" : "s"}. Skipped ${duplicateDates.length} day${duplicateDates.length === 1 ? "" : "s"} with an existing exact duty.`
-    );
-  } else {
-    toast.success(
-      datesToCreate.length > 1
-        ? `Rota assignment saved for ${datesToCreate.length} days.`
-        : "Rota assignment saved."
-    );
-  }
-    } catch (error: any) {
-      await rota.refetch();
-      toast.error(
-        error?.message ||
-          "The rota assignment could not be saved. Check the rota and try again."
-      );
-    }
+    create.mutate({ workDates: datesToCreate, ...basePayload });
   };
 
   const usePattern = (pattern: typeof standardShiftPatterns[number]) => { setEditingAssignmentId(null); setForm(current => ({ ...current, assignmentType: pattern.assignmentType, startTime: pattern.startTime, endTime: pattern.endTime })); setOpen(true); };
