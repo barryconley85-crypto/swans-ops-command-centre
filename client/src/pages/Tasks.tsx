@@ -11,12 +11,13 @@ import { WeeklyTaskPlanner, type PlannerTask } from "@/components/WeeklyTaskPlan
 import { trpc } from "@/lib/trpc";
 import { compactTime, dateTitle, labelForStatus, localDateKey, priorityStyle, statusStyle } from "@/lib/operations";
 import { format } from "date-fns";
-import { Check, ChevronLeft, ChevronRight, CircleAlert, ClipboardCheck, Clock3, FileText, MessageSquareText, Plus, RotateCcw, Sparkles } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, CircleAlert, ClipboardCheck, Clock3, FileText, MessageSquareText, Pencil, Plus, RotateCcw, Save, Sparkles, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 type TaskRow = {
   id: number;
+  workDate: string;
   title: string;
   detail: string | null;
   priority: "low" | "normal" | "high" | "critical";
@@ -38,6 +39,9 @@ function TaskDetail({ task, selectedDate, isManager = false, members = [] }: { t
   const { user: currentUser } = useAuth();
   const canManageTasks = isManager || Boolean(currentUser?.canManageOperations);
   const [comment, setComment] = useState("");
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState({ workDate: task.workDate, title: task.title, detail: task.detail || "", priority: task.priority, dueTime: task.dueAt ? format(new Date(task.dueAt), "HH:mm") : "", assignedTeamMemberId: task.assignedTeamMemberId ? String(task.assignedTeamMemberId) : "" });
   const activity = trpc.operations.tasks.activity.useQuery({ taskId: task.id });
   const commentMutation = trpc.operations.tasks.comment.useMutation({
     onSuccess: async () => {
@@ -52,6 +56,14 @@ function TaskDetail({ task, selectedDate, isManager = false, members = [] }: { t
     onSuccess: async () => { await utils.operations.tasks.list.invalidate({ date: selectedDate }); toast.success("Task owner updated."); },
     onError: error => toast.error(error.message),
   });
+  const editMutation = trpc.operations.tasks.edit.useMutation({
+    onSuccess: async () => { await utils.operations.tasks.list.invalidate({ date: selectedDate }); setEditing(false); toast.success("Task updated."); },
+    onError: error => toast.error(error.message),
+  });
+  const deleteMutation = trpc.operations.tasks.remove.useMutation({
+    onSuccess: async () => { await utils.operations.tasks.list.invalidate({ date: selectedDate }); setOpen(false); toast.success("Task removed."); },
+    onError: error => toast.error(error.message),
+  });
   const statusMutation = trpc.operations.tasks.updateStatus.useMutation({
     onSuccess: async () => {
       await Promise.all([utils.operations.tasks.list.invalidate({ date: selectedDate }), activity.refetch()]);
@@ -64,15 +76,19 @@ function TaskDetail({ task, selectedDate, isManager = false, members = [] }: { t
     const note = status === "blocked" ? window.prompt("What is blocking this task?") || undefined : undefined;
     statusMutation.mutate({ taskId: task.id, status, note });
   };
+  const saveTask = () => {
+    if (!draft.title.trim()) return toast.error("Give the task a clear title.");
+    editMutation.mutate({ taskId: task.id, workDate: draft.workDate, title: draft.title.trim(), detail: draft.detail.trim() || null, priority: draft.priority, dueAt: draft.dueTime ? new Date(`${draft.workDate}T${draft.dueTime}:00`).getTime() : null, assignedTeamMemberId: draft.assignedTeamMemberId ? Number(draft.assignedTeamMemberId) : null });
+  };
+  const removeTask = () => { if (window.confirm(`Remove “${task.title}”? This cannot be undone.`)) deleteMutation.mutate({ taskId: task.id }); };
 
   return (
-    <Dialog>
-      <DialogTrigger asChild><button className="min-w-0 text-left"><p className="truncate text-[15px] font-semibold text-[#1E2A27] hover:text-[#1D5C63]">{task.title}</p>{task.detail ? <p className="mt-1 line-clamp-1 text-xs text-[#6D7774]">{task.detail}</p> : null}</button></DialogTrigger>
+    <Dialog open={open} onOpenChange={value => { setOpen(value); if (!value) setEditing(false); }}>
+      <DialogTrigger asChild><button className="min-w-0 text-left" onClick={() => { setOpen(true); setEditing(false); }}><p className="truncate text-[15px] font-semibold text-[#1E2A27] hover:text-[#1D5C63]">{task.title}</p>{task.detail ? <p className="mt-1 line-clamp-1 text-xs text-[#6D7774]">{task.detail}</p> : null}</button></DialogTrigger>
       <DialogContent className="max-w-xl border-0 bg-[#FCFCFA] p-0 shadow-2xl">
         <div className="border-b border-[#E5E9E6] px-6 pb-5 pt-6">
-          <div className="mb-4 flex items-center gap-2"><TaskStatusBadge status={task.status} /><Badge className={`border-0 text-[10px] uppercase tracking-[0.12em] ${priorityStyle[task.priority]}`}>{task.priority}</Badge></div>
-          <DialogTitle className="text-xl font-semibold tracking-tight text-[#17211E]">{task.title}</DialogTitle>
-          <DialogDescription className="mt-2 text-sm leading-6 text-[#66706D]">{task.detail || "No additional instructions were added to this task."}</DialogDescription>
+          <div className="mb-4 flex items-start justify-between gap-3"><div className="flex items-center gap-2"><TaskStatusBadge status={task.status} /><Badge className={`border-0 text-[10px] uppercase tracking-[0.12em] ${priorityStyle[task.priority]}`}>{task.priority}</Badge></div>{canManageTasks && !editing ? <div className="flex gap-1.5"><Button size="sm" variant="outline" onClick={() => { setDraft({ workDate: task.workDate, title: task.title, detail: task.detail || "", priority: task.priority, dueTime: task.dueAt ? format(new Date(task.dueAt), "HH:mm") : "", assignedTeamMemberId: task.assignedTeamMemberId ? String(task.assignedTeamMemberId) : "" }); setEditing(true); }}><Pencil className="mr-1.5 h-3.5 w-3.5" />Edit</Button><Button size="sm" variant="outline" onClick={removeTask} disabled={deleteMutation.isPending} className="border-[#F0C9C3] text-[#A84237] hover:bg-[#FFF2F0]"><Trash2 className="mr-1.5 h-3.5 w-3.5" />Delete</Button></div> : null}</div>
+          {editing ? <div className="space-y-3"><div><Label>Task title</Label><Input value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })} className="mt-1.5" /></div><div><Label>Notes</Label><Textarea value={draft.detail} onChange={event => setDraft({ ...draft, detail: event.target.value })} className="mt-1.5 min-h-20" /></div><div className="grid gap-3 sm:grid-cols-2"><div><Label>Date</Label><Input type="date" value={draft.workDate} onChange={event => setDraft({ ...draft, workDate: event.target.value })} className="mt-1.5" /></div><div><Label>Due time</Label><Input type="time" value={draft.dueTime} onChange={event => setDraft({ ...draft, dueTime: event.target.value })} className="mt-1.5" /></div><div><Label>Priority</Label><select value={draft.priority} onChange={event => setDraft({ ...draft, priority: event.target.value as TaskRow["priority"] })} className="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="critical">Critical</option></select></div><div><Label>Owner</Label><select value={draft.assignedTeamMemberId} onChange={event => setDraft({ ...draft, assignedTeamMemberId: event.target.value })} className="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="">Unassigned</option>{teamMembers.filter(member => member.status === "active").map(member => <option key={member.id} value={member.id}>{member.displayName}</option>)}</select></div></div><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setEditing(false)}><X className="mr-1.5 h-3.5 w-3.5" />Cancel</Button><Button onClick={saveTask} disabled={editMutation.isPending} className="bg-[#1D5C63] hover:bg-[#164B50]"><Save className="mr-1.5 h-3.5 w-3.5" />{editMutation.isPending ? "Saving…" : "Save changes"}</Button></div></div> : <><DialogTitle className="text-xl font-semibold tracking-tight text-[#17211E]">{task.title}</DialogTitle><DialogDescription className="mt-2 text-sm leading-6 text-[#66706D]">{task.detail || "No additional instructions were added to this task."}</DialogDescription></>}
         </div>
         <div className="grid gap-5 px-6 py-5 sm:grid-cols-3">
           <div><p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#87918D]">Assignee</p>{canManageTasks ? <select aria-label={`Assign ${task.title}`} value={task.assignedTeamMemberId ? String(task.assignedTeamMemberId) : ""} onChange={event => assignmentMutation.mutate({ taskId: task.id, assignedTeamMemberId: event.target.value ? Number(event.target.value) : null })} disabled={assignmentMutation.isPending} className="mt-1.5 h-9 w-full rounded-md border border-[#DCE5DF] bg-white px-2 text-xs text-[#405249]"><option value="">Unassigned</option>{teamMembers.filter(member => member.status === "active").map(member => <option key={member.id} value={member.id}>{member.displayName}</option>)}</select> : <div className="mt-1.5"><ColleagueMarker member={task.assignee} /></div>}</div>
