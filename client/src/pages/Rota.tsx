@@ -82,21 +82,40 @@ export default function Rota() {
     if (!datesToCreate.length) return toast.error(targetDates.length > 1 ? "That exact duty is already on this person’s rota for every selected day." : "That exact duty is already on this person’s rota. Edit the existing duty or choose different times.");
 
     try {
-      for (const workDate of datesToCreate) {
-        await create.mutateAsync({ workDate, ...basePayload });
-      }
-      await rota.refetch();
-      setOpen(false);
-      resetForm();
-      if (duplicateDates.length) {
-        toast.success(`Saved ${datesToCreate.length} day${datesToCreate.length === 1 ? "" : "s"}. Skipped ${duplicateDates.length} day${duplicateDates.length === 1 ? "" : "s"} with an existing exact duty.`);
-      } else {
-        toast.success(datesToCreate.length > 1 ? `Rota assignment saved for ${datesToCreate.length} days.` : "Rota assignment saved.");
-      }
-    } catch (error: any) {
-      await rota.refetch();
-      toast.error(error?.message || "Some days could not be saved. Check the rota and try the remaining days again.");
-    }
+  for (const workDate of datesToCreate) {
+    await new Promise<void>((resolve, reject) => {
+      create.mutate(
+        { workDate, ...basePayload },
+        {
+          onSuccess: () => resolve(),
+          onError: error => reject(error),
+        }
+      );
+    });
+  }
+
+  await rota.refetch();
+  setOpen(false);
+  resetForm();
+
+  if (duplicateDates.length) {
+    toast.success(
+      `Saved ${datesToCreate.length} day${datesToCreate.length === 1 ? "" : "s"}. Skipped ${duplicateDates.length} day${duplicateDates.length === 1 ? "" : "s"} with an existing exact duty.`
+    );
+  } else {
+    toast.success(
+      datesToCreate.length > 1
+        ? `Rota assignment saved for ${datesToCreate.length} days.`
+        : "Rota assignment saved."
+    );
+  }
+} catch (error: any) {
+  await rota.refetch();
+  toast.error(
+    error?.message ||
+      "Some days could not be saved. Check the rota and try the remaining days again."
+  );
+}
   };
 
   const usePattern = (pattern: typeof standardShiftPatterns[number]) => { setEditingAssignmentId(null); setForm(current => ({ ...current, assignmentType: pattern.assignmentType, startTime: pattern.startTime, endTime: pattern.endTime })); setOpen(true); };
