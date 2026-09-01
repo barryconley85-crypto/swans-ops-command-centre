@@ -7,7 +7,7 @@ import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { localDateKey } from "@/lib/operations";
 import { trpc } from "@/lib/trpc";
 import { AlertTriangle, ArrowRight, CheckCircle2, Headphones, LockKeyhole, Plus, Send, ShieldCheck } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 
@@ -22,6 +22,13 @@ function QuickOnCallSignIn() {
 }
 
 export default function QuickOnCall() {
+  useEffect(() => {
+    const icon = document.querySelector('link[rel="apple-touch-icon"]');
+
+    if (icon) {
+      icon.setAttribute("href", "/on-call-logo.png");
+    }
+  }, []);
   const { user, loading } = useAuth();
   const [, setLocation] = useLocation();
   const date = localDateKey();
