@@ -32,11 +32,14 @@ export default function Rota() {
   const [editingAssignmentId, setEditingAssignmentId] = useState<number | null>(null);
   const [assignmentPendingRemoval, setAssignmentPendingRemoval] = useState<any>(null);
   const [form, setForm] = useState({ workDate: weekStart, teamMemberId: "", assignmentType: "core", startTime: "09:00", endTime: "17:00", note: "" });
+  // Dates ticked on for a NEW assignment. Ignored while editing an existing one (edit stays single-day).
+  const [selectedDates, setSelectedDates] = useState<string[]>([weekStart]);
   const team = trpc.operations.team.list.useQuery();
   const rota = trpc.operations.rota.week.useQuery({ weekStart });
   const utils = trpc.useUtils();
-  const resetForm = (date = weekStart) => { setEditingAssignmentId(null); setForm({ workDate: date, teamMemberId: "", assignmentType: "core", startTime: "09:00", endTime: "17:00", note: "" }); };
-  const create = trpc.operations.rota.create.useMutation({ onSuccess: async () => { await rota.refetch(); setOpen(false); resetForm(); toast.success("Rota assignment saved."); }, onError: error => toast.error(error.message) });
+  const resetForm = (date = weekStart) => { setEditingAssignmentId(null); setForm({ workDate: date, teamMemberId: "", assignmentType: "core", startTime: "09:00", endTime: "17:00", note: "" }); setSelectedDates([date]); };
+  // create no longer closes/toasts on its own — submit() drives that so it can run this mutation once per selected day.
+  const create = trpc.operations.rota.create.useMutation({ onError: error => toast.error(error.message) });
   const update = trpc.operations.rota.update.useMutation({ onSuccess: async () => { await rota.refetch(); setOpen(false); resetForm(); toast.success("Rota assignment updated."); }, onError: error => toast.error(error.message) });
   const remove = trpc.operations.rota.remove.useMutation({ onSuccess: async () => { await rota.refetch(); toast.success("Rota assignment removed."); }, onError: error => toast.error(error.message) });
   const days = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(new Date(`${weekStart}T12:00:00`), index)), [weekStart]);
@@ -45,13 +48,99 @@ export default function Rota() {
   const onCallGaps = days.filter(day => !(rota.data?.assignments.some(item => item.workDate === localDateKey(day) && item.assignmentType === "on_call")));
   const shiftGaps = days.filter(day => !(rota.data?.assignments.some(item => item.workDate === localDateKey(day) && ["early", "core", "late"].includes(item.assignmentType))));
   const counts = activeMembers.map(member => ({ member, onCall: rota.data?.assignments.filter(item => item.teamMemberId === member.id && item.assignmentType === "on_call").length ?? 0, shifts: rota.data?.assignments.filter(item => item.teamMemberId === member.id && ["early", "core", "late"].includes(item.assignmentType)).length ?? 0 }));
-  const moveWeek = (offset: number) => { const changed = addDays(new Date(`${weekStart}T12:00:00`), offset * 7); const key = localDateKey(changed); setWeekStart(key); if (!editingAssignmentId) setForm(current => ({ ...current, workDate: key })); };
-  const submit = () => { if (!form.teamMemberId) return toast.error("Choose the team member who owns this shift."); const payload = { workDate: form.workDate, teamMemberId: Number(form.teamMemberId), assignmentType: form.assignmentType as "early" | "core" | "late" | "on_call" | "leave" | "unavailable" | "holiday", startTime: ["leave", "unavailable", "on_call", "holiday"].includes(form.assignmentType) ? null : form.startTime, endTime: ["leave", "unavailable", "on_call", "holiday"].includes(form.assignmentType) ? null : form.endTime, note: form.note || null }; if (hasExactRotaDuplicate(rota.data?.assignments ?? [], payload, editingAssignmentId)) return toast.error("That exact duty is already on this person’s rota. Edit the existing duty or choose different times."); if (editingAssignmentId) update.mutate({ id: editingAssignmentId, ...payload }); else create.mutate(payload); };
+  const moveWeek = (offset: number) => { const changed = addDays(new Date(`${weekStart}T12:00:00`), offset * 7); const key = localDateKey(changed); setWeekStart(key); if (!editingAssignmentId) { setForm(current => ({ ...current, workDate: key })); setSelectedDates([key]); } };
+
+  const toggleDate = (dateKey: string) => {
+    setSelectedDates(current => current.includes(dateKey) ? current.filter(d => d !== dateKey) : [...current, dateKey].sort());
+  };
+  const selectWeekdays = () => setSelectedDates(days.filter(d => { const dow = d.getDay(); return dow !== 0 && dow !== 6; }).map(d => localDateKey(d)));
+  const selectAllDays = () => setSelectedDates(days.map(d => localDateKey(d)));
+  const selectJustOne = () => setSelectedDates([form.workDate]);
+
+  const submit = async () => {
+    if (!form.teamMemberId) return toast.error("Choose the team member who owns this shift.");
+    const isTimedShift = !["leave", "unavailable", "on_call", "holiday"].includes(form.assignmentType);
+    const basePayload = {
+      teamMemberId: Number(form.teamMemberId),
+      assignmentType: form.assignmentType as "early" | "core" | "late" | "on_call" | "leave" | "unavailable" | "holiday",
+      startTime: isTimedShift ? form.startTime : null,
+      endTime: isTimedShift ? form.endTime : null,
+      note: form.note || null,
+    };
+
+    if (editingAssignmentId) {
+      const payload = { workDate: form.workDate, ...basePayload };
+      if (hasExactRotaDuplicate(rota.data?.assignments ?? [], payload, editingAssignmentId)) return toast.error("That exact duty is already on this person’s rota. Edit the existing duty or choose different times.");
+      update.mutate({ id: editingAssignmentId, ...payload });
+      return;
+    }
+
+    const targetDates = selectedDates.length ? selectedDates : [form.workDate];
+    const duplicateDates = targetDates.filter(workDate => hasExactRotaDuplicate(rota.data?.assignments ?? [], { workDate, ...basePayload }, null));
+    const datesToCreate = targetDates.filter(workDate => !duplicateDates.includes(workDate));
+
+    if (!datesToCreate.length) return toast.error(targetDates.length > 1 ? "That exact duty is already on this person’s rota for every selected day." : "That exact duty is already on this person’s rota. Edit the existing duty or choose different times.");
+
+    try {
+      for (const workDate of datesToCreate) {
+        await create.mutateAsync({ workDate, ...basePayload });
+      }
+      await rota.refetch();
+      setOpen(false);
+      resetForm();
+      if (duplicateDates.length) {
+        toast.success(`Saved ${datesToCreate.length} day${datesToCreate.length === 1 ? "" : "s"}. Skipped ${duplicateDates.length} day${duplicateDates.length === 1 ? "" : "s"} with an existing exact duty.`);
+      } else {
+        toast.success(datesToCreate.length > 1 ? `Rota assignment saved for ${datesToCreate.length} days.` : "Rota assignment saved.");
+      }
+    } catch (error: any) {
+      await rota.refetch();
+      toast.error(error?.message || "Some days could not be saved. Check the rota and try the remaining days again.");
+    }
+  };
+
   const usePattern = (pattern: typeof standardShiftPatterns[number]) => { setEditingAssignmentId(null); setForm(current => ({ ...current, assignmentType: pattern.assignmentType, startTime: pattern.startTime, endTime: pattern.endTime })); setOpen(true); };
-  const editAssignment = (item: any) => { setEditingAssignmentId(item.id); setForm({ workDate: item.workDate, teamMemberId: String(item.teamMemberId), assignmentType: item.assignmentType, startTime: item.startTime || "09:00", endTime: item.endTime || "17:00", note: item.note || "" }); setOpen(true); };
+  const editAssignment = (item: any) => { setEditingAssignmentId(item.id); setForm({ workDate: item.workDate, teamMemberId: String(item.teamMemberId), assignmentType: item.assignmentType, startTime: item.startTime || "09:00", endTime: item.endTime || "17:00", note: item.note || "" }); setSelectedDates([item.workDate]); setOpen(true); };
   if (team.isError || rota.isError) return <LoadError message="The weekly rota could not be loaded. Your existing cover plan is unchanged." onRetry={() => void Promise.all([team.refetch(), rota.refetch()])} />;
 
-  return <div className="mx-auto max-w-[1500px] pb-10"><PageHeader eyebrow={`Week commencing ${format(days[0]!, "d MMMM")}`} title="Rota & on-call" description="Plan cover, holidays and availability explicitly so that cover gaps are visible before the operating day." actions={<><div className="flex h-10 items-center rounded-xl border border-[#DFE6E1] bg-white p-1 shadow-sm"><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => moveWeek(-1)}><ChevronLeft className="h-4 w-4" /></Button><span className="min-w-36 px-2 text-center text-sm font-semibold text-[#34413C]">{format(days[0]!, "d MMM")} – {format(days[6]!, "d MMM")}</span><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => moveWeek(1)}><ChevronRight className="h-4 w-4" /></Button></div>{isManager ? <Dialog open={open} onOpenChange={nextOpen => { setOpen(nextOpen); if (!nextOpen) resetForm(); }}><DialogTrigger asChild><Button onClick={() => resetForm()} className="bg-[#1D5C63] hover:bg-[#164B50]"><Plus className="mr-2 h-4 w-4" />Add cover</Button></DialogTrigger><DialogContent className="max-w-lg"><DialogHeader><DialogTitle>{editingAssignmentId ? "Edit rota assignment" : "Add rota assignment"}</DialogTitle><DialogDescription>{editingAssignmentId ? "Update the duty, holiday or availability record if the cover plan has changed." : "Use shift, on-call, holiday, leave or unavailable assignments so that cover gaps are evident."}</DialogDescription></DialogHeader><div className="space-y-4 py-2"><div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label>Date</Label><Input type="date" value={form.workDate} onChange={event => setForm({ ...form, workDate: event.target.value })} /></div><div className="space-y-2"><Label>Team member</Label><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={form.teamMemberId} onChange={event => setForm({ ...form, teamMemberId: event.target.value })}><option value="">Choose…</option>{activeMembers.map(member => <option key={member.id} value={member.id}>{member.displayName}</option>)}</select></div></div><div className="space-y-2"><Label>Assignment</Label><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={form.assignmentType} onChange={event => setForm({ ...form, assignmentType: event.target.value })}><option value="early">Early shift</option><option value="core">Core shift</option><option value="late">Late shift</option><option value="on_call">On-call lead</option><option value="holiday">Holiday</option><option value="leave">Leave</option><option value="unavailable">Unavailable</option></select></div>{!["leave", "unavailable", "on_call", "holiday"].includes(form.assignmentType) ? <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label>Start</Label><Input type="time" value={form.startTime} onChange={event => setForm({ ...form, startTime: event.target.value })} /></div><div className="space-y-2"><Label>End</Label><Input type="time" value={form.endTime} onChange={event => setForm({ ...form, endTime: event.target.value })} /></div></div> : null}<div className="space-y-2"><Label>Cover note</Label><Input value={form.note} onChange={event => setForm({ ...form, note: event.target.value })} placeholder="Optional context or location" /></div></div><DialogFooter><Button disabled={create.isPending || update.isPending} onClick={submit} className="bg-[#1D5C63] hover:bg-[#164B50]">{editingAssignmentId ? "Save changes" : "Save assignment"}</Button></DialogFooter></DialogContent></Dialog> : null}</>} />
+  return <div className="mx-auto max-w-[1500px] pb-10"><PageHeader eyebrow={`Week commencing ${format(days[0]!, "d MMMM")}`} title="Rota & on-call" description="Plan cover, holidays and availability explicitly so that cover gaps are visible before the operating day." actions={<><div className="flex h-10 items-center rounded-xl border border-[#DFE6E1] bg-white p-1 shadow-sm"><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => moveWeek(-1)}><ChevronLeft className="h-4 w-4" /></Button><span className="min-w-36 px-2 text-center text-sm font-semibold text-[#34413C]">{format(days[0]!, "d MMM")} – {format(days[6]!, "d MMM")}</span><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => moveWeek(1)}><ChevronRight className="h-4 w-4" /></Button></div>{isManager ? <Dialog open={open} onOpenChange={nextOpen => { setOpen(nextOpen); if (!nextOpen) resetForm(); }}><DialogTrigger asChild><Button onClick={() => resetForm()} className="bg-[#1D5C63] hover:bg-[#164B50]"><Plus className="mr-2 h-4 w-4" />Add cover</Button></DialogTrigger><DialogContent className="max-w-lg"><DialogHeader><DialogTitle>{editingAssignmentId ? "Edit rota assignment" : "Add rota assignment"}</DialogTitle><DialogDescription>{editingAssignmentId ? "Update the duty, holiday or availability record if the cover plan has changed." : "Use shift, on-call, holiday, leave or unavailable assignments so that cover gaps are evident. Tick more than one day to apply the same duty across the week."}</DialogDescription></DialogHeader><div className="space-y-4 py-2">
+
+      {editingAssignmentId ? (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2"><Label>Date</Label><Input type="date" value={form.workDate} onChange={event => setForm({ ...form, workDate: event.target.value })} /></div>
+          <div className="space-y-2"><Label>Team member</Label><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={form.teamMemberId} onChange={event => setForm({ ...form, teamMemberId: event.target.value })}><option value="">Choose…</option>{activeMembers.map(member => <option key={member.id} value={member.id}>{member.displayName}</option>)}</select></div>
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2 sm:col-span-2">
+            <div className="flex items-center justify-between">
+              <Label>Days</Label>
+              <div className="flex gap-1.5">
+                <TinyButton type="button" onClick={selectJustOne}>Just one day</TinyButton>
+                <TinyButton type="button" onClick={selectWeekdays}>Weekdays</TinyButton>
+                <TinyButton type="button" onClick={selectAllDays}>All 7</TinyButton>
+              </div>
+            </div>
+            <div className="grid grid-cols-7 gap-1.5">
+              {days.map(day => {
+                const key = localDateKey(day);
+                const isSelected = selectedDates.includes(key);
+                return <button type="button" key={key} onClick={() => toggleDate(key)} className={`rounded-lg border px-1 py-2 text-center transition ${isSelected ? "border-[#1D5C63] bg-[#EAF3F1] text-[#164B50]" : "border-[#E1E7E3] bg-white text-[#5C6862] hover:border-[#B9D5C9]"}`}>
+                  <p className="text-[10px] font-bold uppercase tracking-wide">{format(day, "EEE")}</p>
+                  <p className="mt-0.5 text-xs font-semibold">{format(day, "d")}</p>
+                </button>;
+              })}
+            </div>
+            {selectedDates.length > 1 ? <p className="pt-0.5 text-[11px] text-[#6F7C76]">This duty will be added to {selectedDates.length} days.</p> : null}
+          </div>
+          <div className="space-y-2 sm:col-span-2"><Label>Team member</Label><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={form.teamMemberId} onChange={event => setForm({ ...form, teamMemberId: event.target.value })}><option value="">Choose…</option>{activeMembers.map(member => <option key={member.id} value={member.id}>{member.displayName}</option>)}</select></div>
+        </div>
+      )}
+
+      <div className="space-y-2"><Label>Assignment</Label><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={form.assignmentType} onChange={event => setForm({ ...form, assignmentType: event.target.value })}><option value="early">Early shift</option><option value="core">Core shift</option><option value="late">Late shift</option><option value="on_call">On-call lead</option><option value="holiday">Holiday</option><option value="leave">Leave</option><option value="unavailable">Unavailable</option></select></div>
+      {!["leave", "unavailable", "on_call", "holiday"].includes(form.assignmentType) ? <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label>Start</Label><Input type="time" value={form.startTime} onChange={event => setForm({ ...form, startTime: event.target.value })} /></div><div className="space-y-2"><Label>End</Label><Input type="time" value={form.endTime} onChange={event => setForm({ ...form, endTime: event.target.value })} /></div></div> : null}
+      <div className="space-y-2"><Label>Cover note</Label><Input value={form.note} onChange={event => setForm({ ...form, note: event.target.value })} placeholder="Optional context or location" /></div>
+    </div><DialogFooter><Button disabled={create.isPending || update.isPending} onClick={submit} className="bg-[#1D5C63] hover:bg-[#164B50]">{editingAssignmentId ? "Save changes" : selectedDates.length > 1 ? `Save for ${selectedDates.length} days` : "Save assignment"}</Button></DialogFooter></DialogContent></Dialog> : null}</>} />
     <AlertDialog open={Boolean(assignmentPendingRemoval)} onOpenChange={nextOpen => { if (!nextOpen) setAssignmentPendingRemoval(null); }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Remove this rota assignment?</AlertDialogTitle><AlertDialogDescription>{assignmentPendingRemoval ? `${assignmentPendingRemoval.assignmentType.replace("_", " ")} duty for ${assignmentPendingRemoval.workDate}${assignmentPendingRemoval.startTime ? `, ${assignmentPendingRemoval.startTime}–${assignmentPendingRemoval.endTime}` : ""}, will be removed. This cannot be undone.` : ""}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Keep assignment</AlertDialogCancel><AlertDialogAction disabled={remove.isPending} onClick={() => { if (assignmentPendingRemoval) remove.mutate({ id: assignmentPendingRemoval.id }); setAssignmentPendingRemoval(null); }} className="bg-[#A73D34] hover:bg-[#8F3028]">Remove assignment</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
     <section className="mb-5 grid gap-3 lg:grid-cols-3">{standardShiftPatterns.map(pattern => <button key={pattern.label} onClick={() => usePattern(pattern)} className="group rounded-2xl border border-[#DDE7E1] bg-white p-4 text-left shadow-[0_12px_28px_-26px_rgba(18,48,41,0.45)] transition hover:-translate-y-0.5 hover:border-[#B9D5C9]"><div className="flex items-center justify-between"><span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#668078]">{pattern.label} pattern</span><span className="rounded-full bg-[#EDF5F1] px-2 py-1 text-[10px] font-bold text-[#34715F]">Use pattern</span></div><p className="mt-4 text-xl font-semibold tracking-tight text-[#263730]">{pattern.startTime}–{pattern.endTime}</p><p className="mt-1 text-xs leading-5 text-[#728079]">{pattern.description}</p></button>)}</section>
     <section className="mb-6 grid gap-4 md:grid-cols-2"><GapCard icon={<CircleAlert className="h-5 w-5" />} label="On-call gaps" description={onCallGaps.length ? `${onCallGaps.map(day => format(day, "EEE d")).join(", ")} currently has no named on-call lead.` : "Every day this week has a named on-call lead."} alert={Boolean(onCallGaps.length)} /><GapCard icon={<CalendarClock className="h-5 w-5" />} label="Shift coverage" description={shiftGaps.length ? `${shiftGaps.map(day => format(day, "EEE d")).join(", ")} has no rostered operational shift.` : "Core operational cover is present every day this week."} alert={Boolean(shiftGaps.length)} /></section>
