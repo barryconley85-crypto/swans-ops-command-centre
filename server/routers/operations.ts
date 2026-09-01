@@ -6,7 +6,7 @@ import { protectedProcedure, router } from "../_core/trpc";
 const dateInput = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const priority = z.enum(["low", "normal", "high", "critical"]);
 const teamRole = z.enum(["lead", "coordinator", "support"]);
-const assignmentType = z.enum(["early", "core", "late", "on_call", "leave", "unavailable"]);
+const assignmentType = z.enum(["early", "core", "late", "on_call", "leave", "unavailable", "holiday"]);
 
 const managerProcedure = protectedProcedure.use(({ ctx, next }) => {
   if (ctx.user.role !== "admin") {
