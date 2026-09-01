@@ -121,7 +121,7 @@ export const rotaAssignments = mysqlTable(
     id: int("id").autoincrement().primaryKey(),
     workDate: varchar("workDate", { length: 10 }).notNull(),
     teamMemberId: int("teamMemberId").notNull(),
-    assignmentType: mysqlEnum("assignmentType", ["early", "core", "late", "on_call", "leave", "unavailable"]).notNull(),
+    assignmentType: mysqlEnum("assignmentType", ["early", "core", "late", "on_call", "leave", "unavailable", "holiday"]).notNull(),
     startTime: varchar("startTime", { length: 5 }),
     endTime: varchar("endTime", { length: 5 }),
     note: varchar("note", { length: 500 }),

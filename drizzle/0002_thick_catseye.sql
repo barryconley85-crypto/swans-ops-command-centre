@@ -1,0 +1,1 @@
+ALTER TABLE `rotaAssignments` MODIFY COLUMN `assignmentType` enum('early','core','late','on_call','leave','unavailable','holiday') NOT NULL;

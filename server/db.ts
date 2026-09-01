@@ -182,9 +182,19 @@ export async function listTaskActivity(taskId: number) {
   return database.select().from(taskActivity).where(eq(taskActivity.taskId, taskId)).orderBy(desc(taskActivity.createdAt));
 }
 
-export async function createRotaAssignment(input: { workDate: string; teamMemberId: number; assignmentType: "early" | "core" | "late" | "on_call" | "leave" | "unavailable"; startTime?: string; endTime?: string; note?: string; createdByUserId: number }) {
+type RotaAssignmentInput = {
+  workDate: string;
+  teamMemberId: number;
+  assignmentType: "early" | "core" | "late" | "on_call" | "leave" | "unavailable" | "holiday";
+  startTime?: string;
+  endTime?: string;
+  note?: string;
+  createdByUserId: number;
+};
+
+export async function createRotaAssignments(inputs: RotaAssignmentInput[]) {
   const database = await requireDb();
-  return database.insert(rotaAssignments).values(input).$returningId();
+  return database.insert(rotaAssignments).values(inputs).$returningId();
 }
 
 export async function removeRotaAssignment(id: number) {

@@ -7,6 +7,13 @@ const dateInput = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const priority = z.enum(["low", "normal", "high", "critical"]);
 const teamRole = z.enum(["lead", "coordinator", "support"]);
 const assignmentType = z.enum(["early", "core", "late", "on_call", "leave", "unavailable", "holiday"]);
+const rotaAssignmentInput = z.object({
+  teamMemberId: z.number().int().positive(),
+  assignmentType,
+  startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+  endTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+  note: z.string().max(500).optional(),
+});
 
 const managerProcedure = protectedProcedure.use(({ ctx, next }) => {
   if (ctx.user.role !== "admin") {
@@ -109,17 +116,12 @@ export const operationsRouter = router({
   rota: router({
     week: protectedProcedure.input(z.object({ weekStart: dateInput })).query(({ input }) => db.getRotaWeek(input.weekStart)),
     create: managerProcedure
-      .input(
-        z.object({
-          workDate: dateInput,
-          teamMemberId: z.number().int().positive(),
-          assignmentType,
-          startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
-          endTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
-          note: z.string().max(500).optional(),
-        }),
-      )
-      .mutation(({ ctx, input }) => db.createRotaAssignment({ ...input, createdByUserId: ctx.user.id })),
+      .input(rotaAssignmentInput.extend({ workDates: z.array(dateInput).min(1).max(7) }))
+      .mutation(({ ctx, input }) => {
+        const { workDates, ...assignment } = input;
+        const dates = [...new Set(workDates)];
+        return db.createRotaAssignments(dates.map(workDate => ({ ...assignment, workDate, createdByUserId: ctx.user.id })));
+      }),
     remove: managerProcedure.input(z.object({ id: z.number().int().positive() })).mutation(({ input }) => db.removeRotaAssignment(input.id)),
   }),
 
