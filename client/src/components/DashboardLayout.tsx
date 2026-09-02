@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { WorkEmailGate } from "@/components/WorkEmailGate";
 import { useIsMobile } from "@/hooks/useMobile";
-import { AlertTriangle, BarChart3, Bell, CalendarDays, CheckCheck, CircleUserRound, ClipboardCheck, HandHeart, Headphones, History, LayoutDashboard, LogOut, MessageCircleMore, PanelLeft, Users, Volume2, VolumeX, Waypoints } from "lucide-react";
+import { AlertTriangle, BarChart3, Bell, CalendarDays, CheckCheck, CircleUserRound, ClipboardCheck, HandHeart, Headphones, History, LayoutDashboard, LogOut, MessageCircleMore, Monitor, PanelLeft, Users, Volume2, VolumeX, Waypoints } from "lucide-react";
 import { CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -30,6 +30,12 @@ import { trpc } from "@/lib/trpc";
 import { activePresence } from "@/lib/presence";
 import { InitialsCircle } from "@/components/ColleagueMarker";
 import { toast } from "sonner";
+
+const DESKTOP_ALERTS_KEY = "ops-desktop-alerts";
+
+const desktopNotificationsSupported = () => typeof window !== "undefined" && "Notification" in window;
+
+const storedDesktopAlertsEnabled = () => desktopNotificationsSupported() && localStorage.getItem(DESKTOP_ALERTS_KEY) === "on" && Notification.permission === "granted";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Today", path: "/" },
@@ -267,7 +273,9 @@ function NotificationCentre() {
   const markRead = trpc.operations.notifications.markRead.useMutation({ onSuccess: () => void notifications.refetch() });
   const seenIds = useRef<Set<number>>(new Set());
   const hydrated = useRef(false);
-  const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem("ops-alert-sound") !== "off");
+  const [soundEnabled, setSoundEnabled] = useState(() => typeof window === "undefined" || localStorage.getItem("ops-alert-sound") !== "off");
+  const [desktopEnabled, setDesktopEnabled] = useState(storedDesktopAlertsEnabled);
+  const [desktopPermission, setDesktopPermission] = useState<NotificationPermission | "unsupported">(() => desktopNotificationsSupported() ? Notification.permission : "unsupported");
   const unread = (notifications.data || []).filter((item: any) => !item.readAt);
   const playAlertChime = useCallback(() => {
     if (!soundEnabled || typeof window === "undefined") return;
@@ -299,13 +307,41 @@ function NotificationCentre() {
     const fresh = hydrated.current ? (notifications.data || []).filter((item: any) => !item.readAt && !seenIds.current.has(item.id)) : [];
     fresh.forEach((item: any) => toast(item.title, { description: item.body, duration: 5000 }));
     if (fresh.length) playAlertChime();
+    if (fresh.length && desktopEnabled && document.visibilityState !== "visible") {
+      fresh.forEach((item: any) => {
+        const desktopAlert = new Notification(item.title, { body: item.body, tag: `ops-alert-${item.id}` });
+        desktopAlert.onclick = () => { window.focus(); desktopAlert.close(); };
+      });
+    }
     (notifications.data || []).forEach((item: any) => seenIds.current.add(item.id));
     hydrated.current = true;
-  }, [notifications.data, notifications.isLoading, playAlertChime]);
+  }, [desktopEnabled, notifications.data, notifications.isLoading, playAlertChime]);
   const toggleSound = () => {
     const next = !soundEnabled;
     setSoundEnabled(next);
     localStorage.setItem("ops-alert-sound", next ? "on" : "off");
   };
-  return <DropdownMenu><DropdownMenuTrigger asChild><button aria-label="Open notifications" className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-[#E0E7E2] bg-white text-[#4A5A53] shadow-sm transition-colors hover:bg-[#F3F7F5]"><Bell className="h-4 w-4" />{unread.length ? <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#B8473B] px-1 text-[9px] font-bold text-white">{unread.length > 9 ? "9+" : unread.length}</span> : null}</button></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-80 border-[#E0E7E2] p-1"><div className="flex items-center justify-between px-3 py-2"><p className="text-xs font-bold text-[#35443D]">Notifications</p><span className="text-[10px] text-[#7B8781]">{unread.length ? `${unread.length} unread` : "All caught up"}</span></div>{notifications.data?.length ? notifications.data.slice(0, 8).map((item: any) => <DropdownMenuItem key={item.id} onClick={() => !item.readAt && markRead.mutate({ id: item.id })} className={`flex cursor-pointer items-start gap-2 rounded-lg px-3 py-2.5 ${item.readAt ? "opacity-60" : "bg-[#F4F8F5]"}`}><ClipboardCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#2B7865]" /><span className="min-w-0"><span className="block text-xs font-semibold text-[#3A4942]">{item.title}</span><span className="mt-0.5 block truncate text-[11px] text-[#718078]">{item.body}</span></span></DropdownMenuItem>) : <p className="px-3 py-6 text-center text-xs text-[#819089]">New alerts will appear here.</p>}{unread.length ? <button onClick={() => unread.forEach((item: any) => markRead.mutate({ id: item.id }))} className="flex w-full items-center justify-center gap-1 rounded-lg px-3 py-2 text-[11px] font-semibold text-[#1D5C63] hover:bg-[#F2F7F4]"><CheckCheck className="h-3.5 w-3.5" />Mark all read</button> : null}<button type="button" onClick={toggleSound} aria-pressed={soundEnabled} className="mt-1 flex w-full items-center justify-between rounded-lg border-t border-[#E8EEEA] px-3 py-2.5 text-[11px] font-semibold text-[#5F6E67] hover:bg-[#F7FAF8]"><span className="flex items-center gap-2">{soundEnabled ? <Volume2 className="h-3.5 w-3.5 text-[#2B7865]" /> : <VolumeX className="h-3.5 w-3.5 text-[#9AA59F]" />}Alert sound</span><span className="text-[10px] font-medium text-[#87938C]">{soundEnabled ? "On" : "Off"}</span></button></DropdownMenuContent></DropdownMenu>;
+  const toggleDesktopAlerts = async () => {
+    if (!desktopNotificationsSupported()) {
+      toast.error("Desktop notifications are not supported by this browser.");
+      return;
+    }
+    if (desktopEnabled) {
+      setDesktopEnabled(false);
+      localStorage.setItem(DESKTOP_ALERTS_KEY, "off");
+      return;
+    }
+    const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+    setDesktopPermission(permission);
+    if (permission === "granted") {
+      setDesktopEnabled(true);
+      localStorage.setItem(DESKTOP_ALERTS_KEY, "on");
+      toast.success("Desktop alerts enabled.");
+    } else {
+      setDesktopEnabled(false);
+      localStorage.setItem(DESKTOP_ALERTS_KEY, "off");
+      toast.error(permission === "denied" ? "Desktop alerts are blocked in your browser settings." : "Desktop alert permission was not granted.");
+    }
+  };
+  return <DropdownMenu><DropdownMenuTrigger asChild><button aria-label="Open notifications" className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-[#E0E7E2] bg-white text-[#4A5A53] shadow-sm transition-colors hover:bg-[#F3F7F5]"><Bell className="h-4 w-4" />{unread.length ? <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#B8473B] px-1 text-[9px] font-bold text-white">{unread.length > 9 ? "9+" : unread.length}</span> : null}</button></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-80 border-[#E0E7E2] p-1"><div className="flex items-center justify-between px-3 py-2"><p className="text-xs font-bold text-[#35443D]">Notifications</p><span className="text-[10px] text-[#7B8781]">{unread.length ? `${unread.length} unread` : "All caught up"}</span></div>{notifications.data?.length ? notifications.data.slice(0, 8).map((item: any) => <DropdownMenuItem key={item.id} onClick={() => !item.readAt && markRead.mutate({ id: item.id })} className={`flex cursor-pointer items-start gap-2 rounded-lg px-3 py-2.5 ${item.readAt ? "opacity-60" : "bg-[#F4F8F5]"}`}><ClipboardCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#2B7865]" /><span className="min-w-0"><span className="block text-xs font-semibold text-[#3A4942]">{item.title}</span><span className="mt-0.5 block truncate text-[11px] text-[#718078]">{item.body}</span></span></DropdownMenuItem>) : <p className="px-3 py-6 text-center text-xs text-[#819089]">New alerts will appear here.</p>}{unread.length ? <button onClick={() => unread.forEach((item: any) => markRead.mutate({ id: item.id }))} className="flex w-full items-center justify-center gap-1 rounded-lg px-3 py-2 text-[11px] font-semibold text-[#1D5C63] hover:bg-[#F2F7F4]"><CheckCheck className="h-3.5 w-3.5" />Mark all read</button> : null}<button type="button" onClick={toggleSound} aria-pressed={soundEnabled} className="mt-1 flex w-full items-center justify-between rounded-lg border-t border-[#E8EEEA] px-3 py-2.5 text-[11px] font-semibold text-[#5F6E67] hover:bg-[#F7FAF8]"><span className="flex items-center gap-2">{soundEnabled ? <Volume2 className="h-3.5 w-3.5 text-[#2B7865]" /> : <VolumeX className="h-3.5 w-3.5 text-[#9AA59F]" />}Alert sound</span><span className="text-[10px] font-medium text-[#87938C]">{soundEnabled ? "On" : "Off"}</span></button><button type="button" onClick={() => void toggleDesktopAlerts()} disabled={desktopPermission === "unsupported"} aria-pressed={desktopEnabled} className="mt-1 flex w-full items-center justify-between rounded-lg border-t border-[#E8EEEA] px-3 py-2.5 text-[11px] font-semibold text-[#5F6E67] hover:bg-[#F7FAF8] disabled:cursor-not-allowed disabled:opacity-50"><span className="flex items-center gap-2"><Monitor className={`h-3.5 w-3.5 ${desktopEnabled ? "text-[#2B7865]" : "text-[#9AA59F]"}`} />Desktop notifications</span><span className="text-[10px] font-medium text-[#87938C]">{desktopPermission === "unsupported" ? "Unavailable" : desktopEnabled ? "On" : desktopPermission === "denied" ? "Blocked" : "Off"}</span></button></DropdownMenuContent></DropdownMenu>;
 }
