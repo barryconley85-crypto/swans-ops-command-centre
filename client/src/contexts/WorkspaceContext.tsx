@@ -1,26 +1,29 @@
-import { firebaseAuth, firebaseConfigured, firebaseDb } from "@/lib/firebase";
+import { firebaseAuth, firebaseConfigured, firebaseDb, firebaseStorage } from "@/lib/firebase";
 import { omitUndefinedFields } from "@/lib/firestorePayload";
 import { buildTaskAssignmentNotification } from "@/lib/collaboration";
 import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, query, setDoc, updateDoc, where } from "firebase/firestore";
 import { createUserWithEmailAndPassword, onAuthStateChanged, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signOut, type User } from "firebase/auth";
+import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { activitySummary } from "@/lib/auditHistory";
 
 type Member = { id: number; userId: string; displayName: string; email: string; jobTitle: string; memberRole: "lead" | "manager" | "coordinator" | "dispatcher" | "on_call" | "viewer" | "support"; initials: string; colour: string; status: "active" | "inactive" | "invited" };
 type Task = { id: number; workDate: string; title: string; detail: string | null; priority: "low" | "normal" | "high" | "critical"; status: "pending" | "in_progress" | "blocked" | "complete"; dueAt: number | null; assignedTeamMemberId: number | null; blockedReason: string | null; completedAt: number | null; createdAt: number; updatedAt: number };
+type TaskAttachmentInput = { taskId: number; file: File };
+type TaskAttachment = { _docId: string; id: number; taskId: number; name: string; contentType: string; size: number; storagePath: string; downloadUrl: string; uploadedByUserId: string; uploadedByTeamMemberId: number; uploadedByName: string; createdAt: number; };
 type State = Record<string, any[]>;
 
-const emptyState: State = { members: [], tasks: [], activities: [], templates: [], rota: [], handovers: [], issues: [], readiness: [], notes: [], chatMessages: [], notifications: [], onCallItems: [], helpRequests: [], shiftPrompts: [], presence: [], reportViews: [], auditLogs: [] };
+const emptyState: State = { members: [], tasks: [], activities: [], taskAttachments: [], templates: [], rota: [], handovers: [], issues: [], readiness: [], notes: [], chatMessages: [], notifications: [], onCallItems: [], helpRequests: [], shiftPrompts: [], presence: [], reportViews: [], auditLogs: [] };
 const leadEmail = "bc@swanstravel.com";
 
 type WorkspaceContextValue = {
   authUser: User | null; profile: Member | null; loading: boolean; error: Error | null; state: State; refresh: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>; signUp: (name: string, email: string, password: string) => Promise<void>; resetPassword: (email: string) => Promise<void>; logout: () => Promise<void>;
-  add: (collectionName: string, value: Record<string, unknown>) => Promise<any>; patch: (collectionName: string, id: string, value: Record<string, unknown>) => Promise<void>; remove: (collectionName: string, id: string) => Promise<void>; createTeamMember: (value: Record<string, unknown>) => Promise<any>; cancelTeamInvitation: (email: string) => Promise<void>;
+  add: (collectionName: string, value: Record<string, unknown>) => Promise<any>; patch: (collectionName: string, id: string, value: Record<string, unknown>) => Promise<void>; remove: (collectionName: string, id: string) => Promise<void>; uploadTaskAttachment: (input: TaskAttachmentInput) => Promise<TaskAttachment>; removeTaskAttachment: (attachment: TaskAttachment) => Promise<void>; createTeamMember: (value: Record<string, unknown>) => Promise<any>; cancelTeamInvitation: (email: string) => Promise<void>;
 };
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
-const collectionMap: Record<string, string> = { members: "ops_members", tasks: "ops_tasks", activities: "ops_task_activity", templates: "ops_templates", rota: "ops_rota", handovers: "ops_handovers", issues: "ops_issues", readiness: "ops_readiness", notes: "ops_performance_notes", chatMessages: "ops_chat_messages", notifications: "ops_notifications", onCallItems: "ops_on_call_items", helpRequests: "ops_help_requests", shiftPrompts: "ops_shift_prompts", presence: "ops_presence", reportViews: "ops_report_views", auditLogs: "ops_audit_logs" };
+const collectionMap: Record<string, string> = { members: "ops_members", tasks: "ops_tasks", activities: "ops_task_activity", taskAttachments: "ops_task_attachments", templates: "ops_templates", rota: "ops_rota", handovers: "ops_handovers", issues: "ops_issues", readiness: "ops_readiness", notes: "ops_performance_notes", chatMessages: "ops_chat_messages", notifications: "ops_notifications", onCallItems: "ops_on_call_items", helpRequests: "ops_help_requests", shiftPrompts: "ops_shift_prompts", presence: "ops_presence", reportViews: "ops_report_views", auditLogs: "ops_audit_logs" };
 const safeArray = (value: any) => Array.isArray(value) ? value : [];
 const now = () => Date.now();
 const numericId = () => Date.now() + Math.floor(Math.random() * 1_000);
@@ -54,9 +57,34 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const add = useCallback(async (collectionName: string, value: Record<string, unknown>) => { if (!firebaseDb) throw new Error("Firebase is not configured yet."); const payload = omitUndefinedFields({ ...value, createdAt: now(), updatedAt: now() }); const result = await addDoc(collection(firebaseDb, collectionMap[collectionName]), payload); if (collectionName !== "auditLogs" && collectionName !== "notifications") writeAudit("created", collectionName, result.id, payload); if (collectionName === "tasks" && typeof payload.assignedEmail === "string" && payload.assignedEmail) { try { const createdAt = now(); await addDoc(collection(firebaseDb, collectionMap.notifications), buildTaskAssignmentNotification({ id: typeof payload.id === "number" ? payload.id : null, assignedEmail: payload.assignedEmail, title: String(payload.title || "A new task") }, numericId(), createdAt)); } finally { void queueTaskAssignmentEmail(authUser, payload); } } return { _docId: result.id, ...payload }; }, [authUser, writeAudit]);
   const patch = useCallback(async (collectionName: string, id: string, value: Record<string, unknown>) => { if (!firebaseDb) throw new Error("Firebase is not configured yet."); const changes = omitUndefinedFields({ ...value, updatedAt: now() }); await updateDoc(doc(firebaseDb, collectionMap[collectionName], id), changes); if (collectionName !== "auditLogs" && collectionName !== "notifications" && collectionName !== "presence") writeAudit("updated", collectionName, id, changes); if (collectionName === "members" && id === authUser?.uid) setProfile(current => current ? { ...current, ...changes } as Member : current); }, [authUser, writeAudit]);
   const remove = useCallback(async (collectionName: string, id: string) => { if (!firebaseDb) throw new Error("Firebase is not configured yet."); await deleteDoc(doc(firebaseDb, collectionMap[collectionName], id)); if (collectionName !== "auditLogs" && collectionName !== "notifications") writeAudit("deleted", collectionName, id); }, [writeAudit]);
+  const uploadTaskAttachment = useCallback(async ({ taskId, file }: TaskAttachmentInput) => {
+    if (!firebaseDb || !firebaseStorage || !authUser || !profile) throw new Error("You must be signed in to attach a file.");
+    if (file.size > 10 * 1024 * 1024) throw new Error("Attachments must be 10 MB or smaller.");
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-").slice(-120) || "attachment";
+    const storagePath = `ops_tasks/${taskId}/${authUser.uid}/${Date.now()}-${safeName}`;
+    const fileRef = storageRef(firebaseStorage, storagePath);
+    await uploadBytes(fileRef, file, { contentType: file.type || "application/octet-stream" });
+    try {
+      const downloadUrl = await getDownloadURL(fileRef);
+      const payload = { id: numericId(), taskId, name: file.name, contentType: file.type || "application/octet-stream", size: file.size, storagePath, downloadUrl, uploadedByUserId: authUser.uid, uploadedByTeamMemberId: profile.id, uploadedByName: profile.displayName };
+      const result = await addDoc(collection(firebaseDb, collectionMap.taskAttachments), { ...payload, createdAt: now(), updatedAt: now() });
+      writeAudit("created", "taskAttachments", result.id, payload);
+      return { _docId: result.id, ...payload, createdAt: now() } as TaskAttachment;
+    } catch (reason) {
+      await deleteObject(fileRef).catch(() => undefined);
+      throw reason;
+    }
+  }, [authUser, profile, writeAudit]);
+  const removeTaskAttachment = useCallback(async (attachment: TaskAttachment) => {
+    if (!firebaseDb || !firebaseStorage || !profile || !["lead", "manager"].includes(profile.memberRole)) throw new Error("Only an operations manager can remove task attachments.");
+    const fileRef = storageRef(firebaseStorage, attachment.storagePath);
+    try { await deleteObject(fileRef); } catch (reason) { if ((reason as { code?: string })?.code !== "storage/object-not-found") throw reason; }
+    await deleteDoc(doc(firebaseDb, collectionMap.taskAttachments, attachment._docId));
+    writeAudit("deleted", "taskAttachments", attachment._docId, { taskId: attachment.taskId, name: attachment.name });
+  }, [profile, writeAudit]);
   const createTeamMember = useCallback(async (value: Record<string, unknown>) => { if (!firebaseDb || !profile || profile.memberRole !== "lead") throw new Error("Only the operations lead can add a team member."); const email = String(value.email || "").trim().toLowerCase(); if (!email.endsWith("@swanstravel.com")) throw new Error("Use the colleague’s Swans Travel work email."); const memberId = numericId(); const invitation: Member & { createdAt: number; createdBy: string } = { id: memberId, userId: "", email, displayName: String(value.displayName), jobTitle: String(value.jobTitle), memberRole: value.memberRole as Member["memberRole"], initials: String(value.initials), colour: String(value.colour), status: "invited", createdAt: now(), createdBy: profile.userId }; await setDoc(doc(firebaseDb, "ops_invites", email), invitation); writeAudit("created", "members", email, invitation); setInvitations(current => [...current.filter(member => member.email !== email), invitation]); return invitation; }, [profile, writeAudit]);
   const cancelTeamInvitation = useCallback(async (email: string) => { if (!firebaseDb || profile?.memberRole !== "lead") throw new Error("Only the operations lead can cancel an invitation."); await deleteDoc(doc(firebaseDb, "ops_invites", email)); writeAudit("deleted", "members", email, { email }); setInvitations(current => current.filter(member => member.email !== email)); }, [profile, writeAudit]);
-  const value = useMemo(() => ({ authUser, profile, loading, error, state: workspaceState, refresh, signIn, signUp, resetPassword, logout, add, patch, remove, createTeamMember, cancelTeamInvitation }), [authUser, profile, loading, error, workspaceState, refresh, signIn, signUp, resetPassword, logout, add, patch, remove, createTeamMember, cancelTeamInvitation]); return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
+  const value = useMemo(() => ({ authUser, profile, loading, error, state: workspaceState, refresh, signIn, signUp, resetPassword, logout, add, patch, remove, uploadTaskAttachment, removeTaskAttachment, createTeamMember, cancelTeamInvitation }), [authUser, profile, loading, error, workspaceState, refresh, signIn, signUp, resetPassword, logout, add, patch, remove, uploadTaskAttachment, removeTaskAttachment, createTeamMember, cancelTeamInvitation]); return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }
 export function useWorkspace() { const context = useContext(WorkspaceContext); if (!context) throw new Error("WorkspaceProvider is missing."); return context; }
 export function requireLead(profile: Member | null) { if (!profile || profile.memberRole !== "lead") throw new Error("Only the operations lead can perform that action."); }

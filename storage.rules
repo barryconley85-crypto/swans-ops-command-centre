@@ -1,0 +1,24 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() { return request.auth != null; }
+    function member() {
+      return signedIn()
+        && exists(/databases/(default)/documents/ops_members/$(request.auth.uid))
+        && get(/databases/(default)/documents/ops_members/$(request.auth.uid)).data.status == 'active';
+    }
+    function operationsManager() {
+      return member()
+        && get(/databases/(default)/documents/ops_members/$(request.auth.uid)).data.memberRole in ['lead', 'manager'];
+    }
+
+    match /ops_tasks/{taskId}/{userId}/{fileName} {
+      allow read: if member();
+      allow create: if operationsManager() && userId == request.auth.uid
+        && request.resource.size <= 10 * 1024 * 1024;
+      allow delete: if operationsManager();
+      allow update: if false;
+    }
+  }
+}
