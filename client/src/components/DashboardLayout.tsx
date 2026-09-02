@@ -33,6 +33,7 @@ import { toast } from "sonner";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Today", path: "/" },
+  { icon: AlertTriangle, label: "Live exceptions", path: "/exceptions" },
   { icon: CircleUserRound, label: "My shift", path: "/my-shift" },
   { icon: ClipboardCheck, label: "Tasks", path: "/tasks" },
   { icon: CalendarDays, label: "Rota & on-call", path: "/rota" },

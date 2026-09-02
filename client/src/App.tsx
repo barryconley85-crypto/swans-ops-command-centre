@@ -19,7 +19,8 @@ import Tasks from "./pages/Tasks";
 import MyShift from "./pages/MyShift";
 import ShiftCheck from "./pages/ShiftCheck";
 import Profile from "./pages/Profile";
-import ActivityHistory from "./pages/ActivityHistory";
+import ActivityHistory from "@/pages/ActivityHistory";
+import Exceptions from "@/pages/Exceptions";
 
 function DashboardPage({ children }: { children: React.ReactNode }) {
   return <DashboardLayout>{children}</DashboardLayout>;
@@ -30,6 +31,7 @@ function Router() {
   return (
     <Switch>
       <Route path={"/"} component={() => <DashboardPage><Home /></DashboardPage>} />
+      <Route path={"/exceptions"} component={() => <DashboardPage><Exceptions /></DashboardPage>} />
       <Route path={"/my-shift"} component={() => <DashboardPage><MyShift /></DashboardPage>} />
       <Route path={"/shift-check"} component={() => <DashboardPage><ShiftCheck /></DashboardPage>} />
       <Route path={"/profile"} component={() => <DashboardPage><Profile /></DashboardPage>} />
