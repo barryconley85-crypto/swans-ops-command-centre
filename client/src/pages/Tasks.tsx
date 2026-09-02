@@ -12,8 +12,8 @@ import { WeeklyTaskPlanner, type PlannerTask } from "@/components/WeeklyTaskPlan
 import { trpc } from "@/lib/trpc";
 import { compactTime, dateTitle, labelForStatus, localDateKey, priorityStyle, statusStyle } from "@/lib/operations";
 import { format } from "date-fns";
-import { Check, ChevronLeft, ChevronRight, CircleAlert, ClipboardCheck, Clock3, ExternalLink, FileText, FileUp, MessageSquareText, Pencil, Plus, RotateCcw, Save, Sparkles, Trash2, X } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { Check, ChevronLeft, ChevronRight, CircleAlert, ClipboardCheck, Clock3, ExternalLink, FileText, Link, MessageSquareText, Pencil, Plus, RotateCcw, Save, Sparkles, Trash2, X } from "lucide-react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 type TaskRow = {
@@ -31,25 +31,23 @@ type TaskRow = {
   assignee: { id: number; displayName: string; initials: string; colour: string } | null;
 };
 
-function formatBytes(bytes: number) { if (!bytes) return "0 KB"; const units = ["B", "KB", "MB", "GB"]; const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1); return `${(bytes / 1024 ** index).toFixed(index ? 1 : 0)} ${units[index]}`; }
-
 function TaskStatusBadge({ status }: { status: TaskRow["status"] }) {
   return <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize ${statusStyle[status]}`}>{labelForStatus(status)}</span>;
 }
 
 function TaskDetail({ task, selectedDate, isManager = false, members = [] }: { task: TaskRow; selectedDate: string; isManager?: boolean; members?: any[] }) {
   const utils = trpc.useUtils();
-  const { state, uploadTaskAttachment, removeTaskAttachment } = useWorkspace();
+  const { state, addTaskResource, removeTaskResource } = useWorkspace();
   const { user: currentUser } = useAuth();
   const canManageTasks = isManager || Boolean(currentUser?.canManageOperations);
   const [comment, setComment] = useState("");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({ workDate: task.workDate, title: task.title, detail: task.detail || "", priority: task.priority, dueTime: task.dueAt ? format(new Date(task.dueAt), "HH:mm") : "", assignedTeamMemberId: task.assignedTeamMemberId ? String(task.assignedTeamMemberId) : "" });
-  const [uploading, setUploading] = useState(false);
-  const [removingAttachmentId, setRemovingAttachmentId] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const attachments = (state.taskAttachments || []).filter((attachment: any) => attachment.taskId === task.id).sort((a: any, b: any) => b.createdAt - a.createdAt);
+  const [savingResource, setSavingResource] = useState(false);
+  const [removingResourceId, setRemovingResourceId] = useState<string | null>(null);
+  const [resourceForm, setResourceForm] = useState({ url: "", title: "", note: "" });
+  const resources = (state.taskAttachments || []).filter((resource: any) => resource.taskId === task.id && typeof resource.url === "string" && resource.url).sort((a: any, b: any) => b.createdAt - a.createdAt);
   const activity = trpc.operations.tasks.activity.useQuery({ taskId: task.id });
   const commentMutation = trpc.operations.tasks.comment.useMutation({
     onSuccess: async () => {
@@ -89,17 +87,26 @@ function TaskDetail({ task, selectedDate, isManager = false, members = [] }: { t
     editMutation.mutate({ taskId: task.id, workDate: draft.workDate, title: draft.title.trim(), detail: draft.detail.trim() || null, priority: draft.priority, dueAt: draft.dueTime ? new Date(`${draft.workDate}T${draft.dueTime}:00`).getTime() : null, assignedTeamMemberId: draft.assignedTeamMemberId ? Number(draft.assignedTeamMemberId) : null });
   };
   const removeTask = () => { if (window.confirm(`Remove “${task.title}”? This cannot be undone.`)) deleteMutation.mutate({ taskId: task.id }); };
-  const uploadAttachment = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    setUploading(true);
-    try { await uploadTaskAttachment({ taskId: task.id, file }); toast.success(`${file.name} attached to this task.`); } catch (reason) { toast.error(reason instanceof Error ? reason.message : "The attachment could not be uploaded."); } finally { setUploading(false); }
+  const addResource = async () => {
+    const url = resourceForm.url.trim();
+    const title = resourceForm.title.trim();
+    if (!url) return toast.error("Paste a SharePoint or OneDrive link.");
+    if (!title) return toast.error("Give the resource a clear title.");
+    setSavingResource(true);
+    try {
+      await addTaskResource({ taskId: task.id, url, title, note: resourceForm.note.trim() || undefined });
+      setResourceForm({ url: "", title: "", note: "" });
+      toast.success("Resource link added to this task.");
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : "The resource link could not be added.");
+    } finally {
+      setSavingResource(false);
+    }
   };
-  const deleteAttachment = async (attachment: any) => {
-    if (!window.confirm(`Remove “${attachment.name}”? This cannot be undone.`)) return;
-    setRemovingAttachmentId(attachment._docId);
-    try { await removeTaskAttachment(attachment); toast.success("Attachment removed."); } catch (reason) { toast.error(reason instanceof Error ? reason.message : "The attachment could not be removed."); } finally { setRemovingAttachmentId(null); }
+  const deleteResource = async (resource: any) => {
+    if (!window.confirm("Remove “" + resource.title + "”? This will only remove the link from the task.")) return;
+    setRemovingResourceId(resource._docId);
+    try { await removeTaskResource(resource); toast.success("Resource link removed."); } catch (reason) { toast.error(reason instanceof Error ? reason.message : "The resource link could not be removed."); } finally { setRemovingResourceId(null); }
   };
 
   return (
@@ -117,7 +124,7 @@ function TaskDetail({ task, selectedDate, isManager = false, members = [] }: { t
         </div>
         {task.status === "complete" ? <div className="mx-6 mb-5 rounded-xl border border-[#D7E8DE] bg-[#F3FAF5] px-4 py-3"><p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#5A8470]">Completion evidence</p><p className="mt-1 text-sm font-semibold text-[#245C42]">Completed by {task.completedByName || "a team member"}</p><p className="mt-1 text-xs text-[#5B7668]">{task.completedAt ? format(new Date(task.completedAt), "d MMM yyyy, HH:mm") : "Recorded before completion attribution was enabled"}</p></div> : null}
         {task.blockedReason ? <div className="mx-6 rounded-xl border border-[#F4CCC5] bg-[#FFF1EF] px-4 py-3 text-sm text-[#9E4035]"><strong>Blocker:</strong> {task.blockedReason}</div> : null}
-        <div className="mx-6 mb-5 rounded-xl border border-[#E1E7E3] bg-white px-4 py-4"><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-semibold text-[#28352F]">Attachments</p><p className="mt-0.5 text-xs text-[#7A8680]">Documents, print sheets, photos, or instructions for this task.</p></div>{canManageTasks ? <><input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.jpg,.jpeg,.png,.webp" onChange={uploadAttachment} className="hidden" /><Button size="sm" variant="outline" disabled={uploading} onClick={() => fileInputRef.current?.click()}>{uploading ? "Uploading…" : <><FileUp className="mr-1.5 h-3.5 w-3.5" />Attach file</>}</Button></> : null}</div>{attachments.length ? <div className="mt-3 space-y-2">{attachments.map((attachment: any) => <div key={attachment._docId} className="flex items-center gap-3 rounded-lg border border-[#EDF0EE] bg-[#FAFCFA] px-3 py-2.5"><FileText className="h-4 w-4 shrink-0 text-[#4C8171]" /><div className="min-w-0 flex-1"><a href={attachment.downloadUrl} target="_blank" rel="noreferrer" className="block truncate text-xs font-semibold text-[#2A5F64] hover:underline">{attachment.name}<ExternalLink className="ml-1 inline h-3 w-3" /></a><p className="mt-0.5 text-[10px] text-[#84908A]">{formatBytes(attachment.size)} · Added by {attachment.uploadedByName || "the operations team"}</p></div>{canManageTasks ? <Button size="icon" variant="ghost" disabled={removingAttachmentId === attachment._docId} onClick={() => void deleteAttachment(attachment)} aria-label={`Remove ${attachment.name}`} className="h-8 w-8 text-[#A84237] hover:bg-[#FFF2F0]"><Trash2 className="h-3.5 w-3.5" /></Button> : null}</div>)}</div> : <p className="mt-3 rounded-lg bg-[#F7FAF7] px-3 py-3 text-xs text-[#85908B]">No attachments have been added to this task.</p>}</div>
+        <div className="mx-6 mb-5 rounded-xl border border-[#E1E7E3] bg-white px-4 py-4"><div className="flex items-center gap-3"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#EAF2EF] text-[#3A7D68]"><Link className="h-4 w-4" /></div><div><p className="text-sm font-semibold text-[#28352F]">Task resources</p><p className="mt-0.5 text-xs text-[#7A8680]">Link to the SharePoint or OneDrive document used for this task.</p></div></div>{canManageTasks ? <div className="mt-3 space-y-2"><Input value={resourceForm.url} onChange={event => setResourceForm({ ...resourceForm, url: event.target.value })} placeholder="https://yourcompany.sharepoint.com/..." aria-label="SharePoint or OneDrive URL" /><div className="grid gap-2 sm:grid-cols-2"><Input value={resourceForm.title} onChange={event => setResourceForm({ ...resourceForm, title: event.target.value })} placeholder="Resource title" aria-label="Resource title" /><Input value={resourceForm.note} onChange={event => setResourceForm({ ...resourceForm, note: event.target.value })} placeholder="Optional note" aria-label="Optional note" /></div><div className="flex justify-end"><Button size="sm" variant="outline" disabled={savingResource} onClick={() => void addResource()}><Link className="mr-1.5 h-3.5 w-3.5" />{savingResource ? "Adding…" : "Add link"}</Button></div></div> : null}{resources.length ? <div className="mt-3 space-y-2">{resources.map((resource: any) => <div key={resource._docId} className="flex items-start gap-3 rounded-lg border border-[#EDF0EE] bg-[#FAFCFA] px-3 py-2.5"><Link className="mt-0.5 h-4 w-4 shrink-0 text-[#4C8171]" /><div className="min-w-0 flex-1"><a href={resource.url} target="_blank" rel="noreferrer" className="block truncate text-xs font-semibold text-[#2A5F64] hover:underline">{resource.title}<ExternalLink className="ml-1 inline h-3 w-3" /></a>{resource.note ? <p className="mt-0.5 text-xs text-[#65716C]">{resource.note}</p> : null}<p className="mt-1 text-[10px] text-[#84908A]">Added by {resource.addedByName || "the operations team"}</p></div>{canManageTasks ? <Button size="icon" variant="ghost" disabled={removingResourceId === resource._docId} onClick={() => void deleteResource(resource)} aria-label={"Remove " + resource.title} className="h-8 w-8 text-[#A84237] hover:bg-[#FFF2F0]"><Trash2 className="h-3.5 w-3.5" /></Button> : null}</div>)}</div> : <p className="mt-3 rounded-lg bg-[#F7FAF7] px-3 py-3 text-xs text-[#85908B]">No resource links have been added to this task.</p>}</div>
         <div className="border-t border-[#E5E9E6] px-6 py-5">
           <div className="flex items-center justify-between"><p className="text-sm font-semibold text-[#28332F]">Activity</p><div className="flex gap-1.5"><Button size="sm" variant="outline" onClick={() => setTaskStatus("in_progress")}>Start</Button><Button size="sm" className="bg-[#1D5C63] hover:bg-[#164B50]" onClick={() => setTaskStatus("complete")}><Check className="mr-1 h-3.5 w-3.5" />Complete</Button></div></div>
           <div className="mt-4 max-h-40 space-y-3 overflow-y-auto pr-1">
