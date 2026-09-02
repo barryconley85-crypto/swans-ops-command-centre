@@ -1,6 +1,6 @@
 # Firebase and Vercel Setup
 
-The external release uses the Firebase web app registered as **Swans Ops Web** in the Firebase project `swans-ops-command-centre`. Its project is on the Spark tier, which was shown in the console as **No cost ($0/month)**.
+The external release uses the Firebase web app registered as **Swans Ops Web** in the Firebase project `swans-ops-command-centre`. Firebase Auth and Firestore power the workspace. Task resources are stored as links to the company’s SharePoint or OneDrive documents; the app does not upload files to Firebase Storage.
 
 ## Vercel environment variables
 
@@ -11,9 +11,12 @@ Add the following public variables to the Vercel project before deployment. Fire
 | `VITE_FIREBASE_API_KEY` | `AIzaSyAF6KhLk9CJvIbBjM0KHEzPO2dMAc1_OLY` |
 | `VITE_FIREBASE_AUTH_DOMAIN` | `swans-ops-command-centre.firebaseapp.com` |
 | `VITE_FIREBASE_PROJECT_ID` | `swans-ops-command-centre` |
-| `VITE_FIREBASE_STORAGE_BUCKET` | `swans-ops-command-centre.firebasestorage.app` |
 | `VITE_FIREBASE_MESSAGING_SENDER_ID` | `875238693473` |
 | `VITE_FIREBASE_APP_ID` | `1:875238693473:web:fffefa9b2fe3e79412e820` |
+
+## Task resources
+
+The Command Centre stores SharePoint and OneDrive links in Firestore instead of uploading duplicate files to Firebase Storage. This keeps the company’s existing Microsoft 365 permissions authoritative and means the Firebase project does not need a Cloud Storage bucket or Blaze billing for task resources.
 
 ## Access process
 
