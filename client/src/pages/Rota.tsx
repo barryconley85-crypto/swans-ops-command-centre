@@ -10,7 +10,7 @@ import { trpc } from "@/lib/trpc";
 import { hasExactRotaDuplicate, standardShiftPatterns } from "@/lib/collaboration";
 import { isoWeekStart, localDateKey } from "@/lib/operations";
 import { addDays, format } from "date-fns";
-import { ChevronLeft, ChevronRight, CircleAlert, Pencil, Plus, RotateCcw, Trash2, UserRoundCheck } from "lucide-react";
+import { ChevronLeft, ChevronRight, CircleAlert, Copy, Pencil, Plus, RotateCcw, Save, Trash2, UserRoundCheck } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -34,14 +34,19 @@ export default function Rota() {
   const [form, setForm] = useState({ workDate: weekStart, teamMemberId: "", assignmentType: "core", startTime: "09:00", endTime: "17:00", note: "" });
   // Dates ticked on for a NEW assignment. Ignored while editing an existing one (edit stays single-day).
   const [selectedDates, setSelectedDates] = useState<string[]>([weekStart]);
+  const [templateName, setTemplateName] = useState("");
   const team = trpc.operations.team.list.useQuery();
   const rota = trpc.operations.rota.week.useQuery({ weekStart });
+  const templates = trpc.operations.rota.templates.useQuery();
   const utils = trpc.useUtils();
   const resetForm = (date = weekStart) => { setEditingAssignmentId(null); setForm({ workDate: date, teamMemberId: "", assignmentType: "core", startTime: "09:00", endTime: "17:00", note: "" }); setSelectedDates([date]); };
   // A single mutation carries every selected date, so a multi-day duty is submitted in one action.
   const create = trpc.operations.rota.create.useMutation({ onSuccess: async () => { await rota.refetch(); setOpen(false); resetForm(); toast.success("Rota assignment saved."); }, onError: error => toast.error(error.message) });
   const update = trpc.operations.rota.update.useMutation({ onSuccess: async () => { await rota.refetch(); setOpen(false); resetForm(); toast.success("Rota assignment updated."); }, onError: error => toast.error(error.message) });
   const remove = trpc.operations.rota.remove.useMutation({ onSuccess: async () => { await rota.refetch(); toast.success("Rota assignment removed."); }, onError: error => toast.error(error.message) });
+  const createTemplate = trpc.operations.rota.createTemplate.useMutation({ onSuccess: async () => { await templates.refetch(); setTemplateName(""); toast.success("Rota template saved."); }, onError: error => toast.error(error.message) });
+  const applyTemplate = trpc.operations.rota.applyTemplate.useMutation({ onSuccess: async result => { await rota.refetch(); toast.success(`${result?.created || "Template"} assignments added to this week.`); }, onError: error => toast.error(error.message) });
+  const removeTemplate = trpc.operations.rota.removeTemplate.useMutation({ onSuccess: async () => { await templates.refetch(); toast.success("Rota template deleted."); }, onError: error => toast.error(error.message) });
   const days = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(new Date(`${weekStart}T12:00:00`), index)), [weekStart]);
   const activeMembers = team.data?.filter(member => member.status !== "inactive") ?? [];
   const assignmentFor = (memberId: number, date: Date) => rota.data?.assignments.filter(item => item.teamMemberId === memberId && item.workDate === localDateKey(date)) ?? [];
@@ -84,6 +89,12 @@ export default function Rota() {
   };
 
   const usePattern = (pattern: typeof standardShiftPatterns[number]) => { setEditingAssignmentId(null); setForm(current => ({ ...current, assignmentType: pattern.assignmentType, startTime: pattern.startTime, endTime: pattern.endTime })); setOpen(true); };
+  const saveCurrentWeekAsTemplate = () => {
+    const assignments = (rota.data?.assignments || []).flatMap((item: any) => { const dayOffset = days.findIndex(day => localDateKey(day) === item.workDate); if (dayOffset < 0) return []; const assignment = { dayOffset, teamMemberId: item.teamMemberId, assignmentType: item.assignmentType } as Record<string, unknown>; if (item.startTime) assignment.startTime = item.startTime; if (item.endTime) assignment.endTime = item.endTime; if (item.note) assignment.note = item.note; return [assignment]; });
+    if (!templateName.trim()) return toast.error("Give the template a name first.");
+    if (!assignments.length) return toast.error("Add at least one rota assignment before saving a template.");
+    createTemplate.mutate({ name: templateName, assignments });
+  };
   const editAssignment = (item: any) => { setEditingAssignmentId(item.id); setForm({ workDate: item.workDate, teamMemberId: String(item.teamMemberId), assignmentType: item.assignmentType, startTime: item.startTime || "09:00", endTime: item.endTime || "17:00", note: item.note || "" }); setSelectedDates([item.workDate]); setOpen(true); };
   if (team.isError || rota.isError) return <LoadError message="The weekly rota could not be loaded. Your existing cover plan is unchanged." onRetry={() => void Promise.all([team.refetch(), rota.refetch()])} />;
 
@@ -126,6 +137,22 @@ export default function Rota() {
       <div className="space-y-2"><Label>Cover note</Label><Input value={form.note} onChange={event => setForm({ ...form, note: event.target.value })} placeholder="Optional context or location" /></div>
     </div><DialogFooter><Button disabled={create.isPending || update.isPending} onClick={submit} className="bg-[#1D5C63] hover:bg-[#164B50]">{editingAssignmentId ? "Save changes" : selectedDates.length > 1 ? `Save for ${selectedDates.length} days` : "Save assignment"}</Button></DialogFooter></DialogContent></Dialog> : null}</>} />
     <AlertDialog open={Boolean(assignmentPendingRemoval)} onOpenChange={nextOpen => { if (!nextOpen) setAssignmentPendingRemoval(null); }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Remove this rota assignment?</AlertDialogTitle><AlertDialogDescription>{assignmentPendingRemoval ? `${assignmentPendingRemoval.assignmentType.replace("_", " ")} duty for ${assignmentPendingRemoval.workDate}${assignmentPendingRemoval.startTime ? `, ${assignmentPendingRemoval.startTime}–${assignmentPendingRemoval.endTime}` : ""}, will be removed. This cannot be undone.` : ""}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Keep assignment</AlertDialogCancel><AlertDialogAction disabled={remove.isPending} onClick={() => { if (assignmentPendingRemoval) remove.mutate({ id: assignmentPendingRemoval.id }); setAssignmentPendingRemoval(null); }} className="bg-[#A73D34] hover:bg-[#8F3028]">Remove assignment</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+    <section className="mb-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <Panel>
+        <PanelHeading title="Three-week rota templates" description="Save this seven-day pattern, then apply it to any week. Individual assignments remain editable or removable." />
+        <div className="flex gap-2 px-5 pb-5">
+          <Input value={templateName} onChange={event => setTemplateName(event.target.value)} placeholder="Template 1, Template 2…" className="h-9" />
+          <Button onClick={saveCurrentWeekAsTemplate} disabled={createTemplate.isPending} className="h-9 shrink-0 bg-[#1D5C63] hover:bg-[#164B50]"><Save className="mr-2 h-3.5 w-3.5" />Save current week</Button>
+        </div>
+      </Panel>
+      <Panel>
+        <PanelHeading title="Saved templates" description={templates.data?.length ? `${templates.data.length} template${templates.data.length === 1 ? "" : "s"} ready to apply.` : "Save the first weekly pattern to get started."} />
+        <div className="space-y-2 px-5 pb-5">
+          {(templates.data || []).map((template: any) => <div key={template._docId || template.id} className="flex items-center justify-between gap-3 rounded-xl border border-[#E1E9E4] bg-[#FAFCFA] px-3 py-2.5"><div className="min-w-0"><p className="truncate text-sm font-semibold text-[#34413C]">{template.name}</p><p className="text-[11px] text-[#718079]">{template.assignments?.length || 0} assignments</p></div><div className="flex shrink-0 gap-1.5"><Button variant="outline" size="sm" disabled={applyTemplate.isPending} onClick={() => applyTemplate.mutate({ id: template.id, weekStart })} className="h-8 border-[#C9DCD2] text-xs"><Copy className="mr-1.5 h-3.5 w-3.5" />Apply</Button><Button variant="ghost" size="icon" disabled={removeTemplate.isPending} onClick={() => removeTemplate.mutate({ id: template.id })} title="Delete rota template" aria-label="Delete rota template" className="h-8 w-8 text-[#A73D34] hover:bg-[#FFF0EE] hover:text-[#8F3028]"><Trash2 className="h-3.5 w-3.5" /></Button></div></div>)}
+          {!templates.data?.length ? <p className="text-xs leading-5 text-[#718079]">Use the current week as your first template, then build the other two patterns from the rota.</p> : null}
+        </div>
+      </Panel>
+    </section>
     <section className="mb-5 grid gap-3 lg:grid-cols-3">{standardShiftPatterns.map(pattern => <button key={pattern.label} onClick={() => usePattern(pattern)} className="group rounded-2xl border border-[#DDE7E1] bg-white p-4 text-left shadow-[0_12px_28px_-26px_rgba(18,48,41,0.45)] transition hover:-translate-y-0.5 hover:border-[#B9D5C9]"><div className="flex items-center justify-between"><span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#668078]">{pattern.label} pattern</span><span className="rounded-full bg-[#EDF5F1] px-2 py-1 text-[10px] font-bold text-[#34715F]">Use pattern</span></div><p className="mt-4 text-xl font-semibold tracking-tight text-[#263730]">{pattern.startTime}–{pattern.endTime}</p><p className="mt-1 text-xs leading-5 text-[#728079]">{pattern.description}</p></button>)}</section>
     <section className="mb-6"><GapCard icon={<CircleAlert className="h-5 w-5" />} label="On-call gaps" description={onCallGaps.length ? `${onCallGaps.map(day => format(day, "EEE d")).join(", ")} currently has no named on-call lead.` : "Every day this week has a named on-call lead."} alert={Boolean(onCallGaps.length)} /></section>
     <Panel className="overflow-x-auto">
