@@ -1,4 +1,7 @@
-const requiredCover = ["early", "core", "late", "on_call"];
+// Operational shifts are intentionally not treated as alert gaps: staffing
+// varies by day, especially weekends and planned leave. On-call cover is the
+// only rota requirement that should create an exception.
+const requiredCover = ["on_call"];
 
 export function buildOperationalSignals(state: any, workDate: string) {
   const rota = (state.rota || []).filter((item: any) => item.workDate === workDate);
