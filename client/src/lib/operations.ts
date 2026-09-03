@@ -8,6 +8,13 @@ export function localDateKey(date = new Date()) {
   return new Date(date.getTime() - offset).toISOString().slice(0, 10);
 }
 
+// Date-only values must not pass through local midnight before becoming an ISO
+// string: in British Summer Time that can shift the calculated key back a day.
+export function addDaysToDateKey(dateKey: string, days: number) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+
 export function dateTitle(dateKey: string) {
   return format(new Date(`${dateKey}T12:00:00`), "EEEE, d MMMM");
 }
