@@ -11,7 +11,7 @@ import { trpc } from "@/lib/trpc";
 import { dateTitle, localDateKey, priorityStyle } from "@/lib/operations";
 import { CheckCheck, ChevronLeft, ChevronRight, ClipboardList, Headphones, Plus, ShieldCheck, UserRoundCheck } from "lucide-react";
 import { addDays, format } from "date-fns";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 const statusStyle: Record<string, string> = { open: "bg-[#FFF0EE] text-[#B8473B]", acknowledged: "bg-[#FFF4E2] text-[#A56520]", resolved: "bg-[#E9F4ED] text-[#337454]" };
@@ -29,6 +29,8 @@ export default function OnCallPortal() {
   const rota = trpc.operations.rota.week.useQuery({ weekStart: isoWeekStartFor(date) });
   const create = trpc.operations.onCall.create.useMutation({ onSuccess: async () => { setOpen(false); setForm({ title: "", detail: "", owner: "", priority: "normal", nextAction: "" }); await items.refetch(); toast.success("On-call item recorded and assigned."); }, onError: (error: Error) => toast.error(error.message) });
   const acknowledge = trpc.operations.onCall.acknowledge.useMutation({ onSuccess: async () => { await items.refetch(); toast.success("On-call item acknowledged."); }, onError: (error: Error) => toast.error(error.message) });
+  const syncTasks = trpc.operations.onCall.syncTasks.useMutation({ onError: (error: Error) => toast.error(error.message) });
+  useEffect(() => { if (canUseOnCall && items.data?.length && user?.canManageOperations) void syncTasks.mutate({}); }, [canUseOnCall, items.data?.length, user?.canManageOperations]);
   const resolve = trpc.operations.onCall.resolve.useMutation({ onSuccess: async () => { setResolving(null); setResolution(""); await items.refetch(); toast.success("On-call item resolved."); }, onError: (error: Error) => toast.error(error.message) });
   const activeMembers = useMemo(() => (team.data || []).filter((member: any) => member.status !== "inactive"), [team.data]);
   const onCallLead = rota.data?.assignments.find((assignment: any) => assignment.workDate === date && assignment.assignmentType === "on_call");
