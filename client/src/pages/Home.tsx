@@ -17,6 +17,8 @@ export default function Home() {
   const firstName = user?.name?.split(" ")[0] || "there";
   const onCall = snapshot?.rota.find(item => item.assignmentType === "on_call")?.member;
   const signals = snapshot?.signals;
+  const syncOnCallTasks = trpc.operations.onCall.syncTasks.useMutation();
+  useEffect(() => { if (user?.canManageOperations && snapshot?.outstandingOnCall?.length) void syncOnCallTasks.mutate({}); }, [user?.canManageOperations, snapshot?.outstandingOnCall?.length]);
 
   if (dashboard.isLoading) return <div className="flex min-h-[55vh] items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-[#1D5C63]" /></div>;
   if (dashboard.isError) return <LoadError message="The live command board is temporarily unavailable." onRetry={() => void dashboard.refetch()} />;
