@@ -63,7 +63,7 @@ export function WeeklyTaskPlanner({ open, onOpenChange, templates, members, init
           title: item.title,
           detail: item.detail ?? null,
           priority: item.priority ?? "normal",
-          dueAt: item.dueTime ? new Date(`${localDateKey(day)}T${item.dueTime}:00`).getTime() : null,
+          dueAt: (item.dueTime || template.defaultTime) ? new Date(`${localDateKey(day)}T${item.dueTime || template.defaultTime}:00`).getTime() : null,
           assignedTeamMemberId,
         });
       });
