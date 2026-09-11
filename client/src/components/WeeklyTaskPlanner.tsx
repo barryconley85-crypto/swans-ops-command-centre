@@ -72,7 +72,7 @@ export function WeeklyTaskPlanner({ open, onOpenChange, templates, members, init
   };
 
   return <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent className="w-[calc(100vw-1rem)] max-w-[1400px] min-w-0 max-h-[92vh] overflow-hidden border-0 bg-[#FCFCFA] p-0 shadow-2xl">
+    <DialogContent className="w-[calc(100vw-1rem)] max-w-[1400px] min-w-0 max-h-[92vh] overflow-hidden border-0 bg-[#FCFCFA] p-0 shadow-2xl sm:max-w-[1400px]">
       <DialogHeader className="border-b border-[#E5E9E6] px-6 pb-5 pt-6">
         <div className="flex items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#E6F0ED] text-[#317168]"><CalendarRange className="h-5 w-5" /></span><div><DialogTitle>Plan a week of tasks</DialogTitle><DialogDescription className="mt-2">Choose a reusable checklist, then assign each task to a named person on the days it is needed. Empty cells are not scheduled.</DialogDescription></div></div>
       </DialogHeader>
