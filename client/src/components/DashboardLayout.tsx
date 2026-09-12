@@ -170,12 +170,11 @@ function DashboardLayoutContent({
                 <PanelLeft className="h-4 w-4 text-muted-foreground" />
               </button>
               {!isCollapsed ? (
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#1D5C63] text-[10px] font-bold tracking-[0.08em] text-white">SW</span>
-                  <span className="min-w-0 truncate text-sm font-semibold tracking-tight text-[#24332E]">
-                    Swans Ops
-                    <span className="mt-0.5 block text-[10px] font-medium uppercase tracking-[0.12em] text-[#73817B]">Command centre</span>
-                  </span>
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <div className="h-9 w-[124px] overflow-hidden rounded-lg border border-[#E7E4D8] bg-white shadow-sm" aria-label="Swans Travel">
+                    <img src="/swans-travel-logo.png" alt="Swans Travel" className="h-[180px] w-[180px] max-w-none -translate-x-[33px] -translate-y-[75px]" />
+                  </div>
+                  <span className="pl-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-[#73817B]">Ops command centre</span>
                 </div>
               ) : null}
             </div>
@@ -309,7 +308,7 @@ function NotificationCentre() {
     if (fresh.length) playAlertChime();
     if (fresh.length && desktopEnabled && document.visibilityState !== "visible") {
       fresh.forEach((item: any) => {
-        const desktopAlert = new Notification(item.title, { body: item.body, tag: `ops-alert-${item.id}` });
+        const desktopAlert = new Notification(item.title, { body: item.body, icon: "/swans-travel-logo.png", tag: `ops-alert-${item.id}` });
         desktopAlert.onclick = () => { window.focus(); desktopAlert.close(); };
       });
     }
