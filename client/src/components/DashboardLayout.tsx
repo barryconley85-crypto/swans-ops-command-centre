@@ -171,8 +171,8 @@ function DashboardLayoutContent({
               </button>
               {!isCollapsed ? (
                 <div className="flex min-w-0 flex-col gap-0.5">
-                  <div className="h-9 w-[124px] overflow-hidden rounded-lg border border-[#E7E4D8] bg-white shadow-sm" aria-label="Swans Travel">
-                    <img src="/swans-travel-logo.png" alt="Swans Travel" className="h-[180px] w-[180px] max-w-none -translate-x-[33px] -translate-y-[75px]" />
+                  <div className="flex h-9 w-[124px] items-center justify-center overflow-hidden rounded-lg border border-[#E7E4D8] bg-white px-1.5 shadow-sm" aria-label="Swans Travel">
+                    <img src="/swans-travel-logo-header.png" alt="Swans Travel" className="block h-auto w-full object-contain" />
                   </div>
                   <span className="pl-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-[#73817B]">Ops command centre</span>
                 </div>
