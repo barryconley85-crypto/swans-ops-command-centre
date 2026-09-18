@@ -166,7 +166,7 @@ Reason: ${reason.trim()}`)) deleteMutation.mutate({ taskId: task.id, reason: rea
 
 export default function Tasks() {
   const { user } = useAuth();
-  const { addTaskResource } = useWorkspace();
+  const { state, addTaskResource } = useWorkspace();
   const [selectedDate, setSelectedDate] = useState(localDateKey());
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [showTemplateForm, setShowTemplateForm] = useState(false);
@@ -240,7 +240,11 @@ export default function Tasks() {
     if (!personalMode && !taskForm.assignee) return toast.error("Choose the staff member responsible for this task.");
     if (taskForm.resourceUrl.trim() && !taskForm.resourceTitle.trim()) return toast.error("Give the resource link a clear title.");
     if (taskForm.resourceTitle.trim() && !taskForm.resourceUrl.trim()) return toast.error("Paste the SharePoint or OneDrive link for this resource.");
-    taskMutation.mutate({ workDate: selectedDate, title: taskForm.title, detail: taskForm.detail || undefined, priority: taskForm.priority, dueAt: taskForm.dueTime ? new Date(`${selectedDate}T${taskForm.dueTime}:00`).getTime() : undefined, assignedTeamMemberId: personalMode ? personalProfile?.id : Number(taskForm.assignee), isPersonal: personalMode });
+    const assignedId = personalMode ? personalProfile?.id : Number(taskForm.assignee);
+    const member = teamQuery.data?.find(person => person.id === assignedId);
+    const absence = (state.rota || []).find((item: any) => item.workDate === selectedDate && item.teamMemberId === assignedId && ["holiday", "leave", "rest_day", "rest-day", "unavailable"].includes(item.assignmentType));
+    if (!personalMode && absence && !window.confirm(`Warning: ${member?.displayName || "This colleague"} is marked as ${absence.assignmentType === "leave" || absence.assignmentType === "rest_day" || absence.assignmentType === "rest-day" ? "Rest Day" : absence.assignmentType} on ${selectedDate}. Assign this task anyway?`)) return;
+    taskMutation.mutate({ workDate: selectedDate, title: taskForm.title, detail: taskForm.detail || undefined, priority: taskForm.priority, dueAt: taskForm.dueTime ? new Date(`${selectedDate}T${taskForm.dueTime}:00`).getTime() : undefined, assignedTeamMemberId: assignedId, isPersonal: personalMode });
   };
   const templateItemRows = templateForm.items ? templateForm.items.split("\n").map(line => line.trim()).map(line => { const match = line.match(/^(\d{1,2}:\d{2})\s*[|\-]\s*(.+)$/); return { title: match ? match[2].trim() : line, dueTime: match ? match[1].padStart(5, "0") : "" }; }) : [];
   const updateTemplateItems = (rows: Array<{ title: string; dueTime: string }>) => setTemplateForm(current => ({ ...current, items: rows.map(row => `${row.dueTime ? `${row.dueTime} | ` : ""}${row.title || " "}`).join("\n") }));
