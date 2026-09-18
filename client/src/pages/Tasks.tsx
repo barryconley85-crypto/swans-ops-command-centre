@@ -233,7 +233,7 @@ export default function Tasks() {
     taskMutation.mutate({ workDate: selectedDate, title: taskForm.title, detail: taskForm.detail || undefined, priority: taskForm.priority, dueAt: taskForm.dueTime ? new Date(`${selectedDate}T${taskForm.dueTime}:00`).getTime() : undefined, assignedTeamMemberId: personalMode ? personalProfile?.id : Number(taskForm.assignee), isPersonal: personalMode });
   };
   const templateItemRows = templateForm.items.split("\n").map(line => line.trim()).filter(Boolean).map(line => { const match = line.match(/^(\d{1,2}:\d{2})\s*[|\-]\s*(.+)$/); return { title: match ? match[2].trim() : line, dueTime: match ? match[1].padStart(5, "0") : "" }; });
-  const updateTemplateItems = (rows: Array<{ title: string; dueTime: string }>) => setTemplateForm({ ...templateForm, items: rows.map(row => `${row.dueTime ? `${row.dueTime} | ` : ""}${row.title}`).join("\n") });
+  const updateTemplateItems = (rows: Array<{ title: string; dueTime: string }>) => setTemplateForm(current => ({ ...current, items: rows.map(row => `${row.dueTime ? `${row.dueTime} | ` : ""}${row.title}`).join("\n") }));
   const submitTemplate = () => {
     const items = templateForm.items.split("\n").map(item => item.trim()).filter(Boolean).map(line => { const match = line.match(/^(\d{1,2}:\d{2})\s*[|\-]\s*(.+)$/); return match ? { title: match[2].trim(), dueTime: match[1].padStart(5, "0"), priority: "normal" } : { title: line, priority: "normal" }; });
     if (!templateForm.name.trim() || !items.length || items.some(item => !item.title)) return toast.error("Add a template name and at least one checklist item.");
