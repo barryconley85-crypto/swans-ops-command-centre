@@ -258,7 +258,11 @@ export default function Tasks() {
   };
   const editTemplate = (template: any) => { setEditingTemplateId(template.id); setTemplateForm({ name: template.name || "", description: template.description || "", defaultTime: template.defaultTime || "", items: (template.items || []).map((item: any) => `${item.dueTime ? `${item.dueTime} | ` : ""}${item.title}`).join("\n") }); setShowTemplateForm(true); };
   const deleteTemplate = (template: any) => { if (window.confirm(`Delete the checklist template “${template.name}”? Existing tasks already created from it will not be removed.`)) templateRemoveMutation.mutate({ id: template.id }); };
-  const submitWeeklyPlan = (plannedTasks: PlannerTask[]) => weeklyPlannerMutation.mutate({ tasks: plannedTasks });
+  const submitWeeklyPlan = (plannedTasks: PlannerTask[]) => {
+    const conflicts = plannedTasks.map(task => { const member = teamQuery.data?.find(person => person.id === task.assignedTeamMemberId); const absence = (state.rota || []).find((item: any) => item.workDate === task.workDate && item.teamMemberId === task.assignedTeamMemberId && ["holiday", "leave", "rest_day", "rest-day", "unavailable"].includes(item.assignmentType)); return absence ? `${member?.displayName || "Team member"} — ${task.workDate} (${absence.assignmentType === "leave" || absence.assignmentType === "rest_day" || absence.assignmentType === "rest-day" ? "Rest Day" : absence.assignmentType})` : null; }).filter(Boolean) as string[];
+    if (conflicts.length && !window.confirm(`Warning: some planned tasks are assigned on absence days:\n\n${conflicts.slice(0, 8).join("\n")}${conflicts.length > 8 ? `\n…and ${conflicts.length - 8} more` : ""}\n\nSave anyway as a manager override?`)) return;
+    weeklyPlannerMutation.mutate({ tasks: plannedTasks });
+  };
 
   if (tasksQuery.isError || teamQuery.isError || templatesQuery.isError) return <LoadError message="The task board could not be loaded. No work has been changed." onRetry={() => void Promise.all([tasksQuery.refetch(), teamQuery.refetch(), templatesQuery.refetch()])} />;
 
