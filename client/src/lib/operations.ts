@@ -1,7 +1,7 @@
 import { format } from "date-fns";
 
 export type Priority = "low" | "normal" | "high" | "critical";
-export type TaskStatus = "pending" | "in_progress" | "blocked" | "complete";
+export type TaskStatus = "pending" | "in_progress" | "blocked" | "missed" | "complete";
 
 export function localDateKey(date = new Date()) {
   const offset = date.getTimezoneOffset() * 60_000;
@@ -41,6 +41,7 @@ export const statusStyle: Record<TaskStatus, string> = {
   pending: "bg-[#EEF0EE] text-[#5D6764]",
   in_progress: "bg-[#E6F0F4] text-[#31718A]",
   blocked: "bg-[#FFE7E4] text-[#B94336]",
+  missed: "bg-[#FFF0DB] text-[#A25E16]",
   complete: "bg-[#E6F2EC] text-[#28714F]",
 };
 

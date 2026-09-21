@@ -17,7 +17,7 @@ const exceptionStyle = {
 
 type Exception = {
   id: string;
-  kind: "Blocked" | "Overdue" | "Unassigned" | "Due soon" | "Cover gap" | "Issue" | "Handover" | "Help request";
+  kind: "Blocked" | "Missed" | "Overdue" | "Unassigned" | "Due soon" | "Cover gap" | "Issue" | "Handover" | "Help request";
   title: string;
   detail: string;
   owner: string;
@@ -44,14 +44,15 @@ export default function Exceptions() {
     const result: Exception[] = [];
     const tasks = snapshot.tasks.filter((task: any) => task.status !== "complete");
     tasks.forEach((task: any) => {
+      const missed = task.status === "missed";
       const overdue = Boolean(task.dueAt && task.dueAt < now);
       const dueSoon = Boolean(task.dueAt && task.dueAt >= now && task.dueAt <= now + 2 * 60 * 60 * 1000);
       const blocked = task.status === "blocked";
       const unassigned = !task.assignedTeamMemberId;
-      if (!blocked && !overdue && !unassigned && !dueSoon) return;
-      const kind: Exception["kind"] = blocked ? "Blocked" : overdue ? "Overdue" : unassigned ? "Unassigned" : "Due soon";
-      const priority: Exception["priority"] = blocked || task.priority === "critical" ? "critical" : overdue || task.priority === "high" ? "high" : "normal";
-      result.push({ id: `task-${task.id}`, kind, title: task.title, detail: blocked ? task.blockedReason || "The task has been marked as blocked." : overdue ? `Due ${compactTime(task.dueAt)} and still open.` : unassigned ? "No staff member has been made responsible." : `Due at ${compactTime(task.dueAt)}.`, owner: task.member?.displayName || "No owner", priority, href: "/tasks", action: "Open task", resolutionTime: task.dueAt });
+      if (!missed && !blocked && !overdue && !unassigned && !dueSoon) return;
+      const kind: Exception["kind"] = missed ? "Missed" : blocked ? "Blocked" : overdue ? "Overdue" : unassigned ? "Unassigned" : "Due soon";
+      const priority: Exception["priority"] = missed || blocked || task.priority === "critical" ? "critical" : overdue || task.priority === "high" ? "high" : "normal";
+      result.push({ id: `task-${task.id}`, kind, title: task.title, detail: missed ? `Missed: ${task.missedReason || "No reason recorded."} Follow-up: ${task.missedFollowUp || "Lead review required."}` : blocked ? task.blockedReason || "The task has been marked as blocked." : overdue ? `Due ${compactTime(task.dueAt)} and still open.` : unassigned ? "No staff member has been made responsible." : `Due at ${compactTime(task.dueAt)}.`, owner: task.member?.displayName || "No owner", priority, href: "/tasks", action: "Open task", resolutionTime: task.dueAt });
     });
     (snapshot.signals?.uncoveredDuties || []).forEach((duty: string) => result.push({ id: `cover-${duty}`, kind: "Cover gap", title: `${duty.replace("_", " ")} cover is missing`, detail: "No rota assignment is recorded for this required duty today.", owner: "No cover", priority: "critical", href: "/rota", action: "Review rota" }));
     (snapshot.handovers || []).forEach((handover: any) => result.push({ id: `handover-${handover.id}`, kind: "Handover", title: handover.title, detail: handover.detail || "Open handover waiting to be acknowledged.", owner: handover.member?.displayName || "Unassigned", priority: handover.priority === "critical" ? "critical" : handover.priority === "high" ? "high" : "normal", href: "/handover", action: "Open handover" }));
