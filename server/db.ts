@@ -221,8 +221,8 @@ export async function listHandovers(input: { query?: string; status?: "open" | "
   if (input.status) predicates.push(eq(handovers.status, input.status));
   if (input.query) predicates.push(or(sql`LOWER(${handovers.title}) LIKE ${`%${input.query.toLowerCase()}%`}`, sql`LOWER(${handovers.detail}) LIKE ${`%${input.query.toLowerCase()}%`}`));
   const data = await database.select().from(handovers).where(predicates.length ? and(...predicates) : undefined).orderBy(desc(handovers.createdAt));
-  const members = await listTeamMembers();
-  return data.map(item => ({ ...item, owner: members.find(member => member.id === item.ownerTeamMemberId) ?? null }));
+  const [members, registeredUsers] = await Promise.all([listTeamMembers(), database.select({ id: users.id, name: users.name, email: users.email }).from(users)]);
+  return data.map(item => { const registeredBy = registeredUsers.find(user => user.id === item.createdByUserId); return { ...item, owner: members.find(member => member.id === item.ownerTeamMemberId) ?? null, createdByName: registeredBy?.name || registeredBy?.email || "Unknown user" }; });
 }
 
 export async function createHandover(input: { title: string; detail: string; priority: "low" | "normal" | "high" | "critical"; ownerTeamMemberId?: number; deadlineAt?: number; decisionRecord?: string; createdByUserId: number }) {
