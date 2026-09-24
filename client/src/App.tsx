@@ -21,6 +21,7 @@ import ShiftCheck from "./pages/ShiftCheck";
 import Profile from "./pages/Profile";
 import ActivityHistory from "@/pages/ActivityHistory";
 import Exceptions from "@/pages/Exceptions";
+import DriverSignOn, { PublicDriverSignOn } from "@/pages/DriverSignOn";
 
 function DashboardPage({ children }: { children: React.ReactNode }) {
   return <DashboardLayout>{children}</DashboardLayout>;
@@ -41,11 +42,13 @@ function Router() {
       <Route path={"/rota"} component={() => <DashboardPage><Rota /></DashboardPage>} />
       <Route path={"/on-call"} component={() => <DashboardPage><OnCallPortal /></DashboardPage>} />
       <Route path={"/quick-on-call"} component={QuickOnCall} />
+      <Route path={"/driver-sign-on/:depot"} component={props => <PublicDriverSignOn depot={props.params.depot} />} />
       <Route path={"/chat"} component={() => <DashboardPage><TeamChat /></DashboardPage>} />
       <Route path={"/handover"} component={() => <DashboardPage><Handovers /></DashboardPage>} />
       <Route path={"/issues"} component={() => <DashboardPage><Issues /></DashboardPage>} />
       <Route path={"/reports"} component={() => <DashboardPage><Reports /></DashboardPage>} />
       <Route path={"/people"} component={() => <DashboardPage><People /></DashboardPage>} />
+      <Route path={"/driver-sign-on"} component={() => <DashboardPage><DriverSignOn /></DashboardPage>} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

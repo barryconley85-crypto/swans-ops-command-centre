@@ -50,5 +50,18 @@ service cloud.firestore {
     match /ops_shift_prompts/{promptId} { allow read: if member(); allow create, update: if onCallResponder() && request.resource.data.userId == request.auth.uid; allow delete: if lead(); }
     match /ops_presence/{userId} { allow read: if member(); allow create, update: if member() && userId == request.auth.uid && request.resource.data.userId == request.auth.uid; allow delete: if false; }
     match /ops_report_views/{viewId} { allow read, write: if lead(); }
+    match /ops_drivers/{driverId} { allow read: if true; allow create, update, delete: if operationsManager(); }
+    match /ops_driver_sign_ons/{signOnId} {
+      allow read: if member();
+      allow create: if request.resource.data.keys().hasOnly(['driverId', 'driverName', 'depotSlug', 'depotName', 'workDate', 'createdAt'])
+        && request.resource.data.driverId is string
+        && request.resource.data.driverName is string
+        && request.resource.data.workDate is string
+        && request.resource.data.createdAt is number
+        && ['travelmaster', 'alderly-park'].hasAny([request.resource.data.depotSlug])
+        && exists(/databases/$(database)/documents/ops_drivers/$(request.resource.data.driverId))
+        && get(/databases/$(database)/documents/ops_drivers/$(request.resource.data.driverId)).data.active == true;
+      allow update, delete: if lead();
+    }
   }
 }
