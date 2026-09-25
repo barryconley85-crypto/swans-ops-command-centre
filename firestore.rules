@@ -58,7 +58,7 @@ service cloud.firestore {
         && request.resource.data.driverName is string
         && request.resource.data.workDate is string
         && request.resource.data.createdAt is number
-        && ['travelmaster', 'alderly-park'].hasAny([request.resource.data.depotSlug])
+        && ['travelmaster', 'alderly-park', 'swans', 'cheltenham'].hasAny([request.resource.data.depotSlug])
         && exists(/databases/$(database)/documents/ops_drivers/$(request.resource.data.driverId))
         && get(/databases/$(database)/documents/ops_drivers/$(request.resource.data.driverId)).data.active == true;
       allow update, delete: if lead();

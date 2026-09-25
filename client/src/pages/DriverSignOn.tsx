@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { PageHeader, LoadError } from "@/components/WorkspacePrimitives";
 import { localDateKey } from "@/lib/operations";
 
-const depots = [{ slug: "travelmaster", name: "Travelmaster" }, { slug: "alderly-park", name: "Alderly Park" }];
+const depots = [{ slug: "travelmaster", name: "Travelmaster" }, { slug: "alderly-park", name: "Alderly Park" }, { slug: "swans", name: "Swans" }, { slug: "cheltenham", name: "Cheltenham" }];
 const depotName = (slug: string) => depots.find(depot => depot.slug === slug)?.name || slug;
 const csvEscape = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
 
@@ -49,8 +49,8 @@ export default function DriverSignOn() {
   const importCsv = async (file: File) => {
     if (!firebaseDb) return;
     const lines = (await file.text()).split(/\r?\n/).map(line => line.trim()).filter(Boolean);
-    const rows = lines.slice(/^name\s*(,|$)/i.test(lines[0] || "") ? 1 : 0).map(line => { const columns = line.split(",").map(value => value.replace(/^"|"$/g, "").trim()); const depot = columns[1]?.toLowerCase() === "alderly park" ? "alderly-park" : columns[1]?.toLowerCase() === "travelmaster" ? "travelmaster" : columns[1] || ""; return { name: columns[0], depot }; }).filter(row => row.name);
-    if (!rows.length || rows.some(row => !["travelmaster", "alderly-park"].includes(row.depot))) return toast.error("CSV must include name and depot columns using Travelmaster or Alderly Park.");
+    const rows = lines.slice(/^name\s*(,|$)/i.test(lines[0] || "") ? 1 : 0).map(line => { const columns = line.split(",").map(value => value.replace(/^"|"$/g, "").trim()); const depotValue = columns[1]?.toLowerCase(); const depot = depotValue === "alderly park" ? "alderly-park" : depotValue === "travelmaster" ? "travelmaster" : depotValue === "swans" ? "swans" : depotValue === "cheltenham" ? "cheltenham" : columns[1] || ""; return { name: columns[0], depot }; }).filter(row => row.name);
+    if (!rows.length || rows.some(row => !depots.some(depot => depot.slug === row.depot))) return toast.error("CSV must include name and depot columns using Travelmaster, Alderly Park, Swans, or Cheltenham.");
     try { for (const row of rows) { const existing = activeDrivers.find((driver: any) => driver.name.trim().toLowerCase() === row.name.trim().toLowerCase()); if (existing) await updateDoc(doc(firebaseDb, "ops_drivers", existing._docId), { name: row.name, depot: row.depot, active: true, updatedAt: Date.now() }); else await addDoc(collection(firebaseDb, "ops_drivers"), { name: row.name, depot: row.depot, active: true, createdAt: Date.now(), updatedAt: Date.now() }); } await refresh(); toast.success(`${rows.length} driver${rows.length === 1 ? "" : "s"} imported or updated.`); } catch (error) { toast.error(error instanceof Error ? error.message : "CSV import failed."); }
   };
   const exportCsv = () => {
