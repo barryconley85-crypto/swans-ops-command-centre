@@ -12,7 +12,7 @@ type TaskResourceInput = { taskId: number; url: string; title: string; note?: st
 type TaskResource = { _docId: string; id: number; taskId: number; url: string; title: string; note: string | null; addedByUserId: string; addedByTeamMemberId: number; addedByName: string; createdAt: number; };
 type State = Record<string, any[]>;
 
-const emptyState: State = { members: [], tasks: [], activities: [], taskAttachments: [], templates: [], rota: [], handovers: [], issues: [], readiness: [], notes: [], chatMessages: [], notifications: [], onCallItems: [], helpRequests: [], shiftPrompts: [], presence: [], reportViews: [], auditLogs: [], drivers: [], signOns: [] };
+const emptyState: State = { members: [], tasks: [], activities: [], taskAttachments: [], templates: [], rota: [], handovers: [], issues: [], readiness: [], notes: [], chatMessages: [], notifications: [], onCallItems: [], helpRequests: [], shiftPrompts: [], presence: [], reportViews: [], auditLogs: [], drivers: [], signOns: [], attendance: [] };
 const leadEmail = "bc@swanstravel.com";
 
 type WorkspaceContextValue = {
@@ -22,7 +22,7 @@ type WorkspaceContextValue = {
 };
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
-const collectionMap: Record<string, string> = { members: "ops_members", tasks: "ops_tasks", activities: "ops_task_activity", taskAttachments: "ops_task_attachments", templates: "ops_templates", rota: "ops_rota", handovers: "ops_handovers", issues: "ops_issues", readiness: "ops_readiness", notes: "ops_performance_notes", chatMessages: "ops_chat_messages", notifications: "ops_notifications", onCallItems: "ops_on_call_items", helpRequests: "ops_help_requests", shiftPrompts: "ops_shift_prompts", presence: "ops_presence", reportViews: "ops_report_views", auditLogs: "ops_audit_logs", drivers: "ops_drivers", signOns: "ops_driver_sign_ons" };
+const collectionMap: Record<string, string> = { members: "ops_members", tasks: "ops_tasks", activities: "ops_task_activity", taskAttachments: "ops_task_attachments", templates: "ops_templates", rota: "ops_rota", handovers: "ops_handovers", issues: "ops_issues", readiness: "ops_readiness", notes: "ops_performance_notes", chatMessages: "ops_chat_messages", notifications: "ops_notifications", onCallItems: "ops_on_call_items", helpRequests: "ops_help_requests", shiftPrompts: "ops_shift_prompts", presence: "ops_presence", reportViews: "ops_report_views", auditLogs: "ops_audit_logs", drivers: "ops_drivers", signOns: "ops_driver_sign_ons", attendance: "ops_driver_attendance" };
 const safeArray = (value: any) => Array.isArray(value) ? value : [];
 const now = () => Date.now();
 const numericId = () => Date.now() + Math.floor(Math.random() * 1_000);

@@ -63,5 +63,15 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/ops_drivers/$(request.resource.data.driverId)).data.active == true;
       allow update, delete: if lead();
     }
+    match /ops_driver_attendance/{attendanceId} {
+      allow read: if member();
+      allow create, update: if member()
+        && request.resource.data.driverId is string
+        && request.resource.data.driverName is string
+        && request.resource.data.firstDaySick is string
+        && request.resource.data.expectedReturnDate is string
+        && request.resource.data.reasonCategory is string;
+      allow delete: if lead();
+    }
   }
 }

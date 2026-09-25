@@ -179,3 +179,15 @@
     }
   }
 }
+
+.print-only { display: none; }
+@media print {
+  .no-print, body > * { display: none !important; }
+  .print-only { display: block !important; padding: 24px; color: #17231d; font-family: Arial, sans-serif; }
+  .print-only h1 { font-size: 22px; margin: 0 0 8px; }
+  .print-only p { font-size: 12px; margin: 8px 0; }
+  .print-only table { width: 100%; border-collapse: collapse; margin-top: 24px; font-size: 11px; }
+  .print-only th, .print-only td { border: 1px solid #b9c9bf; padding: 8px; text-align: left; }
+  .print-only th { background: #eef5ef; }
+  .print-only .report-note { margin-top: 28px; color: #52645a; }
+}
