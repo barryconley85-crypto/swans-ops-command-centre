@@ -42,7 +42,7 @@ const menuItems = [
   { icon: AlertTriangle, label: "Live Operations", path: "/exceptions" },
   { icon: CircleUserRound, label: "My shift", path: "/my-shift" },
   { icon: ClipboardCheck, label: "Tasks", path: "/tasks" },
-  { icon: QrCode, label: "Driver sign-on", path: "/driver-sign-on", leadOnly: true },
+  { icon: QrCode, label: "Driver sign-on", path: "/driver-sign-on", managerOnly: true },
   { icon: FileBarChart, label: "Driver attendance", path: "/driver-attendance" },
   { icon: CalendarDays, label: "Rota & on-call", path: "/rota" },
   { icon: Headphones, label: "On-call portal", path: "/on-call" },
@@ -184,7 +184,7 @@ function DashboardLayoutContent({
 
           <SidebarContent className="gap-0">
             <SidebarMenu className="px-2 py-2">
-              {menuItems.filter(item => !item.leadOnly || user?.isSuperuser).map(item => {
+              {menuItems.filter(item => (!item.leadOnly || user?.isSuperuser) && (!item.managerOnly || user?.canManageOperations)).map(item => {
                 const isActive = location === item.path;
                 return (
                   <SidebarMenuItem key={item.path}>
