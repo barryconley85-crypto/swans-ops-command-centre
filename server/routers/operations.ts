@@ -6,7 +6,7 @@ import { protectedProcedure, router } from "../_core/trpc";
 const dateInput = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const priority = z.enum(["low", "normal", "high", "critical"]);
 const teamRole = z.enum(["lead", "coordinator", "support"]);
-const assignmentType = z.enum(["early", "core", "late", "on_call", "leave", "unavailable", "holiday"]);
+const assignmentType = z.enum(["early", "core", "late", "on_call", "escalation_manager", "leave", "unavailable", "holiday"]);
 const rotaAssignmentInput = z.object({
   teamMemberId: z.number().int().positive(),
   assignmentType,
