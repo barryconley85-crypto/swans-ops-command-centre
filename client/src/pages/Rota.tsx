@@ -19,6 +19,7 @@ const assignmentStyle: Record<string, string> = {
   core: "border-[#BCD8DF] bg-[#E9F4F6] text-[#327183]",
   late: "border-[#DED0B6] bg-[#FFF5E7] text-[#9A641D]",
   on_call: "border-[#C7C5DF] bg-[#F0EFFA] text-[#625996]",
+  escalation_manager: "border-[#B8D7F0] bg-[#EAF5FF] text-[#245D8C]",
   leave: "border-[#F1C9C3] bg-[#FFF0EE] text-[#B44C40]",
   unavailable: "border-[#F1C9C3] bg-[#FFF0EE] text-[#B44C40]",
   holiday: "border-[#D6C8E9] bg-[#F6F0FB] text-[#79589C]",
@@ -63,10 +64,10 @@ export default function Rota() {
 
   const submit = async () => {
     if (!form.teamMemberId) return toast.error("Choose the team member who owns this shift.");
-    const isTimedShift = !["leave", "unavailable", "on_call", "holiday"].includes(form.assignmentType);
+    const isTimedShift = !["leave", "unavailable", "on_call", "escalation_manager", "holiday"].includes(form.assignmentType);
     const basePayload = {
       teamMemberId: Number(form.teamMemberId),
-      assignmentType: form.assignmentType as "early" | "core" | "late" | "on_call" | "leave" | "unavailable" | "holiday",
+      assignmentType: form.assignmentType as "early" | "core" | "late" | "on_call" | "escalation_manager" | "leave" | "unavailable" | "holiday",
       startTime: isTimedShift ? form.startTime : undefined,
       endTime: isTimedShift ? form.endTime : undefined,
       note: form.note || undefined,
@@ -132,7 +133,7 @@ export default function Rota() {
         </div>
       )}
 
-      <div className="space-y-2"><Label>Assignment</Label><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={form.assignmentType} onChange={event => setForm({ ...form, assignmentType: event.target.value })}><option value="early">Early shift</option><option value="core">Core shift</option><option value="late">Late shift</option><option value="on_call">On-call lead</option><option value="holiday">Holiday</option><option value="leave">Rest Day</option><option value="unavailable">Unavailable</option></select></div>
+      <div className="space-y-2"><Label>Assignment</Label><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={form.assignmentType} onChange={event => setForm({ ...form, assignmentType: event.target.value })}><option value="early">Early shift</option><option value="core">Core shift</option><option value="late">Late shift</option><option value="on_call">On-call lead</option><option value="escalation_manager">Escalation Manager</option><option value="holiday">Holiday</option><option value="leave">Rest Day</option><option value="unavailable">Unavailable</option></select></div>
       {!["leave", "unavailable", "on_call", "holiday"].includes(form.assignmentType) ? <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label>Start</Label><Input type="time" value={form.startTime} onChange={event => setForm({ ...form, startTime: event.target.value })} /></div><div className="space-y-2"><Label>End</Label><Input type="time" value={form.endTime} onChange={event => setForm({ ...form, endTime: event.target.value })} /></div></div> : null}
       <div className="space-y-2"><Label>Cover note</Label><Input value={form.note} onChange={event => setForm({ ...form, note: event.target.value })} placeholder="Optional context or location" /></div>
     </div><DialogFooter><Button disabled={create.isPending || update.isPending} onClick={submit} className="bg-[#1D5C63] hover:bg-[#164B50]">{editingAssignmentId ? "Save changes" : selectedDates.length > 1 ? `Save for ${selectedDates.length} days` : "Save assignment"}</Button></DialogFooter></DialogContent></Dialog> : null}</>} />
@@ -167,7 +168,7 @@ export default function Rota() {
             {days.map(day => {
               const assignments = assignmentFor(member.id, day);
               return <div key={day.toISOString()} className={`min-h-[86px] border-l border-[#EFF2F0] p-2 ${assignments.some(item => item.assignmentType === "on_call") ? "bg-[#FAF9FF]" : localDateKey(day) === localDateKey() ? "bg-[#FBFDFC]" : ""}`}>
-                {assignments.map(item => <div key={item.id} className={`relative mb-1 rounded-lg border px-2 py-1.5 pr-10 text-[10px] font-semibold capitalize ${assignmentStyle[item.assignmentType]} ${item.assignmentType === "on_call" ? "ring-1 ring-[#B9B6DF]" : ""}`}><p>{item.assignmentType === "on_call" ? "On-call · highlighted" : item.assignmentType === "leave" ? "Rest Day" : item.assignmentType.replace("_", " ")}</p>{item.startTime ? <p className="mt-0.5 text-[9px] font-medium opacity-75">{item.startTime}–{item.endTime}</p> : null}{isManager ? <div className="absolute right-1 top-1 flex gap-0.5"><button title="Edit rota assignment" aria-label="Edit rota assignment" onClick={() => editAssignment(item)} className="flex h-4 w-4 items-center justify-center rounded bg-white/80 text-[#40534B] hover:bg-white"><Pencil className="h-2.5 w-2.5" /></button><button title="Remove rota assignment" aria-label="Remove rota assignment" onClick={() => setAssignmentPendingRemoval(item)} className="flex h-4 w-4 items-center justify-center rounded bg-[#3E4B45] text-white hover:bg-[#283630]"><Trash2 className="h-2.5 w-2.5" /></button></div> : null}</div>)}
+                {assignments.map(item => <div key={item.id} className={`relative mb-1 rounded-lg border px-2 py-1.5 pr-10 text-[10px] font-semibold capitalize ${assignmentStyle[item.assignmentType]} ${item.assignmentType === "on_call" ? "ring-1 ring-[#B9B6DF]" : ""}`}><p>{item.assignmentType === "on_call" ? "On-call · highlighted" : item.assignmentType === "escalation_manager" ? "Escalation Manager" : item.assignmentType === "leave" ? "Rest Day" : item.assignmentType.replace("_", " ")}</p>{item.startTime ? <p className="mt-0.5 text-[9px] font-medium opacity-75">{item.startTime}–{item.endTime}</p> : null}{isManager ? <div className="absolute right-1 top-1 flex gap-0.5"><button title="Edit rota assignment" aria-label="Edit rota assignment" onClick={() => editAssignment(item)} className="flex h-4 w-4 items-center justify-center rounded bg-white/80 text-[#40534B] hover:bg-white"><Pencil className="h-2.5 w-2.5" /></button><button title="Remove rota assignment" aria-label="Remove rota assignment" onClick={() => setAssignmentPendingRemoval(item)} className="flex h-4 w-4 items-center justify-center rounded bg-[#3E4B45] text-white hover:bg-[#283630]"><Trash2 className="h-2.5 w-2.5" /></button></div> : null}</div>)}
               </div>;
             })}
           </div>
