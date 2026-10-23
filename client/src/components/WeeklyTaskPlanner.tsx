@@ -72,11 +72,11 @@ export function WeeklyTaskPlanner({ open, onOpenChange, templates, members, init
   };
 
   return <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent className="w-[calc(100vw-1rem)] max-w-[1400px] min-w-0 max-h-[92vh] overflow-hidden border-0 bg-[#FCFCFA] p-0 shadow-2xl sm:max-w-[1400px]">
-      <DialogHeader className="border-b border-[#E5E9E6] px-6 pb-5 pt-6">
+    <DialogContent className="flex w-[calc(100vw-1rem)] max-w-[1400px] min-w-0 max-h-[92dvh] flex-col overflow-hidden border-0 bg-[#FCFCFA] p-0 shadow-2xl sm:max-w-[1400px]">
+      <DialogHeader className="shrink-0 border-b border-[#E5E9E6] px-4 pb-4 pt-4 sm:px-6 sm:pb-5 sm:pt-6">
         <div className="flex items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#E6F0ED] text-[#317168]"><CalendarRange className="h-5 w-5" /></span><div><DialogTitle>Plan a week of tasks</DialogTitle><DialogDescription className="mt-2">Choose a reusable checklist, then assign each task to a named person on the days it is needed. Empty cells are not scheduled.</DialogDescription></div></div>
       </DialogHeader>
-      <div className="min-w-0 space-y-4 overflow-y-auto px-6 py-5">
+      <div className="min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5">
         <div className="max-w-md space-y-2"><Label>Checklist</Label><select value={template ? String(template.id) : ""} onChange={event => { setTemplateId(event.target.value); setOwners({}); }} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="">Choose a checklist…</option>{templates.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
         {template ? <>
           <div className="flex flex-col gap-3 rounded-xl border border-[#DCE8E0] bg-[#F5FAF7] px-4 py-3 text-xs leading-5 text-[#4E6B5D] sm:flex-row sm:items-center sm:justify-between"><p><strong>{template.name}</strong> · Week commencing {format(days[0]!, "d MMMM")} · {scheduledCount} task{scheduledCount === 1 ? "" : "s"} currently scheduled. Every selected cell must have an owner.</p><div className="flex items-center gap-1"><Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => moveWeek(-1)} aria-label="Previous week"><ChevronLeft className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => moveWeek(1)} aria-label="Next week"><ChevronRight className="h-4 w-4" /></Button></div></div>
@@ -88,7 +88,7 @@ export function WeeklyTaskPlanner({ open, onOpenChange, templates, members, init
           </div>
         </> : <p className="rounded-xl bg-[#F4F7F5] px-4 py-6 text-center text-sm text-[#68766F]">Create a checklist first, then return here to plan its daily ownership.</p>}
       </div>
-      <DialogFooter className="border-t border-[#E5E9E6] px-6 py-4"><Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button disabled={!template || !scheduledCount || pending} onClick={submit} className="bg-[#1D5C63] hover:bg-[#164B50]">{pending ? "Saving plan…" : `Save ${scheduledCount || "weekly"} task${scheduledCount === 1 ? "" : "s"}`}</Button></DialogFooter>
+      <DialogFooter className="shrink-0 border-t border-[#E5E9E6] bg-[#FCFCFA] px-4 py-3 sm:px-6 sm:py-4"><Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button disabled={!template || !scheduledCount || pending} onClick={submit} className="bg-[#1D5C63] hover:bg-[#164B50]">{pending ? "Saving plan…" : `Save ${scheduledCount || "weekly"} task${scheduledCount === 1 ? "" : "s"}`}</Button></DialogFooter>
     </DialogContent>
   </Dialog>;
 }
