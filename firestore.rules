@@ -33,6 +33,7 @@ service cloud.firestore {
     match /ops_rota/{rotaId} { allow read: if member(); allow write: if operationsManager(); }
     match /ops_handovers/{handoverId} { allow read: if member(); allow create, update: if sharedEditor(); allow delete: if lead(); }
     match /ops_issues/{issueId} { allow read: if member(); allow create, update: if sharedEditor(); allow delete: if lead(); }
+    match /ops_complaints/{complaintId} { allow read: if member(); allow create, update: if sharedEditor(); allow delete: if lead(); }
     match /ops_readiness/{pulseId} { allow read: if member(); allow write: if false; }
     match /ops_performance_notes/{noteId} { allow read: if member(); allow write: if lead(); }
     match /ops_chat_messages/{messageId} { allow read: if member(); allow create: if onCallResponder() && request.resource.data.authorUserId == request.auth.uid; allow update: if false; allow delete: if lead(); }
