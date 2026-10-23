@@ -24,6 +24,7 @@ import ActivityHistory from "@/pages/ActivityHistory";
 import Exceptions from "@/pages/Exceptions";
 import DriverSignOn, { PublicDriverSignOn } from "@/pages/DriverSignOn";
 import DriverAttendance from "@/pages/DriverAttendance";
+import DemoPreview from "@/pages/DemoPreview";
 
 function DashboardPage({ children }: { children: React.ReactNode }) {
   return <DashboardLayout>{children}</DashboardLayout>;
@@ -33,6 +34,7 @@ function Router() {
   // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
+      <Route path={"/demo"} component={DemoPreview} />
       <Route path={"/"} component={() => <DashboardPage><Home /></DashboardPage>} />
       <Route path={"/exceptions"} component={() => <DashboardPage><Exceptions /></DashboardPage>} />
       <Route path={"/my-shift"} component={() => <DashboardPage><MyShift /></DashboardPage>} />
