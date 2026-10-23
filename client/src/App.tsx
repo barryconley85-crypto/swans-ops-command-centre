@@ -9,6 +9,7 @@ import Handovers from "./pages/Handovers";
 import Home from "./pages/Home";
 import HelpRequests from "./pages/HelpRequests";
 import Issues from "./pages/Issues";
+import Complaints from "./pages/Complaints";
 import OnCallPortal from "./pages/OnCallPortal";
 import QuickOnCall from "./pages/QuickOnCall";
 import People from "./pages/People";
@@ -47,6 +48,7 @@ function Router() {
       <Route path={"/chat"} component={() => <DashboardPage><TeamChat /></DashboardPage>} />
       <Route path={"/handover"} component={() => <DashboardPage><Handovers /></DashboardPage>} />
       <Route path={"/issues"} component={() => <DashboardPage><Issues /></DashboardPage>} />
+      <Route path={"/complaints"} component={() => <DashboardPage><Complaints /></DashboardPage>} />
       <Route path={"/reports"} component={() => <DashboardPage><Reports /></DashboardPage>} />
       <Route path={"/people"} component={() => <DashboardPage><People /></DashboardPage>} />
       <Route path={"/driver-sign-on"} component={() => <DashboardPage><DriverSignOn /></DashboardPage>} />

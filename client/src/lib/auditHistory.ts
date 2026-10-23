@@ -5,6 +5,7 @@ export const auditableCollections: Record<string, string> = {
   rota: "rota assignment",
   handovers: "handover",
   issues: "issue",
+  complaints: "complaint",
   readiness: "readiness pulse",
   notes: "team note",
   chatMessages: "chat message",

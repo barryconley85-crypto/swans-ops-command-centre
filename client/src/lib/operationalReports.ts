@@ -38,7 +38,7 @@ export function buildOperationalReport(reportId: string, state: Record<string, a
   const rota = (state.rota || []).filter(item => dateInRange(item.workDate, filter.rangeStart, filter.rangeEnd) && (!filter.memberId || item.teamMemberId === filter.memberId));
   const onCall = (state.onCallItems || []).filter(item => dateInRange(item.workDate, filter.rangeStart, filter.rangeEnd) && (!filter.memberId || item.ownerTeamMemberId === filter.memberId));
   const handovers = (state.handovers || []).filter(item => !item.createdAt || dateInRange(new Date(item.createdAt).toISOString().slice(0, 10), filter.rangeStart, filter.rangeEnd));
-  const issues = (state.issues || []).filter(item => !item.createdAt || dateInRange(new Date(item.createdAt).toISOString().slice(0, 10), filter.rangeStart, filter.rangeEnd));
+  const issues = (state.issues || []).filter(item => item.recordType !== "complaint" && (!item.createdAt || dateInRange(new Date(item.createdAt).toISOString().slice(0, 10), filter.rangeStart, filter.rangeEnd)));
   const definition = reportDefinitions.find(item => item.id === reportId) || reportDefinitions[0]!;
   const base = { id: definition.id, label: definition.label, category: definition.category, description: definition.description };
   const outstanding = tasks.filter(task => task.status !== "complete");
