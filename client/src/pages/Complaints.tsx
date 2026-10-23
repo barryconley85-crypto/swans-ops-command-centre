@@ -79,6 +79,9 @@ export default function Complaints() {
   const complaints = ((workspace.state.complaints || []) as Complaint[]).filter((item: any) => item.recordType === "complaint");
   const members = (workspace.state.members || []).filter((member: any) => member.status === "active");
   const drivers = (workspace.state.drivers || []).filter((driver: any) => driver.active !== false);
+  const vehicles = (workspace.state.vehicles || []).filter((vehicle: any) => vehicle.active !== false);
+  const vehicleLabel = (vehicle: any) => String(vehicle.fleetNumber || vehicle.fleetNo || vehicle.vehicleNumber || vehicle.registration || vehicle.reg || vehicle.name || vehicle.vehicle || vehicle.number || vehicle.id || "").trim();
+  const vehicleOptions = Array.from(new Set(vehicles.map((vehicle: any) => vehicleLabel(vehicle)).filter(Boolean))).sort((a, b) => a.localeCompare(b, "en-GB", { numeric: true, sensitivity: "base" }));
   const ordered = useMemo(() => [...complaints].sort((a, b) => (a.stage === "closed" ? 1 : 0) - (b.stage === "closed" ? 1 : 0) || b.receivedAt - a.receivedAt), [complaints]);
   const visible = ordered.filter(item => filter === "all" || (filter === "active" ? item.stage !== "closed" : filter === "overdue" ? item.stage !== "closed" && (now > item.acknowledgementDueAt && !item.acknowledgedAt || now > item.responseDueAt) : item.stage === filter));
   const selected = complaints.find(item => item._docId === selectedId) || null;
