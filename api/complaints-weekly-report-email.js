@@ -1,15 +1,19 @@
-const firebaseApiKey = process.env.FIREBASE_WEB_API_KEY || "AIzaSyAF6KhLk9CJvIbBjM0KHEzPO2dMAc1_OLY";
-const authorisedReportSenders = new Set(["bc@swanstravel.com", "barryconley85@gmail.com", "barryconley85@gmail.co.uk"]);
-
-async function verifiedLeadEmail(idToken) {
-  const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${firebaseApiKey}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ idToken }),
-  });
-  if (!response.ok) return null;
-  const body = await response.json();
-  return body.users?.[0]?.email?.toLowerCase() || null;
+// Any signed-in Ops Command Centre user may send a management report.
+// Authentication is still required; the report recipient is independent of the sender account.
+async function verifiedSignedInUser(idToken) {
+  if (!idToken) return false;
+  try {
+    const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${process.env.FIREBASE_WEB_API_KEY || "AIzaSyAF6KhLk9CJvIbBjM0KHEzPO2dMAc1_OLY"}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idToken }),
+    });
+    if (!response.ok) return false;
+    const body = await response.json();
+    return Boolean(body.users?.[0]?.localId && body.users?.[0]?.email);
+  } catch {
+    return false;
+  }
 }
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, char => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -43,7 +47,7 @@ function reportHtml(data) {
 export default async function handler(request, response) {
   if (request.method !== "POST") return response.status(405).json({ error: "Method not allowed" });
   const idToken = request.headers.authorization?.replace(/^Bearer\\s+/i, "");
-  if (!idToken || !authorisedReportSenders.has(await verifiedLeadEmail(idToken))) return response.status(403).json({ error: "This account is not authorised to send the management report. Sign in with an authorised Swans account." });
+  if (!idToken || !(await verifiedSignedInUser(idToken))) return response.status(401).json({ error: "Your session could not be verified. Please sign in again and retry." });
   if (!process.env.GOOGLE_MAILER_URL || !process.env.GOOGLE_MAILER_SHARED_SECRET) return response.status(503).json({ emailStatus: "not_configured", error: "The existing Google Apps Script mailer is not connected to this project yet. Copy GOOGLE_MAILER_URL and GOOGLE_MAILER_SHARED_SECRET from the Swans Accident Management Vercel project into this project." });
   const body = typeof request.body === "string" ? JSON.parse(request.body) : request.body || {};
   const recipient = typeof body.recipientEmail === "string" ? body.recipientEmail.trim() : "";
