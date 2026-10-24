@@ -1,5 +1,5 @@
 const firebaseApiKey = process.env.FIREBASE_WEB_API_KEY || "AIzaSyAF6KhLk9CJvIbBjM0KHEzPO2dMAc1_OLY";
-const authorisedReportSenders = new Set(["bc@swanstravel.com", "barryconley85@gmail.com"]);
+const authorisedReportSenders = new Set(["bc@swanstravel.com", "barryconley85@gmail.com", "barryconley85@gmail.co.uk"]);
 
 async function verifiedLeadEmail(idToken) {
   const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${firebaseApiKey}`, {
