@@ -44,22 +44,33 @@ export default async function handler(request, response) {
   if (request.method !== "POST") return response.status(405).json({ error: "Method not allowed" });
   const idToken = request.headers.authorization?.replace(/^Bearer\\s+/i, "");
   if (!idToken || await verifiedLeadEmail(idToken) !== leadEmail) return response.status(403).json({ error: "Only the authorised operations lead can send this management report." });
-  if (!process.env.RESEND_API_KEY || !process.env.TASK_EMAIL_FROM) return response.status(503).json({ emailStatus: "not_configured", error: "Direct email is not configured. Add RESEND_API_KEY and TASK_EMAIL_FROM to Vercel production environment variables." });
+  if (!process.env.GOOGLE_MAILER_URL || !process.env.GOOGLE_MAILER_SHARED_SECRET) return response.status(503).json({ emailStatus: "not_configured", error: "The existing Google Apps Script mailer is not connected to this project yet. Copy GOOGLE_MAILER_URL and GOOGLE_MAILER_SHARED_SECRET from the Swans Accident Management Vercel project into this project." });
   const body = typeof request.body === "string" ? JSON.parse(request.body) : request.body || {};
   const recipient = typeof body.recipientEmail === "string" ? body.recipientEmail.trim() : "";
   if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(recipient)) return response.status(400).json({ error: "Enter a valid recipient email address." });
   if (!body.period?.start || !body.period?.end || !Array.isArray(body.complaints) || !body.summary) return response.status(400).json({ error: "The reporting period and report data are required." });
   if (body.complaints.length > 500) return response.status(413).json({ error: "This report contains too many complaint records to email in one message." });
   const subject = `Swans Travel | MD Weekly Complaints Report | ${body.period.start} to ${body.period.end}`;
-  const emailResponse = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: process.env.TASK_EMAIL_FROM, to: [recipient], subject, html: reportHtml(body), text: `Swans Travel Weekly Complaints Report\\nPeriod: ${body.period.start} to ${body.period.end}\\nComplaints: ${body.summary.received}; Open: ${body.summary.open}; Closed: ${body.summary.closed}; Overdue: ${body.summary.overdue}; Refund/credit value recorded: ${money(body.summary.refundTotal)}. Please view this report in an HTML-capable email client.` }),
-  });
-  if (!emailResponse.ok) {
-    const providerMessage = await emailResponse.text().catch(() => "");
-    return response.status(502).json({ error: `Email provider rejected the report. ${providerMessage.slice(0, 250)}` });
+  const textBody = `SWANS TRAVEL | WEEKLY COMPLAINTS MANAGEMENT REPORT\\nReporting period: ${body.period.start} to ${body.period.end}\\nComplaints: ${body.summary.received}; Open: ${body.summary.open}; Closed: ${body.summary.closed}; Overdue: ${body.summary.overdue}; Refund/credit value recorded: ${money(body.summary.refundTotal)}.\\nThe full management report is included in the HTML version of this email.`;
+  try {
+    const mailResponse = await fetch(process.env.GOOGLE_MAILER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        secret: process.env.GOOGLE_MAILER_SHARED_SECRET,
+        eventKey: `complaints-weekly-${body.period.start}-${body.period.end}-${recipient.toLowerCase()}`,
+        subject,
+        text: textBody,
+        html: reportHtml(body),
+        to: [recipient],
+      }),
+    });
+    const result = await mailResponse.json().catch(() => ({}));
+    if (!mailResponse.ok || result.ok !== true) {
+      return response.status(502).json({ error: result.error || "Google mailer could not accept the report." });
+    }
+    return response.status(200).json({ emailStatus: "sent", id: result.id });
+  } catch (error) {
+    return response.status(502).json({ error: error instanceof Error ? error.message : "Google mailer could not be reached." });
   }
-  const result = await emailResponse.json();
-  return response.status(200).json({ emailStatus: "sent", id: result.id });
 }
