@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
+import { getAuth } from "firebase/auth";
 import { buildOperationalReport, reportDefinitions } from "@/lib/operationalReports";
 import { localDateKey } from "@/lib/operations";
 import { addDays } from "date-fns";
@@ -26,6 +27,9 @@ export default function Reports() {
   const [saveOpen, setSaveOpen] = useState(false);
   const [viewName, setViewName] = useState("");
   const [showComplaintsReport, setShowComplaintsReport] = useState(false);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [reportRecipient, setReportRecipient] = useState("");
+  const [sendingReport, setSendingReport] = useState(false);
   const complaints = useMemo(() => ((workspace.state.complaints || []) as any[]).filter(item => item.recordType === "complaint"), [workspace.state.complaints]);
   const complaintRows = useMemo(() => {
     const from = new Date(`${rangeStart}T00:00:00`).getTime();
@@ -44,65 +48,65 @@ export default function Reports() {
   const complaintFinancialIssued = complaintRows.filter(item => String(item.financialStatus || "") === "issued").length;
   const complaintClosed = complaintRows.filter(item => item.stage === "closed").length;
   const complaintOverdue = complaintRows.filter(item => item.stage !== "closed" && ((!item.acknowledgedAt && Date.now() > Number(item.acknowledgementDueAt || 0)) || (!String(item.clientResponse || "").trim() && Date.now() > Number(item.responseDueAt || 0)))).length;
-  const complaintEmail = () => {
-    const money = new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" });
-    const prettyDate = (value: string) => {
-      const date = new Date(`${value}T00:00:00`);
-      return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-    };
-    const statusLabel = (value: unknown) => ({
-      none: "No refund recorded",
-      pending_approval: "Awaiting approval",
-      approved: "Approved — not yet confirmed as paid",
-      issued: "Issued",
-      declined: "Declined"
-    }[String(value || "none")] || String(value));
-    const lines = [
-      "SWANS TRAVEL | WEEKLY COMPLAINTS MANAGEMENT REPORT",
-      `Reporting period: ${prettyDate(rangeStart)} – ${prettyDate(rangeEnd)}`,
-      `Prepared: ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`,
-      "",
-      "1. EXECUTIVE SUMMARY",
-      `• Complaints logged in period: ${complaintRows.length}`,
-      `• Still open: ${complaintRows.length - complaintClosed}`,
-      `• Closed: ${complaintClosed}`,
-      `• Overdue acknowledgement / response: ${complaintOverdue}`,
-      `• Total refund / credit value recorded: ${money.format(complaintRefundTotal)}`,
-      `• Awaiting approval or approved: ${complaintFinancialPending} case(s)`,
-      `• Marked as issued: ${complaintFinancialIssued} case(s)`,
-      "",
-      "2. ITEMS FOR MANAGEMENT ATTENTION",
-      ...(complaintOverdue ? [`• ${complaintOverdue} complaint(s) show an overdue acknowledgement or response and should be reviewed.`] : ["• No overdue acknowledgement / response is flagged in the records for this period."]),
-      ...((complaintRows.length - complaintClosed) ? [`• ${complaintRows.length - complaintClosed} complaint(s) remain open; confirm an owner and next action for each.`] : ["• All complaints logged in this period are marked closed."]),
-      ...(complaintFinancialPending ? [`• Check approval / payment progress for ${complaintFinancialPending} refund or credit case(s).`] : []),
-      "",
-      "3. REPEAT PATTERNS TO REVIEW",
-      "Driver links (repeat appearances only):",
-      ...(complaintDrivers.length ? complaintDrivers.map(([name, count]) => `• ${name}: ${count} complaints`) : ["• No repeat driver links identified in this period."]),
-      "Vehicle links (repeat appearances only):",
-      ...(complaintVehicles.length ? complaintVehicles.map(([name, count]) => `• ${name}: ${count} complaints`) : ["• No repeat vehicle links identified in this period."]),
-      "These are patterns for management review, not findings of fault.",
-      "",
-      "4. REFUNDS / CREDITS",
-      `• Total value recorded against complaints: ${money.format(complaintRefundTotal)}`,
-      `• Pending approval or approved: ${complaintFinancialPending} case(s)`,
-      `• Marked as issued: ${complaintFinancialIssued} case(s)`,
-      "Note: the total is the value recorded on complaint records; it is not necessarily the amount paid during this reporting period.",
-      "",
-      "5. COMPLAINT REGISTER",
-      ...(complaintRows.length ? complaintRows.map((item, index) => [
-        `${index + 1}. ${item.reference || "Reference not recorded"} — ${item.title || "Complaint title not recorded"}`,
-        `   Client: ${item.client || "Not recorded"} | Received: ${item.receivedAt ? new Date(item.receivedAt).toLocaleDateString("en-GB") : "Not recorded"}`,
-        `   Driver: ${item.driverName || "Not recorded"} | Vehicle: ${item.vehicle || "Not recorded"}`,
-        `   Stage: ${item.stage || "Received"} | Outcome: ${item.outcome || item.decision || "Not recorded"}`,
-        `   Financial status: ${statusLabel(item.financialStatus)} | Refund / credit value: ${money.format(Number(item.refundAmount || 0))}`,
-        item.financialNote ? `   Financial note: ${item.financialNote}` : "",
-      ].filter(Boolean).join("\n")) : ["No complaints were logged in the selected reporting period."]),
-      "",
-      "REPORTING NOTES",
-      "This summary is based on information recorded in the Swans Travel Ops Command Centre for the selected dates. Missing outcomes, driver / vehicle details or financial fields have not been assumed. Review the underlying records before making decisions."
-    ];
-    window.location.href = `mailto:${encodeURIComponent(user?.email || "")}?subject=${encodeURIComponent(`MD Weekly Complaints Report | ${rangeStart} to ${rangeEnd}`)}&body=${encodeURIComponent(lines.join("\n"))}`;
+  const complaintEmail = async () => {
+    const recipient = reportRecipient.trim();
+    if (!recipient || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) {
+      toast.error("Enter a valid recipient email address.");
+      return;
+    }
+    const currentUser = getAuth().currentUser;
+    if (!currentUser) {
+      toast.error("Your session has expired. Sign in again to send the report.");
+      return;
+    }
+    setSendingReport(true);
+    try {
+      const idToken = await currentUser.getIdToken();
+      const response = await fetch("/api/complaints-weekly-report-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({
+          recipientEmail: recipient,
+          period: { start: rangeStart, end: rangeEnd },
+          summary: {
+            received: complaintRows.length,
+            open: complaintRows.length - complaintClosed,
+            closed: complaintClosed,
+            overdue: complaintOverdue,
+            refundTotal: complaintRefundTotal,
+            pendingFinancial: complaintFinancialPending,
+            issuedFinancial: complaintFinancialIssued,
+          },
+          repeatDrivers: complaintDrivers.map(([name, count]) => ({ name, count })),
+          repeatVehicles: complaintVehicles.map(([name, count]) => ({ name, count })),
+          complaints: complaintRows.map(item => ({
+            reference: item.reference || "Not recorded",
+            title: item.title || "Complaint",
+            client: item.client || "Not recorded",
+            receivedAt: item.receivedAt || null,
+            driverName: item.driverName || "Not recorded",
+            vehicle: item.vehicle || "Not recorded",
+            stage: item.stage || "Received",
+            outcome: item.outcome || item.decision || "Not recorded",
+            financialStatus: item.financialStatus || "none",
+            refundAmount: Number(item.refundAmount || 0),
+            financialNote: item.financialNote || "",
+          })),
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || result.emailStatus !== "sent") {
+        throw new Error(result.error || (result.emailStatus === "not_configured"
+          ? "Direct email is not configured yet. Add RESEND_API_KEY and TASK_EMAIL_FROM in Vercel."
+          : "The report could not be sent."));
+      }
+      toast.success(`HTML complaints report sent to ${recipient}.`);
+      setEmailDialogOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "The report could not be sent.");
+    } finally {
+      setSendingReport(false);
+    }
   };
   const report = useMemo(() => buildOperationalReport(reportId, workspace.state, { rangeStart, rangeEnd, memberId: user?.isSuperuser && memberId ? Number(memberId) : null, taskStatus: user?.isSuperuser && taskStatus ? taskStatus : null }), [reportId, workspace.state, rangeStart, rangeEnd, user?.isSuperuser, memberId, taskStatus]);
   const grouped = useMemo(() => reportDefinitions.reduce<Record<string, typeof reportDefinitions>>((all, definition) => ({ ...all, [definition.category]: [...(all[definition.category] || []), definition] }), {}), []);
@@ -130,7 +134,7 @@ export default function Reports() {
     <section className="mb-5 rounded-2xl border border-[#DFE8E3] bg-white p-4 shadow-[0_15px_34px_-30px_rgba(18,48,41,0.5)]">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#1E6258]"><MessageSquareWarning className="h-5 w-5" /></span><div><h2 className="text-sm font-semibold text-[#263630]">Complaints reports</h2><p className="mt-1 text-xs leading-5 text-[#6C7872]">Weekly management summary with repeat driver and vehicle patterns, complaint outcomes and refund / credit exposure for the selected date range.</p></div></div>
-        <div className="flex flex-wrap gap-2"><Button variant="outline" className="border-[#DCE6E0] bg-white" onClick={() => setShowComplaintsReport(value => !value)}>{showComplaintsReport ? "Hide report" : "View complaints report"}</Button><Button className="bg-[#1D5C63] hover:bg-[#164B50]" onClick={complaintEmail}><Mail className="mr-2 h-4 w-4" />Email weekly summary</Button></div>
+        <div className="flex flex-wrap gap-2"><Button variant="outline" className="border-[#DCE6E0] bg-white" onClick={() => setShowComplaintsReport(value => !value)}>{showComplaintsReport ? "Hide report" : "View complaints report"}</Button><Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}><DialogTrigger asChild><Button className="bg-[#1D5C63] hover:bg-[#164B50]"><Mail className="mr-2 h-4 w-4" />Email weekly summary</Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>Send MD complaints report</DialogTitle><DialogDescription>Send a branded HTML summary for {rangeStart} to {rangeEnd}, including headline figures, management actions, repeat patterns, financial exposure and the complaint register.</DialogDescription></DialogHeader><div className="space-y-2 py-2"><Label htmlFor="complaints-report-recipient">Recipient email address</Label><Input id="complaints-report-recipient" type="email" value={reportRecipient} onChange={event => setReportRecipient(event.target.value)} placeholder="md@company.co.uk" autoComplete="email" /></div><DialogFooter><Button variant="outline" onClick={() => setEmailDialogOpen(false)}>Cancel</Button><Button onClick={() => void complaintEmail()} disabled={sendingReport} className="bg-[#1D5C63] hover:bg-[#164B50]">{sendingReport ? "Sending…" : "Send HTML report"}</Button></DialogFooter></DialogContent></Dialog></div>
       </div>
       {showComplaintsReport ? <div className="mt-5">
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
