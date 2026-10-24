@@ -46,18 +46,63 @@ export default function Reports() {
   const complaintOverdue = complaintRows.filter(item => item.stage !== "closed" && ((!item.acknowledgedAt && Date.now() > Number(item.acknowledgementDueAt || 0)) || (!String(item.clientResponse || "").trim() && Date.now() > Number(item.responseDueAt || 0)))).length;
   const complaintEmail = () => {
     const money = new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" });
+    const prettyDate = (value: string) => {
+      const date = new Date(`${value}T00:00:00`);
+      return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+    };
+    const statusLabel = (value: unknown) => ({
+      none: "No refund recorded",
+      pending_approval: "Awaiting approval",
+      approved: "Approved — not yet confirmed as paid",
+      issued: "Issued",
+      declined: "Declined"
+    }[String(value || "none")] || String(value));
     const lines = [
-      "SWANS TRAVEL — WEEKLY COMPLAINTS MANAGEMENT REPORT", `Period: ${rangeStart} to ${rangeEnd}`, "",
-      `Complaints received: ${complaintRows.length}`, `Open at report time: ${complaintRows.length - complaintClosed}`,
-      `Closed: ${complaintClosed}`, `Overdue acknowledgement / response: ${complaintOverdue}`,
-      `Refunds / credits recorded: ${money.format(complaintRefundTotal)}`,
-      `Refunds pending approval or approved: ${complaintFinancialPending}`, `Refunds / credits issued: ${complaintFinancialIssued}`, "",
-      "REPEAT DRIVER LINKS", ...(complaintDrivers.length ? complaintDrivers.map(([name, count]) => `• ${name}: ${count} complaints`) : ["• No repeat driver links in this period."]), "",
-      "REPEAT VEHICLE LINKS", ...(complaintVehicles.length ? complaintVehicles.map(([name, count]) => `• ${name}: ${count} complaints`) : ["• No repeat vehicle links in this period."]), "",
-      "COMPLAINT REGISTER", ...(complaintRows.length ? complaintRows.map(item => `• ${item.reference || "No reference"} — ${item.title || "Untitled"} | Client: ${item.client || "Not recorded"} | Driver: ${item.driverName || "—"} | Vehicle: ${item.vehicle || "—"} | Stage: ${item.stage || "received"} | Outcome: ${item.outcome || item.decision || "Not recorded"} | Financial: ${item.financialStatus || "none"} | Refund/credit: ${money.format(Number(item.refundAmount || 0))}`) : ["• No complaints received in this period."]), "",
-      "This report reflects records entered in the Ops Command Centre; blank outcomes or financial fields mean they have not been recorded."
+      "SWANS TRAVEL | WEEKLY COMPLAINTS MANAGEMENT REPORT",
+      `Reporting period: ${prettyDate(rangeStart)} – ${prettyDate(rangeEnd)}`,
+      `Prepared: ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`,
+      "",
+      "1. EXECUTIVE SUMMARY",
+      `• Complaints logged in period: ${complaintRows.length}`,
+      `• Still open: ${complaintRows.length - complaintClosed}`,
+      `• Closed: ${complaintClosed}`,
+      `• Overdue acknowledgement / response: ${complaintOverdue}`,
+      `• Total refund / credit value recorded: ${money.format(complaintRefundTotal)}`,
+      `• Awaiting approval or approved: ${complaintFinancialPending} case(s)`,
+      `• Marked as issued: ${complaintFinancialIssued} case(s)`,
+      "",
+      "2. ITEMS FOR MANAGEMENT ATTENTION",
+      ...(complaintOverdue ? [`• ${complaintOverdue} complaint(s) show an overdue acknowledgement or response and should be reviewed.`] : ["• No overdue acknowledgement / response is flagged in the records for this period."]),
+      ...((complaintRows.length - complaintClosed) ? [`• ${complaintRows.length - complaintClosed} complaint(s) remain open; confirm an owner and next action for each.`] : ["• All complaints logged in this period are marked closed."]),
+      ...(complaintFinancialPending ? [`• Check approval / payment progress for ${complaintFinancialPending} refund or credit case(s).`] : []),
+      "",
+      "3. REPEAT PATTERNS TO REVIEW",
+      "Driver links (repeat appearances only):",
+      ...(complaintDrivers.length ? complaintDrivers.map(([name, count]) => `• ${name}: ${count} complaints`) : ["• No repeat driver links identified in this period."]),
+      "Vehicle links (repeat appearances only):",
+      ...(complaintVehicles.length ? complaintVehicles.map(([name, count]) => `• ${name}: ${count} complaints`) : ["• No repeat vehicle links identified in this period."]),
+      "These are patterns for management review, not findings of fault.",
+      "",
+      "4. REFUNDS / CREDITS",
+      `• Total value recorded against complaints: ${money.format(complaintRefundTotal)}`,
+      `• Pending approval or approved: ${complaintFinancialPending} case(s)`,
+      `• Marked as issued: ${complaintFinancialIssued} case(s)`,
+      "Note: the total is the value recorded on complaint records; it is not necessarily the amount paid during this reporting period.",
+      "",
+      "5. COMPLAINT REGISTER",
+      ...(complaintRows.length ? complaintRows.map((item, index) => [
+        `${index + 1}. ${item.reference || "Reference not recorded"} — ${item.title || "Complaint title not recorded"}`,
+        `   Client: ${item.client || "Not recorded"} | Received: ${item.receivedAt ? new Date(item.receivedAt).toLocaleDateString("en-GB") : "Not recorded"}`,
+        `   Driver: ${item.driverName || "Not recorded"} | Vehicle: ${item.vehicle || "Not recorded"}`,
+        `   Stage: ${item.stage || "Received"} | Outcome: ${item.outcome || item.decision || "Not recorded"}`,
+        `   Financial status: ${statusLabel(item.financialStatus)} | Refund / credit value: ${money.format(Number(item.refundAmount || 0))}`,
+        item.financialNote ? `   Financial note: ${item.financialNote}` : "",
+      ].filter(Boolean).join("\n")) : ["No complaints were logged in the selected reporting period."]),
+      "",
+      "REPORTING NOTES",
+      "This summary is based on information recorded in the Swans Travel Ops Command Centre for the selected dates. Missing outcomes, driver / vehicle details or financial fields have not been assumed. Review the underlying records before making decisions."
     ];
-    window.location.href = `mailto:${encodeURIComponent(user?.email || "")}?subject=${encodeURIComponent(`Weekly complaints report ${rangeStart} to ${rangeEnd}`)}&body=${encodeURIComponent(lines.join("\\n"))}`;
+    window.location.href = `mailto:${encodeURIComponent(user?.email || "")}?subject=${encodeURIComponent(`MD Weekly Complaints Report | ${rangeStart} to ${rangeEnd}`)}&body=${encodeURIComponent(lines.join("\n"))}`;
   };
   const report = useMemo(() => buildOperationalReport(reportId, workspace.state, { rangeStart, rangeEnd, memberId: user?.isSuperuser && memberId ? Number(memberId) : null, taskStatus: user?.isSuperuser && taskStatus ? taskStatus : null }), [reportId, workspace.state, rangeStart, rangeEnd, user?.isSuperuser, memberId, taskStatus]);
   const grouped = useMemo(() => reportDefinitions.reduce<Record<string, typeof reportDefinitions>>((all, definition) => ({ ...all, [definition.category]: [...(all[definition.category] || []), definition] }), {}), []);
