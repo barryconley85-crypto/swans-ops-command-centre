@@ -20,7 +20,7 @@ const sixMonthsAgo = () => { const date = new Date(); date.setMonth(date.getMont
 const csvEscape = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
 
 export default function DriverAttendance() {
-  const { profile, state, refresh } = useWorkspace();
+  const { profile, state, refresh, error: workspaceError } = useWorkspace();
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [selectedDriverId, setSelectedDriverId] = useState("");
@@ -44,6 +44,7 @@ export default function DriverAttendance() {
     return Array.from(grouped.values()).sort((a, b) => b.episodes - a.episodes || b.days - a.days || a.driver.localeCompare(b.driver)).slice(0, 8);
   }, [records]);
 
+  if (workspaceError) return <LoadError message={`Attendance data could not be loaded from the workspace: ${workspaceError.message}`} onRetry={() => void refresh()} />;
   if (!profile) return <LoadError message="You need an operations account to view driver attendance." onRetry={() => void refresh()} />;
 
   const resetForm = () => { setForm({ firstDaySick: "", expectedReturnDate: "", actualReturnDate: "", reasonCategory: "Illness", notes: "" }); setSelectedDriverId(""); setEditing(null); setShowForm(false); };
