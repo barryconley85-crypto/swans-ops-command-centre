@@ -47,15 +47,15 @@
 }
 
 :root {
-  --primary: var(--color-blue-700);
+  --primary: oklch(0.43 0.085 205);
   --primary-foreground: var(--color-blue-50);
-  --sidebar-primary: var(--color-blue-600);
+  --sidebar-primary: oklch(0.49 0.095 190);
   --sidebar-primary-foreground: var(--color-blue-50);
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
+  --chart-1: oklch(0.78 0.09 185);
+  --chart-2: oklch(0.65 0.105 190);
+  --chart-3: oklch(0.55 0.10 195);
+  --chart-4: oklch(0.43 0.085 205);
+  --chart-5: oklch(0.32 0.065 215);
   --radius: 0.65rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.235 0.015 65);
@@ -73,19 +73,19 @@
   --destructive-foreground: oklch(0.985 0 0);
   --border: oklch(0.92 0.004 286.32);
   --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.623 0.214 259.815);
+  --ring: oklch(0.62 0.09 190);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.235 0.015 65);
   --sidebar-accent: oklch(0.967 0.001 286.375);
   --sidebar-accent-foreground: oklch(0.141 0.005 285.823);
   --sidebar-border: oklch(0.92 0.004 286.32);
-  --sidebar-ring: oklch(0.623 0.214 259.815);
+  --sidebar-ring: oklch(0.62 0.09 190);
 }
 
 .dark {
   --primary: var(--color-blue-700);
   --primary-foreground: var(--color-blue-50);
-  --sidebar-primary: var(--color-blue-500);
+  --sidebar-primary: oklch(0.55 0.10 195);
   --sidebar-primary-foreground: var(--color-blue-50);
   --background: oklch(0.141 0.005 285.823);
   --foreground: oklch(0.85 0.005 65);
@@ -103,7 +103,7 @@
   --destructive-foreground: oklch(0.985 0 0);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.488 0.243 264.376);
+  --ring: oklch(0.62 0.09 190);
   --chart-1: var(--color-blue-300);
   --chart-2: var(--color-blue-500);
   --chart-3: var(--color-blue-600);
@@ -114,7 +114,7 @@
   --sidebar-accent: oklch(0.274 0.006 286.033);
   --sidebar-accent-foreground:  oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.488 0.243 264.376);
+  --sidebar-ring: oklch(0.62 0.09 190);
 }
 
 @layer base {
@@ -190,4 +190,53 @@
   .print-only th, .print-only td { border: 1px solid #b9c9bf; padding: 8px; text-align: left; }
   .print-only th { background: #eef5ef; }
   .print-only .report-note { margin-top: 28px; color: #52645a; }
+}
+
+
+/* Swans Command Centre visual system, aligned with the Complaints control room */
+:root {
+  --radius: 0.9rem;
+  --background: oklch(0.992 0.003 175);
+  --card: oklch(1 0 0);
+  --border: oklch(0.91 0.012 185);
+  --input: oklch(0.91 0.012 185);
+  --secondary: oklch(0.965 0.012 185);
+  --muted: oklch(0.965 0.012 185);
+  --accent: oklch(0.95 0.025 180);
+  --accent-foreground: oklch(0.31 0.045 205);
+}
+.dark {
+  --primary: oklch(0.68 0.095 185);
+  --sidebar-primary: oklch(0.68 0.095 185);
+  --ring: oklch(0.68 0.095 185);
+  --sidebar-ring: oklch(0.68 0.095 185);
+}
+@layer base {
+  body {
+    background-image: linear-gradient(180deg, oklch(0.992 0.003 175) 0%, oklch(0.985 0.008 180) 100%);
+    background-attachment: fixed;
+  }
+  button, input, select, textarea {
+    transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  }
+  :focus-visible {
+    outline: 2px solid oklch(0.62 0.09 190);
+    outline-offset: 2px;
+  }
+}
+@layer components {
+  [data-slot="card"] {
+    border-color: oklch(0.91 0.012 185);
+    border-radius: 1.15rem;
+    box-shadow: 0 8px 28px -22px oklch(0.28 0.045 200 / 28%);
+  }
+  [data-slot="card"]:hover {
+    border-color: oklch(0.84 0.035 185);
+  }
+  [data-slot="button"]:not([data-variant="ghost"]):not([data-variant="link"]) {
+    border-radius: 0.8rem;
+  }
+  input:not([type="checkbox"]):not([type="radio"]), select, textarea {
+    border-radius: 0.7rem;
+  }
 }
