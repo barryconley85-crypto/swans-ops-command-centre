@@ -36,6 +36,30 @@ export default function Reports() {
     const to = new Date(`${rangeEnd}T23:59:59.999`).getTime();
     return complaints.filter(item => Number(item.receivedAt || item.createdAt || 0) >= from && Number(item.receivedAt || item.createdAt || 0) <= to).sort((a, b) => Number(b.receivedAt || 0) - Number(a.receivedAt || 0));
   }, [complaints, rangeStart, rangeEnd]);
+  const periodDays = Math.max(1, Math.round((new Date(rangeEnd + "T12:00:00").getTime() - new Date(rangeStart + "T12:00:00").getTime()) / 86400000) + 1);
+  const previousStart = localDateKey(addDays(new Date(rangeStart + "T12:00:00"), -periodDays));
+  const previousEnd = localDateKey(addDays(new Date(rangeStart + "T12:00:00"), -1));
+  const previousComplaintRows = complaints.filter(item => {
+    const stamp = Number(item.receivedAt || item.createdAt || 0);
+    return stamp >= new Date(previousStart + "T00:00:00").getTime() && stamp <= new Date(previousEnd + "T23:59:59.999").getTime();
+  });
+  const complaintBreakdown = (field: "category" | "client" | "rootCause") => {
+    const counts = new Map<string, number>();
+    complaintRows.forEach(item => { const value = String(item[field] || "").trim(); if (value) counts.set(value, (counts.get(value) || 0) + 1); });
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
+  };
+  const complaintCategories = complaintBreakdown("category");
+  const complaintClients = complaintBreakdown("client");
+  const complaintRootCauses = complaintBreakdown("rootCause");
+  const complaintPreviousChange = complaintRows.length - previousComplaintRows.length;
+  const complaintPreviousPercent = previousComplaintRows.length ? Math.round((complaintPreviousChange / previousComplaintRows.length) * 100) : null;
+  const complaintAcknowledgementDue = complaintRows.filter(item => item.acknowledgementDueAt);
+  const complaintAcknowledgedOnTime = complaintAcknowledgementDue.filter(item => item.acknowledgedAt && Number(item.acknowledgedAt) <= Number(item.acknowledgementDueAt)).length;
+  const complaintAckSlaRate = complaintAcknowledgementDue.length ? Math.round((complaintAcknowledgedOnTime / complaintAcknowledgementDue.length) * 100) : null;
+  const complaintResponseDue = complaintRows.filter(item => item.responseDueAt);
+  const complaintResponseRecorded = complaintResponseDue.filter(item => String(item.clientResponse || "").trim());
+  const complaintResponseRate = complaintResponseDue.length ? Math.round((complaintResponseRecorded.length / complaintResponseDue.length) * 100) : null;
+  const complaintOutstandingFinancial = complaintRows.filter(item => ["pending_approval", "approved"].includes(String(item.financialStatus || ""))).reduce((sum, item) => sum + Math.max(0, Number(item.refundAmount || 0)), 0);
   const complaintPatterns = (field: "driverName" | "vehicle") => {
     const counts = new Map<string, number>();
     complaintRows.forEach(item => { const value = String(item[field] || "").trim(); if (value) counts.set(value, (counts.get(value) || 0) + 1); });
@@ -48,6 +72,15 @@ export default function Reports() {
   const complaintFinancialIssued = complaintRows.filter(item => String(item.financialStatus || "") === "issued").length;
   const complaintClosed = complaintRows.filter(item => item.stage === "closed").length;
   const complaintOverdue = complaintRows.filter(item => item.stage !== "closed" && ((!item.acknowledgedAt && Date.now() > Number(item.acknowledgementDueAt || 0)) || (!String(item.clientResponse || "").trim() && Date.now() > Number(item.responseDueAt || 0)))).length;
+  const complaintDailyTrend = useMemo(() => {
+    const days = Array.from({ length: Math.min(periodDays, 31) }, (_, index) => {
+      const date = localDateKey(addDays(new Date(rangeStart + "T12:00:00"), index));
+      const count = complaintRows.filter(item => localDateKey(new Date(Number(item.receivedAt || item.createdAt || 0))) === date).length;
+      return { date, count };
+    });
+    const max = Math.max(1, ...days.map(day => day.count));
+    return days.map(day => ({ ...day, width: Math.max(day.count ? 4 : 0, (day.count / max) * 100) }));
+  }, [complaintRows, periodDays, rangeStart]);
   const complaintEmail = async () => {
     const recipient = reportRecipient.trim();
     if (!recipient || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) {
@@ -130,7 +163,7 @@ export default function Reports() {
   if (!user?.canRunReports) return <LoadError message="Your workspace role does not have access to operational reports." onRetry={() => void workspace.refresh()} />;
   if (workspace.error) return <LoadError message="Operational reports could not be loaded. No operational data has been changed." onRetry={() => void workspace.refresh()} />;
 
-  return <div className="mx-auto max-w-[1500px] pb-10"><PageHeader eyebrow="Operational intelligence" title="Report centre" description="Run live operational reports across work control, cover, continuity and team support. Every result states what has been recorded; it is not a substitute for operational judgement." actions={<div className="flex flex-wrap gap-2"><Button variant="outline" onClick={exportCsv} className="border-[#DCE6E0] bg-white"><Download className="mr-2 h-4 w-4" />Export CSV</Button>{user.isSuperuser ? <Dialog open={saveOpen} onOpenChange={setSaveOpen}><DialogTrigger asChild><Button className="bg-[#1D5C63] hover:bg-[#164B50]"><Save className="mr-2 h-4 w-4" />Save view</Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>Save this report view</DialogTitle><DialogDescription>Only the operations lead can save reusable report configurations.</DialogDescription></DialogHeader><div className="space-y-2 py-2"><Label>View name</Label><Input value={viewName} onChange={event => setViewName(event.target.value)} placeholder="Friday operations review" /></div><DialogFooter><Button onClick={saveView} className="bg-[#1D5C63] hover:bg-[#164B50]">Save view</Button></DialogFooter></DialogContent></Dialog> : null}</div>} />
+  return <div className="mx-auto max-w-[1500px] pb-10"><PageHeader eyebrow="Operational intelligence" title="Report centre" description="Run live operational reports across work control, cover, continuity and team support. Every result states what has been recorded; it is not a substitute for operational judgement." actions={<div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => window.print()} className="border-[#DCE6E0] bg-white"><FileBarChart className="mr-2 h-4 w-4" />Print / Save PDF</Button><Button variant="outline" onClick={exportCsv} className="border-[#DCE6E0] bg-white"><Download className="mr-2 h-4 w-4" />Export CSV</Button>{user.isSuperuser ? <Dialog open={saveOpen} onOpenChange={setSaveOpen}><DialogTrigger asChild><Button className="bg-[#1D5C63] hover:bg-[#164B50]"><Save className="mr-2 h-4 w-4" />Save view</Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>Save this report view</DialogTitle><DialogDescription>Only the operations lead can save reusable report configurations.</DialogDescription></DialogHeader><div className="space-y-2 py-2"><Label>View name</Label><Input value={viewName} onChange={event => setViewName(event.target.value)} placeholder="Friday operations review" /></div><DialogFooter><Button onClick={saveView} className="bg-[#1D5C63] hover:bg-[#164B50]">Save view</Button></DialogFooter></DialogContent></Dialog> : null}</div>} />
     <section className="mb-5 rounded-2xl border border-[#DFE8E3] bg-white p-4 shadow-[0_15px_34px_-30px_rgba(18,48,41,0.5)]">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EAF3EF] text-[#1E6258]"><MessageSquareWarning className="h-5 w-5" /></span><div><h2 className="text-sm font-semibold text-[#263630]">Complaints reports</h2><p className="mt-1 text-xs leading-5 text-[#6C7872]">Weekly management summary with repeat driver and vehicle patterns, complaint outcomes and refund / credit exposure for the selected date range.</p></div></div>
@@ -139,6 +172,18 @@ export default function Reports() {
       {showComplaintsReport ? <div className="mt-5">
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           {[{label:"Received in period",value:complaintRows.length},{label:"Still open",value:complaintRows.length-complaintClosed},{label:"Closed",value:complaintClosed},{label:"Overdue",value:complaintOverdue},{label:"Refunds / credits",value:new Intl.NumberFormat("en-GB",{style:"currency",currency:"GBP"}).format(complaintRefundTotal)}].map(card => <div key={card.label} className="rounded-xl border border-[#E6ECE8] bg-[#F8FBF9] p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-[#78857F]">{card.label}</p><p className="mt-2 text-xl font-semibold text-[#263630]">{card.value}</p></div>)}
+        </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {[{label:"Change vs previous period",value:complaintPreviousPercent === null ? (complaintPreviousChange > 0 ? "+" + complaintPreviousChange : String(complaintPreviousChange)) : (complaintPreviousPercent > 0 ? "+" : "") + complaintPreviousPercent + "%",detail:previousComplaintRows.length + " complaints in previous " + periodDays + "-day period"},{label:"Acknowledgement SLA",value:complaintAckSlaRate === null ? "Not recorded" : complaintAckSlaRate + "%",detail:complaintAcknowledgedOnTime + " of " + complaintAcknowledgementDue.length + " recorded deadlines met"},{label:"Response recorded",value:complaintResponseRate === null ? "Not recorded" : complaintResponseRate + "%",detail:complaintResponseRecorded.length + " of " + complaintResponseDue.length + " cases with a response deadline"},{label:"Pending financial exposure",value:new Intl.NumberFormat("en-GB",{style:"currency",currency:"GBP"}).format(complaintOutstandingFinancial),detail:complaintFinancialPending + " cases pending / approved"}].map(card => <div key={card.label} className="rounded-xl border border-[#E6ECE8] bg-white p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-[#78857F]">{card.label}</p><p className="mt-2 text-xl font-semibold text-[#263630]">{card.value}</p><p className="mt-1 text-[10px] leading-4 text-[#78857F]">{card.detail}</p></div>)}
+        </div>
+        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          <div className="rounded-xl border border-[#E6ECE8] p-4"><h3 className="text-sm font-semibold text-[#30423A]">Complaint volume by day</h3><p className="mt-1 text-xs text-[#78857F]">Daily count in the selected period (up to 31 days).</p><div className="mt-4 space-y-2">{complaintDailyTrend.map(day => <div key={day.date} className="grid grid-cols-[74px_1fr_24px] items-center gap-2 text-xs"><span className="text-[#78857F]">{new Date(day.date + "T12:00:00").toLocaleDateString("en-GB",{day:"2-digit",month:"short"})}</span><div className="h-2.5 overflow-hidden rounded-full bg-[#EEF3F0]"><div className="h-full rounded-full bg-[#28766C]" style={{width:day.width + "%"}} /></div><strong className="text-right text-[#30423A]">{day.count}</strong></div>)}</div></div>
+          <div className="rounded-xl border border-[#E6ECE8] p-4"><h3 className="text-sm font-semibold text-[#30423A]">Top complaint categories</h3>{complaintCategories.length ? <ul className="mt-3 space-y-3">{complaintCategories.map(([name,count]) => <li key={name}><div className="flex justify-between gap-3 text-xs"><span>{name}</span><strong>{count}</strong></div><div className="mt-1.5 h-2 overflow-hidden rounded-full bg-[#EEF3F0]"><div className="h-full rounded-full bg-[#28766C]" style={{width:Math.max(4,(count / Math.max(1,complaintRows.length))*100) + "%"}} /></div></li>)}</ul> : <p className="mt-3 text-xs text-[#78857F]">No complaint categories recorded for this period.</p>}</div>
+        </div>
+        <div className="mt-5 grid gap-4 lg:grid-cols-3">
+          <div className="rounded-xl border border-[#E6ECE8] p-4"><h3 className="text-sm font-semibold text-[#30423A]">Top clients</h3>{complaintClients.length ? <ul className="mt-3 space-y-2">{complaintClients.map(([name,count]) => <li key={name} className="flex justify-between gap-3 text-xs"><span>{name}</span><strong>{count}</strong></li>)}</ul> : <p className="mt-3 text-xs text-[#78857F]">No client data recorded.</p>}</div>
+          <div className="rounded-xl border border-[#E6ECE8] p-4"><h3 className="text-sm font-semibold text-[#30423A]">Recorded root causes</h3>{complaintRootCauses.length ? <ul className="mt-3 space-y-2">{complaintRootCauses.map(([name,count]) => <li key={name} className="flex justify-between gap-3 text-xs"><span>{name}</span><strong>{count}</strong></li>)}</ul> : <p className="mt-3 text-xs text-[#78857F]">Root cause has not been recorded on complaints in this period.</p>}</div>
+          <div className="rounded-xl border border-[#E6ECE8] p-4"><h3 className="text-sm font-semibold text-[#30423A]">Repeat drivers</h3>{complaintDrivers.length ? <ul className="mt-3 space-y-2">{complaintDrivers.slice(0,6).map(([name,count]) => <li key={name} className="flex justify-between gap-3 text-xs"><span>{name}</span><strong>{count}</strong></li>)}</ul> : <p className="mt-3 text-xs text-[#78857F]">No repeat driver links in this period.</p>}</div>
         </div>
         <div className="mt-5 grid gap-4 lg:grid-cols-2">
           <div className="rounded-xl border border-[#E6ECE8] p-4"><h3 className="text-sm font-semibold text-[#30423A]">Repeat driver patterns</h3>{complaintDrivers.length ? <ul className="mt-3 space-y-2">{complaintDrivers.map(([name,count]) => <li key={name} className="flex justify-between gap-3 text-sm"><span>{name}</span><strong>{count} complaints</strong></li>)}</ul> : <p className="mt-3 text-xs text-[#78857F]">No repeat driver links in this period.</p>}</div>
