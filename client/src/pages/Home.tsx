@@ -11,10 +11,16 @@ import { useEffect, useState } from "react";
 export default function Home() {
   const { user } = useAuth();
   const [today] = useState(localDateKey());
+  const [currentHour, setCurrentHour] = useState(() => new Date().getHours());
+  useEffect(() => {
+    const timer = window.setInterval(() => setCurrentHour(new Date().getHours()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const dashboard = trpc.operations.dashboard.useQuery({ date: today });
   const snapshot = dashboard.data;
   const metrics = snapshot?.metrics;
   const firstName = user?.name?.split(" ")[0] || "there";
+  const greeting = currentHour < 12 ? "Good morning" : currentHour < 17 ? "Good afternoon" : "Good evening";
   const onCall = snapshot?.rota.find(item => item.assignmentType === "on_call")?.member;
   const signals = snapshot?.signals;
   const syncOnCallTasks = trpc.operations.onCall.syncTasks.useMutation();
@@ -24,7 +30,7 @@ export default function Home() {
   if (dashboard.isError) return <LoadError message="The live command board is temporarily unavailable." onRetry={() => void dashboard.refetch()} />;
 
   return <div className="mx-auto max-w-[1500px] pb-10">
-    <header className="flex flex-col gap-5 border-b border-[#E3E9E5] pb-6 lg:flex-row lg:items-end lg:justify-between"><div><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#71817A]">Today · {dateTitle(today)}</p><h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[#1C2924]">Good morning, {firstName}.</h1><p className="mt-2 text-sm text-[#69756F]">Here is the operating picture — what needs attention, who owns it and where support is needed.</p></div><div className="flex flex-wrap gap-2"><Link href="/exceptions"><Button variant="outline" className="border-[#D6E3DE] bg-white">Live Operations<AlertTriangle className="ml-2 h-4 w-4" /></Button></Link><Link href="/tasks"><Button variant="outline" className="border-[#D6E3DE] bg-white">Open task board<ArrowRight className="ml-2 h-4 w-4" /></Button></Link><Link href="/handover"><Button className="bg-[#1D5C63] hover:bg-[#164B50]">Log a handover</Button></Link></div></header>
+    <header className="flex flex-col gap-5 border-b border-[#E3E9E5] pb-6 lg:flex-row lg:items-end lg:justify-between"><div><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#71817A]">Today · {dateTitle(today)}</p><h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[#1C2924]">{greeting}, {firstName}.</h1><p className="mt-2 text-sm text-[#69756F]">Here is the operating picture — what needs attention, who owns it and where support is needed.</p></div><div className="flex flex-wrap gap-2"><Link href="/exceptions"><Button variant="outline" className="border-[#D6E3DE] bg-white">Live Operations<AlertTriangle className="ml-2 h-4 w-4" /></Button></Link><Link href="/tasks"><Button variant="outline" className="border-[#D6E3DE] bg-white">Open task board<ArrowRight className="ml-2 h-4 w-4" /></Button></Link><Link href="/handover"><Button className="bg-[#1D5C63] hover:bg-[#164B50]">Log a handover</Button></Link></div></header>
     {user?.isSuperuser && signals ? <OperationalSignals signals={signals} /> : null}
 
     {!snapshot?.members.length ? <OnboardingPanel /> : <>
