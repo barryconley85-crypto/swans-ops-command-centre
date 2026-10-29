@@ -8,14 +8,10 @@ export default async function handler(request, response) {
   }
 
   const expectedToken = process.env.COMPLAINT_EMAIL_TEST_TOKEN || "";
-  const suppliedToken = request.headers.authorization?.replace(/^Bearer\\s+/i, "") || "";
+  const suppliedToken = request.headers.authorization?.replace(/^Bearer\s+/i, "") || "";
   const expected = Buffer.from(expectedToken);
   const supplied = Buffer.from(suppliedToken);
-  if (
-    !expectedToken ||
-    expected.length !== supplied.length ||
-    !timingSafeEqual(expected, supplied)
-  ) {
+  if (!expectedToken || expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) {
     return response.status(401).json({ error: "Test authorization failed." });
   }
 
@@ -26,21 +22,21 @@ export default async function handler(request, response) {
   }
 
   const testId = new Date().toISOString();
-  const eventKey = `complaint-email-test-${Date.now()}`;
-  const subject = `[TEST ONLY] Swans Ops complaint email alert — ${testId}`;
+  const eventKey = "complaint-email-test-" + Date.now();
+  const subject = "[TEST ONLY] Swans Ops complaint email alert — " + testId;
   const text = [
     "This is a test of the Swans Ops Command Centre complaint email alert.",
     "No complaint has been created.",
     "This test was sent only to the test recipient.",
-    `Test reference: ${eventKey}`,
-  ].join("\\n");
-  const html = `<!doctype html><html><body style="font-family:Arial,sans-serif;color:#24352e">
-    <h1>[TEST ONLY] Complaint email alert</h1>
-    <p>This is a test of the Swans Ops Command Centre mailer.</p>
-    <p><strong>No complaint has been created.</strong></p>
-    <p>This message was sent only to the designated test recipient.</p>
-    <p>Test reference: ${eventKey}</p>
-  </body></html>`;
+    "Test reference: " + eventKey,
+  ].join("\n");
+  const html = "<!doctype html><html><body style=\"font-family:Arial,sans-serif;color:#24352e\">" +
+    "<h1>[TEST ONLY] Complaint email alert</h1>" +
+    "<p>This is a test of the Swans Ops Command Centre mailer.</p>" +
+    "<p><strong>No complaint has been created.</strong></p>" +
+    "<p>This message was sent only to the designated test recipient.</p>" +
+    "<p>Test reference: " + eventKey + "</p>" +
+    "</body></html>";
 
   try {
     const mailResponse = await fetch(mailerUrl, {
