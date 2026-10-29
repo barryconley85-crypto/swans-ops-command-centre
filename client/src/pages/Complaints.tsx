@@ -121,7 +121,25 @@ export default function Complaints() {
       const reference = `CMP-${new Date(receivedAt).getFullYear()}-${String(complaints.length + 1).padStart(4, "0")}`;
       const value = { recordType: "complaint", id: receivedAt, reference, title: form.title.trim(), client: form.client.trim(), clientEmail: form.clientEmail.trim(), receivedAt, category: form.category, stage: "received" as ComplaintStage, summary: form.summary.trim(), driverId: form.driverId, driverName: driver ? String(driver.name || driver.displayName || driver.driverName || driver.id) : "", vehicle: form.vehicle.trim(), serviceDate: form.serviceDate, serviceDetails: form.serviceDetails.trim(), sharePointUrl: form.sharePointUrl.trim(), acknowledgementDueAt: addWorkingHours(receivedAt, 8), responseDueAt: addWorkingHours(receivedAt, 16), acknowledgedAt: null, acknowledgementNote: "", investigationFindings: "", decision: "", clientResponse: "", outcome: "", rootCause: "", ownerTeamMemberId: owner?.id ?? null, tasks: defaultTasks(owner?.displayName || workspace.profile?.displayName || "Unassigned", receivedAt), createdByName: workspace.profile?.displayName || "Unknown", createdByUserId: workspace.authUser?.uid || "", acknowledgementAlertedAt: null, responseAlertedAt: null, closedAt: null };
       const result = await workspace.add("complaints", value);
-      setSelectedId(result._docId); setForm(freshForm()); setOpen(false); toast.success(`Complaint ${reference} logged with actions and deadlines.`);
+      setSelectedId(result._docId); setForm(freshForm()); setOpen(false);
+      // Send a management alert only for a newly created complaint. Email failure must not undo the saved complaint.
+      try {
+        const idToken = await workspace.authUser?.getIdToken();
+        if (!idToken) throw new Error("Your session could not be verified.");
+        const emailResponse = await fetch("/api/new-complaint-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+          body: JSON.stringify({ complaint: { ...value, _docId: result._docId } }),
+        });
+        if (!emailResponse.ok) {
+          const emailResult = await emailResponse.json().catch(() => ({}));
+          toast.warning(`Complaint ${reference} was saved, but Kieran's email alert could not be sent.`, { description: emailResult.error || "Check the email service configuration." });
+        } else {
+          toast.success(`Complaint ${reference} logged and email alert sent to Kieran.`);
+        }
+      } catch {
+        toast.warning(`Complaint ${reference} was saved, but the email alert could not be sent.`);
+      }
     } catch (error) { toast.error(error instanceof Error ? error.message : "The complaint could not be saved."); }
     finally { setSaving(false); }
   };
