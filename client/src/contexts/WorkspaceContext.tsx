@@ -2,7 +2,7 @@ import { firebaseAuth, firebaseConfigured, firebaseDb } from "@/lib/firebase";
 import { omitUndefinedFields } from "@/lib/firestorePayload";
 import { buildTaskAssignmentNotification } from "@/lib/collaboration";
 import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, query, setDoc, updateDoc, where } from "firebase/firestore";
-import { createUserWithEmailAndPassword, onAuthStateChanged, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signOut, type User } from "firebase/auth";
+import { createUserWithEmailAndPassword, deleteUser, onAuthStateChanged, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signOut, type User } from "firebase/auth";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { activitySummary } from "@/lib/auditHistory";
 
@@ -38,6 +38,41 @@ const isAllowedTaskResourceUrl = (value: string) => {
 };
 const asMember = (value: unknown) => value as Member;
 
+async function ensureMemberProfile(database: NonNullable<typeof firebaseDb>, user: User, name = ""): Promise<Member | null> {
+  const email = user.email?.trim().toLowerCase();
+  if (!email) return null;
+
+  const memberRef = doc(database, "ops_members", user.uid);
+  try {
+    const existing = await getDoc(memberRef);
+    if (existing.exists()) return { userId: user.uid, ...existing.data() } as Member;
+  } catch (reason) {
+    const code = typeof reason === "object" && reason !== null && "code" in reason ? String(reason.code) : "";
+    if (code !== "permission-denied" && code !== "firestore/permission-denied") throw reason;
+    // Firestore rules deny reading a not-yet-created member profile. Check the invitation before creating it.
+  }
+
+  const invitationSnapshot = email === leadEmail ? null : await getDoc(doc(database, "ops_invites", email));
+  const invited = invitationSnapshot?.exists() ? invitationSnapshot.data() : null;
+  if (email !== leadEmail && !invited) return null;
+
+  const displayName = invited?.displayName || user.displayName || name.trim() || email.split("@")[0];
+  const memberProfile: Member = {
+    id: invited?.id || now(),
+    userId: user.uid,
+    displayName,
+    email,
+    jobTitle: invited?.jobTitle || "Operations Lead",
+    memberRole: email === leadEmail ? "lead" : invited?.memberRole || "support",
+    initials: invited?.initials || displayName.split(" ").map(part => part[0]).join("").slice(0, 3).toUpperCase(),
+    colour: invited?.colour || "#1D5C63",
+    status: "active",
+  };
+
+  await setDoc(memberRef, { ...memberProfile, createdAt: now(), updatedAt: now() });
+  return memberProfile;
+}
+
 async function queueTaskAssignmentEmail(authUser: User | null, task: Record<string, unknown>) {
   const recipientEmail = typeof task.assignedEmail === "string" ? task.assignedEmail : "";
   const taskTitle = typeof task.title === "string" ? task.title : "";
@@ -58,8 +93,36 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   useEffect(() => { const database = firebaseDb; if (!database || !authUser || !profile) return; const unsubscribers = Object.entries(collectionMap).filter(([key]) => (key !== "reportViews" && key !== "auditLogs") || profile.memberRole === "lead").map(([key, name]) => { const source = key === "notifications" ? query(collection(database, name), where("recipientEmail", "==", profile.email)) : collection(database, name); return onSnapshot(source, snapshot => { const rows = snapshot.docs.map(item => ({ _docId: item.id, ...item.data() })); if (key === "members") setMemberProfiles(rows.map(asMember)); else setState(current => ({ ...current, [key]: rows })); }, reason => setError(reason instanceof Error ? reason : new Error("Unable to load workspace data."))); }); return () => unsubscribers.forEach(unsubscribe => unsubscribe()); }, [authUser, profile]);
   useEffect(() => { const database = firebaseDb; if (!database || profile?.memberRole !== "lead") { setInvitations([]); return; } return onSnapshot(collection(database, "ops_invites"), snapshot => setInvitations(snapshot.docs.map(item => asMember({ _docId: item.id, userId: "", ...item.data(), status: "invited" }))), reason => setError(reason instanceof Error ? reason : new Error("Unable to load invited team profiles."))); }, [profile]);
   useEffect(() => { const database = firebaseDb; if (!database || !authUser || !profile) return; const updatePresence = () => { if (document.visibilityState === "visible") void setDoc(doc(database, "ops_presence", authUser.uid), { userId: authUser.uid, teamMemberId: profile.id, displayName: profile.displayName, initials: profile.initials, colour: profile.colour, lastActiveAt: now() }, { merge: true }); }; updatePresence(); const interval = window.setInterval(updatePresence, 60_000); document.addEventListener("visibilitychange", updatePresence); return () => { window.clearInterval(interval); document.removeEventListener("visibilitychange", updatePresence); }; }, [authUser, profile]);
-  const signIn = useCallback(async (email: string, password: string) => { if (!firebaseAuth) throw new Error("Firebase is not configured yet."); await signInWithEmailAndPassword(firebaseAuth, email.trim().toLowerCase(), password); }, []);
-  const signUp = useCallback(async (name: string, email: string, password: string) => { if (!firebaseAuth || !firebaseDb) throw new Error("Firebase is not configured yet."); const normalized = email.trim().toLowerCase(); if (!normalized.endsWith("@swanstravel.com")) throw new Error("This workspace is restricted to approved Swans Travel work-email accounts."); const credential = await createUserWithEmailAndPassword(firebaseAuth, normalized, password); const invitation = await getDoc(doc(firebaseDb, "ops_invites", normalized)); const invited = invitation.exists() ? invitation.data() : null; if (normalized !== leadEmail && !invited) { await signOut(firebaseAuth); throw new Error("Your work email has not been invited yet. Ask the operations lead to add you to the team directory first."); } const displayName = invited?.displayName || name.trim(); const memberProfile: Member = { id: invited?.id || now(), userId: credential.user.uid, displayName, email: normalized, jobTitle: invited?.jobTitle || "Operations Lead", memberRole: normalized === leadEmail ? "lead" : invited?.memberRole || "support", initials: invited?.initials || displayName.split(" ").map((part: string) => part[0]).join("").slice(0, 3).toUpperCase(), colour: invited?.colour || "#1D5C63", status: "active" }; await setDoc(doc(firebaseDb, "ops_members", credential.user.uid), { ...memberProfile, createdAt: now(), updatedAt: now() }); setProfile(memberProfile); await sendEmailVerification(credential.user); }, []);
+  const signIn = useCallback(async (email: string, password: string) => {
+    if (!firebaseAuth || !firebaseDb) throw new Error("Firebase is not configured yet.");
+    const credential = await signInWithEmailAndPassword(firebaseAuth, email.trim().toLowerCase(), password);
+    const memberProfile = await ensureMemberProfile(firebaseDb, credential.user);
+    if (!memberProfile) {
+      await signOut(firebaseAuth);
+      throw new Error("Your work email has not been invited yet. Ask the operations lead to add you to the team directory first.");
+    }
+    setProfile(memberProfile);
+  }, []);
+  const signUp = useCallback(async (name: string, email: string, password: string) => {
+    if (!firebaseAuth || !firebaseDb) throw new Error("Firebase is not configured yet.");
+    const normalized = email.trim().toLowerCase();
+    if (!normalized.endsWith("@swanstravel.com")) throw new Error("This workspace is restricted to approved Swans Travel work-email accounts.");
+
+    const credential = await createUserWithEmailAndPassword(firebaseAuth, normalized, password);
+    let memberProfileCreated = false;
+    try {
+      const memberProfile = await ensureMemberProfile(firebaseDb, credential.user, name);
+      if (!memberProfile) throw new Error("Your work email has not been invited yet. Ask the operations lead to add you to the team directory first, then try again.");
+      memberProfileCreated = true;
+      setProfile(memberProfile);
+      await sendEmailVerification(credential.user);
+    } catch (reason) {
+      if (!memberProfileCreated) {
+        try { await deleteUser(credential.user); } catch { /* Preserve the original error. A later sign-in can recover an invited account. */ }
+      }
+      throw reason;
+    }
+  }, []);
   const resetPassword = useCallback(async (email: string) => { if (!firebaseAuth) throw new Error("Firebase is not configured yet."); await sendPasswordResetEmail(firebaseAuth, email.trim().toLowerCase()); }, []);
   const logout = useCallback(async () => { if (firebaseAuth) await signOut(firebaseAuth); }, []);
   const writeAudit = useCallback((action: "created" | "updated" | "deleted", collectionName: string, targetId: string, value: Record<string, unknown> = {}) => { if (!firebaseDb || !authUser || !profile || !activitySummary || !collectionMap[collectionName]) return; void addDoc(collection(firebaseDb, "ops_audit_logs"), { actorUserId: authUser.uid, actorName: profile.displayName, actorInitials: profile.initials, actorColour: profile.colour, action, targetType: collectionName, targetId, summary: activitySummary(action, collectionName, value), createdAt: now() }); }, [authUser, profile]);
