@@ -48,7 +48,7 @@ function emailHtml(complaint, appUrl) {
 
 export default async function handler(request, response) {
   if (request.method !== "POST") return response.status(405).json({ error: "Method not allowed" });
-  const idToken = request.headers.authorization?.replace(/^Bearer\\s+/i, "");
+  const idToken = request.headers.authorization?.replace(/^Bearer\s+/i, "");
   if (!idToken || !(await verifiedSignedInUser(idToken))) return response.status(401).json({ error: "Your session could not be verified. Please sign in again." });
   if (!process.env.GOOGLE_MAILER_URL || !process.env.GOOGLE_MAILER_SHARED_SECRET) {
     return response.status(503).json({ emailStatus: "not_configured", error: "The Google Apps Script mailer is not configured for this project." });
@@ -77,7 +77,7 @@ export default async function handler(request, response) {
     c.summary,
     "",
     `Open Complaints Management: ${appUrl}/complaints`,
-  ].join("\\n");
+  ].join("\n");
   try {
     const mailResponse = await fetch(process.env.GOOGLE_MAILER_URL, {
       method: "POST",
