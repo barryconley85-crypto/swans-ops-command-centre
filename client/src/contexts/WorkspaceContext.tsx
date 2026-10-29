@@ -6,7 +6,7 @@ import { createUserWithEmailAndPassword, deleteUser, onAuthStateChanged, sendEma
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { activitySummary } from "@/lib/auditHistory";
 
-type Member = { id: number; userId: string; displayName: string; email: string; jobTitle: string; memberRole: "lead" | "manager" | "coordinator" | "dispatcher" | "on_call" | "viewer" | "support"; initials: string; colour: string; status: "active" | "inactive" | "invited" };
+type Member = { id: number; userId: string; displayName: string; email: string; jobTitle: string; memberRole: "lead" | "manager" | "coordinator" | "dispatcher" | "on_call" | "viewer" | "support" | "complaints"; initials: string; colour: string; status: "active" | "inactive" | "invited" };
 type Task = { id: number; workDate: string; title: string; detail: string | null; priority: "low" | "normal" | "high" | "critical"; status: "pending" | "in_progress" | "blocked" | "complete"; dueAt: number | null; assignedTeamMemberId: number | null; blockedReason: string | null; completedAt: number | null; createdAt: number; updatedAt: number };
 type TaskResourceInput = { taskId: number; url: string; title: string; note?: string };
 type TaskResource = { _docId: string; id: number; taskId: number; url: string; title: string; note: string | null; addedByUserId: string; addedByTeamMemberId: number; addedByName: string; createdAt: number; };

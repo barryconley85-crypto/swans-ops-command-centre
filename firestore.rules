@@ -8,6 +8,7 @@ service cloud.firestore {
     function memberRole() { return get(/databases/$(database)/documents/ops_members/$(request.auth.uid)).data.memberRole; }
     function operationsManager() { return member() && ['lead', 'manager'].hasAny([memberRole()]); }
     function sharedEditor() { return member() && ['lead', 'manager', 'coordinator', 'dispatcher'].hasAny([memberRole()]); }
+    function complaintsOnly() { return member() && memberRole() == 'complaints'; }
     function onCallResponder() { return member() && ['lead', 'manager', 'coordinator', 'dispatcher', 'on_call', 'support'].hasAny([memberRole()]); }
     function currentMemberId() { return get(/databases/$(database)/documents/ops_members/$(request.auth.uid)).data.id; }
     match /ops_invites/{email} {
@@ -17,12 +18,12 @@ service cloud.firestore {
     match /ops_members/{memberId} {
       allow read: if member() || lead();
       allow create: if signedIn() && memberId == request.auth.uid && approved() && request.resource.data.userId == request.auth.uid;
-      allow update: if lead() || (member() && memberId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['initials', 'colour', 'updatedAt']));
+      allow update: if lead() || (member() && memberRole() != 'complaints' && memberId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['initials', 'colour', 'updatedAt']));
       allow delete: if lead();
     }
     match /ops_tasks/{taskId} {
       allow read: if member();
-      allow create: if member();
+      allow create: if member() && !complaintsOnly();
       allow delete: if operationsManager();
       allow update: if operationsManager() || (onCallResponder() && resource.data.assignedEmail == request.auth.token.email && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'blockedReason', 'completedAt', 'completedByTeamMemberId', 'completedByUserId', 'completedByName', 'assistanceTeamMemberIds', 'assistanceRequestedAt', 'assistanceRequestedByName', 'updatedAt']) && ((request.resource.data.status == 'complete' && request.resource.data.completedByUserId == request.auth.uid && request.resource.data.completedByTeamMemberId == get(/databases/$(database)/documents/ops_members/$(request.auth.uid)).data.id && request.resource.data.completedByName == get(/databases/$(database)/documents/ops_members/$(request.auth.uid)).data.displayName) || (request.resource.data.status != 'complete' && request.resource.data.completedAt == null && request.resource.data.completedByTeamMemberId == null && request.resource.data.completedByUserId == null && request.resource.data.completedByName == null)));
     }
@@ -32,12 +33,17 @@ service cloud.firestore {
     match /ops_templates/{templateId} { allow read: if member(); allow write: if operationsManager(); }
     match /ops_rota/{rotaId} { allow read: if member(); allow write: if operationsManager(); }
     match /ops_handovers/{handoverId} { allow read: if member(); allow create, update: if sharedEditor(); allow delete: if lead(); }
-    match /ops_issues/{issueId} { allow read: if member(); allow create, update: if sharedEditor(); allow delete: if lead(); }
-    match /ops_complaints/{complaintId} { allow read: if member(); allow create, update: if sharedEditor(); allow delete: if lead(); }
+    match /ops_issues/{issueId} {
+      allow read: if member();
+      allow create: if sharedEditor() || (complaintsOnly() && request.resource.data.recordType == 'complaint');
+      allow update: if sharedEditor() || (complaintsOnly() && resource.data.recordType == 'complaint' && request.resource.data.recordType == 'complaint');
+      allow delete: if lead();
+    }
+    match /ops_complaints/{complaintId} { allow read: if member(); allow create, update: if sharedEditor() || complaintsOnly(); allow delete: if lead(); }
     match /ops_readiness/{pulseId} { allow read: if member(); allow write: if false; }
     match /ops_performance_notes/{noteId} { allow read: if member(); allow write: if lead(); }
     match /ops_chat_messages/{messageId} { allow read: if member(); allow create: if onCallResponder() && request.resource.data.authorUserId == request.auth.uid; allow update: if false; allow delete: if lead(); }
-    match /ops_notifications/{notificationId} { allow read: if member() && resource.data.recipientEmail == request.auth.token.email; allow create: if member(); allow update: if member() && resource.data.recipientEmail == request.auth.token.email && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt', 'updatedAt']); allow delete: if lead(); }
+    match /ops_notifications/{notificationId} { allow read: if member() && resource.data.recipientEmail == request.auth.token.email; allow create: if member() && !complaintsOnly(); allow update: if member() && !complaintsOnly() && resource.data.recipientEmail == request.auth.token.email && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt', 'updatedAt']); allow delete: if lead(); }
     match /ops_on_call_items/{itemId} { allow read: if member(); allow create, update: if onCallResponder(); allow delete: if lead(); }
     match /ops_help_requests/{requestId} {
       allow read: if member();
@@ -66,7 +72,7 @@ service cloud.firestore {
     }
     match /ops_driver_attendance/{attendanceId} {
       allow read: if member();
-      allow create, update: if member()
+      allow create, update: if member() && !complaintsOnly()
         && request.resource.data.driverId is string
         && request.resource.data.driverName is string
         && request.resource.data.firstDaySick is string

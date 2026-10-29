@@ -1,8 +1,9 @@
-export type WorkspaceRole = "lead" | "manager" | "coordinator" | "dispatcher" | "on_call" | "viewer" | "support";
+export type WorkspaceRole = "lead" | "manager" | "coordinator" | "dispatcher" | "on_call" | "viewer" | "support" | "complaints";
 
 const rolesWith = {
   manageOperations: ["lead", "manager"],
   editSharedWork: ["lead", "manager", "coordinator", "dispatcher"],
+  editComplaints: ["lead", "manager", "coordinator", "dispatcher", "complaints"],
   useOnCall: ["lead", "manager", "coordinator", "dispatcher", "on_call", "support"],
   chat: ["lead", "manager", "coordinator", "dispatcher", "on_call", "support"],
   reports: ["lead", "manager", "coordinator", "dispatcher", "on_call", "viewer", "support"],
@@ -13,6 +14,6 @@ export function hasWorkspacePermission(role: WorkspaceRole | undefined | null, p
 }
 
 export function roleLabel(role: WorkspaceRole | undefined | null) {
-  const labels: Record<string, string> = { lead: "Lead / superuser", manager: "Operations manager", coordinator: "Coordinator", dispatcher: "Dispatcher", on_call: "On-call responder", viewer: "Viewer", support: "Coordinator" };
+  const labels: Record<string, string> = { lead: "Lead / superuser", manager: "Operations manager", coordinator: "Coordinator", dispatcher: "Dispatcher", on_call: "On-call responder", viewer: "Viewer", support: "Coordinator", complaints: "Complaints only" };
   return labels[role || ""] || "Team member";
 }
