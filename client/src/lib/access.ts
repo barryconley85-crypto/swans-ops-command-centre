@@ -6,7 +6,7 @@ const rolesWith = {
   editComplaints: ["lead", "manager", "coordinator", "dispatcher", "complaints"],
   useOnCall: ["lead", "manager", "coordinator", "dispatcher", "on_call", "support"],
   chat: ["lead", "manager", "coordinator", "dispatcher", "on_call", "support"],
-  reports: ["lead", "manager", "coordinator", "dispatcher", "on_call", "viewer", "support"],
+  reports: ["lead", "manager", "coordinator", "dispatcher", "on_call", "viewer", "support", "complaints"],
 } as const;
 
 export function hasWorkspacePermission(role: WorkspaceRole | undefined | null, permission: keyof typeof rolesWith) {
