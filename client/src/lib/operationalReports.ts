@@ -28,6 +28,14 @@ const definitions = [
   ["complaints-register", "Complaints register", "Complaints", "All complaints received in the selected date range with stage, client, owner and deadlines."],
   ["complaints-overdue", "Overdue complaints & SLAs", "Complaints", "Open complaints with missed acknowledgement or full-response deadlines."],
   ["complaints-trends", "Complaint themes & repeat links", "Complaints", "Complaint volumes by category, driver and vehicle to help identify repeat patterns."],
+  ["complaints-volume", "Complaint volume trend", "Complaints", "Daily complaint volumes across the selected date range."],
+  ["complaints-categories", "Complaints by category", "Complaints", "Ranked complaint categories and their share of the total."],
+  ["complaints-clients", "Complaints by client", "Complaints", "Client-level complaint volumes to identify concentration and recurring service issues."],
+  ["complaints-drivers", "Repeat driver analysis", "Complaints", "Drivers linked to more than one complaint, with counts for management review."],
+  ["complaints-vehicles", "Repeat vehicle analysis", "Complaints", "Vehicles linked to more than one complaint, with counts for management review."],
+  ["complaints-sla", "Complaint SLA performance", "Complaints", "Acknowledgement and full-response deadline performance based on recorded timestamps."],
+  ["complaints-financial", "Complaint financial outcomes", "Complaints", "Refund and credit values grouped by recorded financial status."],
+  ["complaints-root-causes", "Complaint root-cause analysis", "Complaints", "Recorded root causes ranked by complaint count."],
 ] as const;
 
 export const reportDefinitions = definitions.map(([id, label, category, description]) => ({ id, label, category, description }));
@@ -63,6 +71,46 @@ export function buildOperationalReport(reportId: string, state: Record<string, a
       complaints.forEach((item: any) => { const category = String(item.category || "Other"); categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1); if (item.driverId) { const key = String(item.driverId); const previous = driverCounts.get(key); driverCounts.set(key, { name: item.driverName || key, count: (previous?.count || 0) + 1 }); } if (String(item.vehicle || "").trim()) { const key = String(item.vehicle).trim(); vehicleCounts.set(key, (vehicleCounts.get(key) || 0) + 1); } });
       const rows: ReportRow[] = [...[...categoryCounts.entries()].map(([name, count]) => ({ "Theme type": "Category", "Theme / driver / vehicle": name, "Complaint count": count, "Repeat signal": count > 1 ? "Review repeat theme" : "Single record" })), ...[...driverCounts.values()].map(item => ({ "Theme type": "Driver", "Theme / driver / vehicle": item.name, "Complaint count": item.count, "Repeat signal": item.count > 1 ? "Review repeat driver link" : "Single record" })), ...[...vehicleCounts.entries()].map(([name, count]) => ({ "Theme type": "Vehicle", "Theme / driver / vehicle": name, "Complaint count": count, "Repeat signal": count > 1 ? "Review repeat vehicle link" : "Single record" }))].sort((a, b) => Number(b["Complaint count"]) - Number(a["Complaint count"]));
       return report(["Theme type", "Theme / driver / vehicle", "Complaint count", "Repeat signal"], rows, "No complaint themes to report in the selected date range.");
+    }
+    case "complaints-volume": {
+      const counts = new Map<string, number>();
+      complaints.forEach((item: any) => { const day = new Date(item.receivedAt || item.createdAt || 0).toLocaleDateString("en-CA", { timeZone: "Europe/London" }); counts.set(day, (counts.get(day) || 0) + 1); });
+      return report(["Date", "Complaints received"], daysBetween(filter.rangeStart, filter.rangeEnd).map(date => ({ Date: date, "Complaints received": counts.get(date) || 0 })), "No complaints were received in the selected date range.");
+    }
+    case "complaints-categories":
+    case "complaints-clients":
+    case "complaints-root-causes": {
+      const field = reportId === "complaints-categories" ? "category" : reportId === "complaints-clients" ? "client" : "rootCause";
+      const label = reportId === "complaints-categories" ? "Category" : reportId === "complaints-clients" ? "Client" : "Recorded root cause";
+      const counts = new Map<string, number>();
+      complaints.forEach((item: any) => { const value = String(item[field] || (field === "category" ? "Other / not recorded" : "Not recorded")).trim(); counts.set(value, (counts.get(value) || 0) + 1); });
+      const total = complaints.length || 1;
+      return report([label, "Complaint count", "Share of total"], [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ [label]: name, "Complaint count": count, "Share of total": Math.round(count / total * 100) + "%" })), "No complaints were received in the selected date range.");
+    }
+    case "complaints-drivers":
+    case "complaints-vehicles": {
+      const isDriver = reportId === "complaints-drivers";
+      const field = isDriver ? "driverName" : "vehicle";
+      const label = isDriver ? "Driver" : "Vehicle";
+      const counts = new Map<string, number>();
+      complaints.forEach((item: any) => { const value = String(item[field] || "").trim(); if (value) counts.set(value, (counts.get(value) || 0) + 1); });
+      return report([label, "Complaint count", "Review prompt"], [...counts.entries()].filter(([, count]) => count > 1).sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ [label]: name, "Complaint count": count, "Review prompt": "Review repeat link; not a finding of fault" })), "No repeat links were recorded in the selected date range.");
+    }
+    case "complaints-sla": {
+      const acknowledgementDue = complaints.filter((item: any) => item.acknowledgementDueAt);
+      const acknowledgementMet = acknowledgementDue.filter((item: any) => item.acknowledgedAt && Number(item.acknowledgedAt) <= Number(item.acknowledgementDueAt)).length;
+      const responseDue = complaints.filter((item: any) => item.responseDueAt);
+      const responseRecorded = responseDue.filter((item: any) => String(item.clientResponse || "").trim());
+      const responseOnTime = responseDue.filter((item: any) => item.clientResponseAt && Number(item.clientResponseAt) <= Number(item.responseDueAt)).length;
+      return report(["SLA measure", "Eligible complaints", "Met / recorded", "Performance", "Data note"], [
+        { "SLA measure": "Acknowledgement within target", "Eligible complaints": acknowledgementDue.length, "Met / recorded": acknowledgementMet, Performance: acknowledgementDue.length ? Math.round(acknowledgementMet / acknowledgementDue.length * 100) + "%" : "Not recorded", "Data note": "Based on acknowledgedAt compared with acknowledgementDueAt." },
+        { "SLA measure": "Full response within target", "Eligible complaints": responseDue.length, "Met / recorded": responseOnTime, Performance: responseDue.length ? Math.round(responseOnTime / responseDue.length * 100) + "%" : "Not recorded", "Data note": "Only response timestamps can confirm deadline compliance; response text alone is not proof of timing." },
+        { "SLA measure": "Response recorded (any timing)", "Eligible complaints": responseDue.length, "Met / recorded": responseRecorded.length, Performance: responseDue.length ? Math.round(responseRecorded.length / responseDue.length * 100) + "%" : "Not recorded", "Data note": "Shows whether a response is recorded, not whether it was on time." },
+      ], "No complaint deadlines are recorded in the selected date range.");
+    }
+    case "complaints-financial": {
+      const statuses = ["none", "pending_approval", "approved", "issued", "declined"];
+      return report(["Financial status", "Complaint count", "Recorded refund / credit value"], statuses.map(status => ({ "Financial status": titleCase(status), "Complaint count": complaints.filter((item: any) => String(item.financialStatus || "none") === status).length, "Recorded refund / credit value": complaints.filter((item: any) => String(item.financialStatus || "none") === status).reduce((sum: number, item: any) => sum + Math.max(0, Number(item.refundAmount || 0)), 0) })).filter(row => Number(row["Complaint count"]) > 0), "No financial outcomes were recorded in the selected date range.");
     }
     case "daily-control": return report(["Metric", "Count"], [{ Metric: "Completed", Count: tasks.filter(task => task.status === "complete").length }, { Metric: "Open or in progress", Count: tasks.filter(task => ["pending", "in_progress"].includes(task.status)).length }, { Metric: "Blocked", Count: blocked.length }, { Metric: "Overdue", Count: overdue.length }], "No tasks are recorded in this window.");
     case "outstanding-work": return report(["Task", "Date", "Status", "Priority", "Owner", "Due", "Blocker"], outstanding.sort((a, b) => (a.dueAt || Number.MAX_SAFE_INTEGER) - (b.dueAt || Number.MAX_SAFE_INTEGER)).map(task => ({ Task: task.title, Date: task.workDate, Status: titleCase(task.status), Priority: titleCase(task.priority), Owner: memberName(task.assignedTeamMemberId), Due: task.dueAt ? new Date(task.dueAt).toLocaleString("en-GB", { timeZone: "Europe/London" }) : "Not timed", Blocker: task.blockedReason || "—" })), "No outstanding tasks in this window.");
