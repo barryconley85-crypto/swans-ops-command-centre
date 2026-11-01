@@ -70,6 +70,13 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/ops_drivers/$(request.resource.data.driverId)).data.active == true;
       allow update, delete: if lead();
     }
+    match /ops_driver_compliance/{recordId} {
+      allow read: if operationsManager();
+      allow create, update: if operationsManager()
+        && request.resource.data.driverName is string
+        && request.resource.data.licenceValidTo is string;
+      allow delete: if lead();
+    }
     match /ops_driver_attendance/{attendanceId} {
       allow read: if member();
       allow create, update: if member() && !complaintsOnly()
