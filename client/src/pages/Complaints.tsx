@@ -86,12 +86,12 @@ export default function Complaints() {
   const ordered = useMemo(() => [...complaints].sort((a, b) => (a.stage === "closed" ? 1 : 0) - (b.stage === "closed" ? 1 : 0) || b.receivedAt - a.receivedAt), [complaints]);
   const visible = ordered.filter(item => filter === "all" || (filter === "active" ? item.stage !== "closed" : filter === "overdue" ? item.stage !== "closed" && (now > item.acknowledgementDueAt && !item.acknowledgedAt || now > responseDeadline(item)) : item.stage === filter));
   const selected = complaints.find(item => item._docId === selectedId) || null;
-  const selectedRepeatDriver = driverPatterns.find(item => item.id === selectedRepeatDriverId) || null;
-  const repeatDriverComplaints = selectedRepeatDriver ? complaints.filter(item => item.driverId === selectedRepeatDriver.id).sort((a, b) => b.receivedAt - a.receivedAt) : [];
   const openCount = complaints.filter(item => item.stage !== "closed").length;
   const ackOverdue = complaints.filter(item => item.stage !== "closed" && !item.acknowledgedAt && now > item.acknowledgementDueAt).length;
   const responseOverdue = complaints.filter(item => item.stage !== "closed" && !item.clientResponse.trim() && now > responseDeadline(item)).length;
   const driverPatterns = useMemo(() => { const counts = new Map<string, number>(); complaints.filter(item => item.driverId && item.stage !== "closed" ? true : Boolean(item.driverId)).forEach(item => counts.set(item.driverId, (counts.get(item.driverId) || 0) + 1)); return [...counts.entries()].filter(([, count]) => count > 1).map(([id, count]) => ({ id, count, name: complaints.find(item => item.driverId === id)?.driverName || id })); }, [complaints]);
+  const selectedRepeatDriver = driverPatterns.find(item => item.id === selectedRepeatDriverId) || null;
+  const repeatDriverComplaints = selectedRepeatDriver ? complaints.filter(item => item.driverId === selectedRepeatDriver.id).sort((a, b) => b.receivedAt - a.receivedAt) : [];
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 30_000); return () => window.clearInterval(timer); }, []);
   // Notify Stephen in-app once an SLA first becomes overdue while the module is active.
   useEffect(() => {
