@@ -2,94 +2,95 @@ import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { firebaseDb } from "@/lib/firebase";
 import { addDoc, collection, onSnapshot, query, updateDoc, doc } from "firebase/firestore";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, Clock3, FileUp, Search, ShieldCheck, Users } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock3, FileUp, Search, ShieldCheck, Users, Pencil, Plus, Save, X } from "lucide-react";
 import { PageHeader, LoadError } from "@/components/WorkspacePrimitives";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
+type Endorsement = { offenceCode: string; points: number; offenceDate: string; expiryDate?: string; };
 type ComplianceRecord = {
-  _docId: string; driverName: string; licenceNumber?: string; licenceValidFrom?: string;
-  licenceValidTo?: string; consentExpiry?: string; endorsements?: Array<{ offenceCode: string; points: number; offenceDate: string }>;
-  updatedAt?: number; source?: string;
+  _docId: string; driverId?: string; driverName: string; licenceNumber?: string; licenceValidFrom?: string;
+  licenceValidTo?: string; consentExpiry?: string; medicalExpiry?: string; cpcExpiry?: string;
+  tachoCardExpiry?: string; dbsDate?: string; trainingExpiry?: string; endorsements?: Endorsement[];
+  notes?: string; updatedAt?: number; source?: string;
 };
+type ComplianceForm = Omit<ComplianceRecord, "_docId" | "updatedAt" | "source">;
+const emptyForm = (driverId: string, driverName: string): ComplianceForm => ({
+  driverId, driverName, licenceNumber: "", licenceValidFrom: "", licenceValidTo: "", consentExpiry: "",
+  medicalExpiry: "", cpcExpiry: "", tachoCardExpiry: "", dbsDate: "", trainingExpiry: "", endorsements: [], notes: ""
+});
 const normalise = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 const parseDate = (value: string) => {
   const raw = value.trim(); if (!raw) return "";
-  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/); if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
-  const uk = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/); if (uk) return `${uk[3]}-${uk[2].padStart(2,"0")}-${uk[1].padStart(2,"0")}`;
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/); if (iso) return iso[0];
+  const uk = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (uk) { const day = Number(uk[1]), month = Number(uk[2]), year = Number(uk[3]); const date = new Date(year, month - 1, day); if (date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day) return `${year}-${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}`; }
   return "";
+};
+const parseCsv = (source: string, delimiter: string) => {
+  const rows: string[][] = []; let row: string[] = []; let cell = ""; let quoted = false;
+  for (let i = 0; i < source.length; i++) { const char = source[i]; if (char === '"' && quoted && source[i + 1] === '"') { cell += '"'; i++; } else if (char === '"') quoted = !quoted; else if (char === delimiter && !quoted) { row.push(cell.trim()); cell = ""; } else if ((char === "\n" || char === "\r") && !quoted) { if (char === "\r" && source[i + 1] === "\n") i++; row.push(cell.trim()); if (row.some(value => value !== "")) rows.push(row); row = []; cell = ""; } else cell += char; }
+  row.push(cell.trim()); if (row.some(value => value !== "")) rows.push(row); return rows;
 };
 const daysUntil = (value?: string) => value ? Math.ceil((new Date(value+"T00:00:00").getTime()-new Date(new Date().toDateString()).getTime())/86400000) : null;
 const dateLabel = (value?: string) => value ? new Date(value+"T00:00:00").toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}) : "Not recorded";
 const statusFor = (value?: string) => { const days=daysUntil(value); if(days===null)return {label:"Missing",tone:"secondary"}; if(days<0)return {label:"Expired",tone:"destructive"}; if(days<=30)return {label:"Due within 30 days",tone:"destructive"}; if(days<=90)return {label:"Due within 90 days",tone:"outline"}; return {label:"In date",tone:"secondary"}; };
+const complianceDates = ["licenceValidTo","consentExpiry","medicalExpiry","cpcExpiry","tachoCardExpiry","trainingExpiry"] as const;
 
 export default function ComplianceCentre() {
-  const { profile, state, refresh } = useWorkspace();
+  const { profile, state, refresh, error: workspaceError } = useWorkspace();
   const [records,setRecords]=useState<ComplianceRecord[]>([]);
   const [search,setSearch]=useState("");
   const [importing,setImporting]=useState(false);
-  const [preview,setPreview]=useState<{matched:number;unmatched:string[];ambiguous:string[];rows:any[]}|null>(null);
+  const [preview,setPreview]=useState<{matched:number;unmatched:string[];ambiguous:string[];invalid:number;rows:any[]}|null>(null);
+  const [selected,setSelected]=useState<any|null>(null);
+  const [form,setForm]=useState<ComplianceForm|null>(null);
+  const [saving,setSaving]=useState(false);
+  const [endorsement,setEndorsement]=useState<Endorsement>({offenceCode:"",points:3,offenceDate:"",expiryDate:""});
   const fileRef=useRef<HTMLInputElement>(null);
   useEffect(()=>{ if(!firebaseDb)return; return onSnapshot(query(collection(firebaseDb,"ops_driver_compliance")),snap=>setRecords(snap.docs.map(item=>({_docId:item.id,...item.data()} as ComplianceRecord))),()=>toast.error("Compliance records could not be loaded.")); },[]);
-  const drivers=useMemo(()=> (state.drivers||[]).filter((d:any)=>d.active!==false),[state.drivers]);
+  const drivers=useMemo(()=> (state.drivers||[]).filter((d:any)=>d.active!==false).sort((a:any,b:any)=>a.name.localeCompare(b.name)),[state.drivers]);
   const rows=useMemo(()=>drivers.map((driver:any)=>{
-    const matches=records.filter(r=>normalise(r.driverName)===normalise(driver.name));
-    const record=matches[0];
-    return {driver,record,duplicate:matches.length>1};
+    const matches=records.filter(r=>(r.driverId&&r.driverId===driver._docId)||normalise(r.driverName)===normalise(driver.name));
+    return {driver,record:matches[0],duplicate:matches.length>1};
   }).filter(item=>!search||item.driver.name.toLowerCase().includes(search.toLowerCase())),[drivers,records,search]);
-  const expiring=rows.filter(x=>{const d=daysUntil(x.record?.licenceValidTo);return d!==null&&d>=0&&d<=90;}).length;
-  const expired=rows.filter(x=>{const d=daysUntil(x.record?.licenceValidTo);return d!==null&&d<0;}).length;
+  const expiring=rows.filter(x=>complianceDates.some(key=>{const d=daysUntil(x.record?.[key]);return d!==null&&d>=0&&d<=90;})).length;
+  const expired=rows.filter(x=>complianceDates.some(key=>{const d=daysUntil(x.record?.[key]);return d!==null&&d<0;})).length;
   const missing=rows.filter(x=>!x.record?.licenceValidTo).length;
+  const openEditor=(driver:any,record?:ComplianceRecord)=>{setSelected(driver);setForm(record?{...emptyForm(driver._docId,driver.name),...record,driverId:driver._docId,driverName:driver.name}:emptyForm(driver._docId,driver.name));setEndorsement({offenceCode:"",points:3,offenceDate:"",expiryDate:""});};
+  const closeEditor=()=>{setSelected(null);setForm(null);};
+  const saveRecord=async()=>{if(!firebaseDb||!profile||!selected||!form)return;if(!form.licenceValidTo){toast.error("Enter the driving licence expiry date, or leave this record unsaved until confirmed.");return;}setSaving(true);try{
+    const payload={...form,driverId:selected._docId,driverName:selected.name,endorsements:form.endorsements||[],updatedAt:Date.now(),updatedBy:profile.displayName||profile.userId};
+    const existing=records.find(r=>r.driverId===selected._docId)||records.find(r=>normalise(r.driverName)===normalise(selected.name));
+    if(existing)await updateDoc(doc(firebaseDb,"ops_driver_compliance",existing._docId),payload);else await addDoc(collection(firebaseDb,"ops_driver_compliance"),{...payload,createdAt:Date.now(),createdBy:profile.displayName||profile.userId});
+    await refresh();closeEditor();toast.success("Driver compliance record saved.");
+  }catch(error){toast.error(error instanceof Error?error.message:"Compliance record could not be saved.");}finally{setSaving(false);}};
+  const addEndorsement=()=>{if(!form||!endorsement.offenceCode.trim()||!endorsement.offenceDate||!Number.isFinite(endorsement.points)||endorsement.points<1||endorsement.points>11){toast.error("Enter the offence code, date and points (1 to 11).");return;}setForm({...form,endorsements:[...(form.endorsements||[]),{...endorsement,offenceCode:endorsement.offenceCode.trim().toUpperCase()}]});setEndorsement({offenceCode:"",points:3,offenceDate:"",expiryDate:""});};
   const parseFile=async(file:File)=>{
-    const text=await file.text(); const lines=text.replace(/^\uFEFF/,"").split(/\r?\n/).filter(Boolean);
-    if(lines.length<2)return toast.error("The file does not contain any driver rows.");
-    const delimiter=lines[0].includes("\t")?"\\t":",";
-    const split=(line:string)=>line.split(delimiter).map(v=>v.trim().replace(/^"|"$/g,""));
-    const headers=split(lines[0]).map(h=>h.toLowerCase());
+    const source=(await file.text()).replace(/^\uFEFF/,"");const delimiter=source.split(/\r?\n/,1)[0]?.includes("\t")?"\t":",";const table=parseCsv(source,delimiter);
+    if(table.length<2)return toast.error("The file does not contain any driver rows.");
+    const headers=table[0].map(h=>h.toLowerCase().replace(/[^a-z0-9]/g,""));
     const index=(...names:string[])=>headers.findIndex(h=>names.includes(h));
-    const nameIndex=index("licencesurname","surname","lastname");
-    const firstIndex=index("licencefirstname","firstname","first name");
-    const expiryIndex=index("licencevalidto","licence expiry","expiry date");
-    const fromIndex=index("licencevalidfrom","valid from");
-    const numberIndex=index("licencenumber","licence number");
-    const consentIndex=index("consentexpiry","consent expiry");
-    if(nameIndex<0||firstIndex<0||expiryIndex<0)return toast.error("Required columns missing. Include LICENCEFIRSTNAME, LICENCESURNAME and LICENCEVALIDTO.");
-    const parsed=lines.slice(1).map(line=>{const cells=split(line);return {driverName:[cells[firstIndex],cells[nameIndex]].filter(Boolean).join(" "),licenceNumber:numberIndex>=0?cells[numberIndex]:"",licenceValidFrom:fromIndex>=0?parseDate(cells[fromIndex]||""):"",licenceValidTo:parseDate(cells[expiryIndex]||""),consentExpiry:consentIndex>=0?parseDate(cells[consentIndex]||""):""};}).filter(r=>r.driverName);
+    const first=index("licencefirstname","firstname","first name".replace(/ /g,""));const surname=index("licencesurname","surname","lastname");const expiry=index("licencevalidto","licenceexpiry","expirydate");const from=index("licencevalidfrom","validfrom");const number=index("licencenumber","drivinglicencenumber");const consent=index("consentexpiry","consentvalidto");
+    if(first<0||surname<0||expiry<0)return toast.error("Required columns missing. Include LICENCEFIRSTNAME, LICENCESURNAME and LICENCEVALIDTO.");
+    let invalid=0;const parsed=table.slice(1).map(cells=>{const driverName=[cells[first],cells[surname]].filter(Boolean).join(" ");const rawExpiry=cells[expiry]||"";const licenceValidTo=parseDate(rawExpiry);if(rawExpiry&&!licenceValidTo)invalid++;return {driverName,licenceNumber:number>=0?cells[number]||"": "",licenceValidFrom:from>=0?parseDate(cells[from]||""):"",licenceValidTo,consentExpiry:consent>=0?parseDate(cells[consent]||""):""};}).filter(r=>r.driverName);
     const unmatched:string[]=[];const ambiguous:string[]=[];let matched=0;
-    parsed.forEach(r=>{const found=drivers.filter((d:any)=>normalise(d.name)===normalise(r.driverName));if(found.length===1)matched++;else if(found.length>1)ambiguous.push(r.driverName);else unmatched.push(r.driverName);});
-    setPreview({matched,unmatched,ambiguous,rows:parsed}); 
+    parsed.forEach(r=>{const found=drivers.filter((d:any)=>normalise(d.name)===normalise(r.driverName));if(found.length===1&&r.licenceValidTo)matched++;else if(found.length>1)ambiguous.push(r.driverName);else if(!found.length)unmatched.push(r.driverName);});
+    setPreview({matched,unmatched,ambiguous,invalid,rows:parsed});
   };
-  const saveImport=async()=>{
-    if(!firebaseDb||!preview)return;
-    setImporting(true);
-    try{
-      let saved=0;
-      for(const row of preview.rows){
-        const found=drivers.filter((d:any)=>normalise(d.name)===normalise(row.driverName));
-        if(found.length!==1)continue;
-        const existing=records.find(r=>normalise(r.driverName)===normalise(row.driverName));
-        const payload={driverName:found[0].name,licenceNumber:row.licenceNumber||"",licenceValidFrom:row.licenceValidFrom||"",licenceValidTo:row.licenceValidTo||"",consentExpiry:row.consentExpiry||"",source:"licence-matrix-import",updatedAt:Date.now(),updatedBy:profile?.displayName||"Operations"};
-        if(existing)await updateDoc(doc(firebaseDb,"ops_driver_compliance",existing._docId),payload);
-        else await addDoc(collection(firebaseDb,"ops_driver_compliance"),{...payload,createdAt:Date.now(),endorsements:[]});
-        saved++;
-      }
-      setPreview(null);toast.success(`${saved} driver compliance records imported.`);
-    }catch(error){toast.error(error instanceof Error?error.message:"Import failed. No further records were processed.");}
-    finally{setImporting(false);}
-  };
+  const saveImport=async()=>{if(!firebaseDb||!preview)return;setImporting(true);try{let saved=0;for(const row of preview.rows){const found=drivers.filter((d:any)=>normalise(d.name)===normalise(row.driverName));if(found.length!==1||!row.licenceValidTo)continue;const existing=records.find(r=>r.driverId===found[0]._docId)||records.find(r=>normalise(r.driverName)===normalise(row.driverName));const previous=existing||emptyForm(found[0]._docId,found[0].name);const payload={...previous,driverId:found[0]._docId,driverName:found[0].name,licenceNumber:row.licenceNumber||previous.licenceNumber||"",licenceValidFrom:row.licenceValidFrom||previous.licenceValidFrom||"",licenceValidTo:row.licenceValidTo,consentExpiry:row.consentExpiry||previous.consentExpiry||"",source:"licence-matrix-import",updatedAt:Date.now(),updatedBy:profile?.displayName||"Operations"};if(existing)await updateDoc(doc(firebaseDb,"ops_driver_compliance",existing._docId),payload);else await addDoc(collection(firebaseDb,"ops_driver_compliance"),{...payload,createdAt:Date.now()});saved++;}setPreview(null);await refresh();toast.success(`${saved} driver compliance records imported. Existing fields not present in the file were retained.`);}catch(error){toast.error(error instanceof Error?error.message:"Import failed. Some earlier rows may already have been saved, check the register before retrying.");}finally{setImporting(false);}};
+  if(workspaceError)return <LoadError message={`Compliance data could not be loaded: ${workspaceError.message}`} onRetry={()=>void refresh()}/>;
   if(!profile)return <LoadError message="Sign in to view driver compliance." onRetry={()=>void refresh()}/>;
+  const totalPoints=(form?.endorsements||[]).reduce((sum,item)=>sum+Number(item.points||0),0);
   return <div className="mx-auto max-w-[1450px] pb-10">
-    <PageHeader eyebrow="Driver management" title="Compliance Centre" description="A central register for licence validity, consent dates and future endorsement monitoring." actions={<><input ref={fileRef} type="file" accept=".csv,.tsv,.txt" className="hidden" onChange={e=>{const f=e.target.files?.[0];if(f)void parseFile(f);e.currentTarget.value="";}}/><Button onClick={()=>fileRef.current?.click()}><FileUp className="mr-2 h-4 w-4"/>Import licence matrix</Button></>}/>
-    <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      {[{label:"Active drivers",value:drivers.length,icon:Users},{label:"Licences expiring in 90 days",value:expiring,icon:Clock3},{label:"Expired licences",value:expired,icon:AlertTriangle},{label:"Missing licence records",value:missing,icon:ShieldCheck}].map(item=><div key={item.label} className="rounded-2xl border border-[#DCE8E1] bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><p className="text-xs font-semibold uppercase tracking-wide text-[#71817A]">{item.label}</p><item.icon className="h-5 w-5 text-[#66847A]"/></div><p className="mt-3 text-3xl font-semibold text-[#21312B]">{item.value}</p></div>)}
-    </div>
-    {preview&&<section className="mt-6 rounded-2xl border border-[#DCE8E1] bg-white p-5 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold text-[#27362F]">Import review</h2><p className="mt-1 text-sm text-[#71817A]">Only exact name matches will be updated. Ambiguous and unmatched names will be skipped.</p></div><Badge variant="outline">{preview.matched} matched</Badge></div><div className="mt-4 grid gap-3 sm:grid-cols-2"><p className="text-sm">Unmatched: <strong>{preview.unmatched.length}</strong> {preview.unmatched.slice(0,5).join(", ")}</p><p className="text-sm">Ambiguous: <strong>{preview.ambiguous.length}</strong> {preview.ambiguous.slice(0,5).join(", ")}</p></div><div className="mt-4 flex gap-2"><Button disabled={importing||!preview.matched} onClick={()=>void saveImport()}>{importing?"Importing…":"Confirm import"}</Button><Button variant="outline" onClick={()=>setPreview(null)}>Cancel</Button></div></section>}
-    <section className="mt-6 rounded-2xl border border-[#E0E8E3] bg-white p-5 shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold text-[#27362F]">Driver compliance register</h2><p className="mt-1 text-xs text-[#78857F]">Driver names are used for matching. No Driver IDs are required.</p></div><div className="relative w-full sm:w-72"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/><Input className="pl-9" placeholder="Search drivers…" value={search} onChange={e=>setSearch(e.target.value)}/></div></div>
-      <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="border-b text-xs uppercase tracking-wide text-[#78857F]"><th className="py-3 pr-4">Driver</th><th className="py-3 pr-4">Licence expiry</th><th className="py-3 pr-4">Status</th><th className="py-3 pr-4">Consent expiry</th><th className="py-3 pr-4">Endorsements</th></tr></thead><tbody>{rows.map(({driver,record,duplicate})=>{const status=statusFor(record?.licenceValidTo);return <tr key={driver._docId} className="border-b border-[#EDF1EE]"><td className="py-3 pr-4 font-medium text-[#27362F]">{driver.name}{duplicate&&<span className="ml-2 text-xs text-red-600">Duplicate record</span>}</td><td className="py-3 pr-4">{dateLabel(record?.licenceValidTo)}</td><td className="py-3 pr-4"><Badge variant={status.tone as any}>{status.label}</Badge></td><td className="py-3 pr-4">{dateLabel(record?.consentExpiry)}</td><td className="py-3 pr-4">{record?.endorsements?.length||"Not checked"}</td></tr>})}</tbody></table></div>
-      {!rows.length&&<div className="py-10 text-center text-sm text-muted-foreground">No drivers match this search.</div>}
-    </section>
-    <p className="mt-4 flex items-start gap-2 text-xs text-[#78857F]"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0"/>Importing updates the compliance register only. It does not alter the existing driver directory or the original spreadsheet.</p>
+    <PageHeader eyebrow="Driver management" title="Compliance Centre" description="One central record for driver licence, medical, CPC, tachograph, DBS, training and endorsement monitoring." actions={<><input ref={fileRef} type="file" accept=".csv,.tsv,.txt" className="hidden" onChange={e=>{const f=e.target.files?.[0];if(f)void parseFile(f);e.currentTarget.value="";}}/><Button variant="outline" onClick={()=>fileRef.current?.click()}><FileUp className="mr-2 h-4 w-4"/>Import licence matrix</Button><Button onClick={()=>drivers[0]&&openEditor(drivers[0])}><Plus className="mr-2 h-4 w-4"/>Add record</Button></>}/>
+    <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{[{label:"Active drivers",value:drivers.length,icon:Users},{label:"Records due within 90 days",value:expiring,icon:Clock3},{label:"Expired compliance dates",value:expired,icon:AlertTriangle},{label:"Missing licence records",value:missing,icon:ShieldCheck}].map(item=><div key={item.label} className="rounded-2xl border border-[#DCE8E1] bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><p className="text-xs font-semibold uppercase tracking-wide text-[#71817A]">{item.label}</p><item.icon className="h-5 w-5 text-[#66847A]"/></div><p className="mt-3 text-3xl font-semibold text-[#21312B]">{item.value}</p></div>)}</div>
+    {preview&&<section className="mt-6 rounded-2xl border border-[#DCE8E1] bg-white p-5 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold text-[#27362F]">Import review</h2><p className="mt-1 text-sm text-[#71817A]">Only exact driver-name matches with a valid licence expiry date will be imported. Existing non-empty fields are retained.</p></div><Badge variant="outline">{preview.matched} ready to import</Badge></div><div className="mt-4 grid gap-3 sm:grid-cols-3"><p className="text-sm">Unmatched: <strong>{preview.unmatched.length}</strong> {preview.unmatched.slice(0,4).join(", ")}</p><p className="text-sm">Ambiguous: <strong>{preview.ambiguous.length}</strong> {preview.ambiguous.slice(0,4).join(", ")}</p><p className="text-sm">Invalid dates: <strong>{preview.invalid}</strong></p></div><div className="mt-4 flex gap-2"><Button disabled={importing||!preview.matched} onClick={()=>void saveImport()}>{importing?"Importing…":"Confirm import"}</Button><Button variant="outline" onClick={()=>setPreview(null)}>Cancel</Button></div></section>}
+    {selected&&form&&<section className="mt-6 rounded-2xl border border-[#CFE1D5] bg-[#F7FBF8] p-5 shadow-sm"><div className="flex items-start justify-between gap-3"><div><h2 className="font-semibold text-[#27362F]">{selected.name}</h2><p className="mt-1 text-sm text-[#71817A]">Update the driver's compliance record. Dates are stored as ISO dates and displayed in UK format.</p></div><Button variant="ghost" size="icon" onClick={closeEditor}><X className="h-4 w-4"/></Button></div><div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{[{key:"licenceNumber",label:"Driving licence number",type:"text"},{key:"licenceValidFrom",label:"Licence valid from",type:"date"},{key:"licenceValidTo",label:"Driving licence expiry",type:"date"},{key:"consentExpiry",label:"DVLA consent expiry",type:"date"},{key:"medicalExpiry",label:"Driver medical expiry",type:"date"},{key:"cpcExpiry",label:"Driver CPC expiry",type:"date"},{key:"tachoCardExpiry",label:"Tachograph card expiry",type:"date"},{key:"dbsDate",label:"DBS check date",type:"date"},{key:"trainingExpiry",label:"Training review / expiry",type:"date"}].map(field=><div key={field.key}><Label>{field.label}</Label><Input className="mt-1.5 bg-white" type={field.type} value={(form as any)[field.key]||""} onChange={e=>setForm({...form,[field.key]:e.target.value})}/></div>)}</div><div className="mt-5 rounded-xl border border-[#E0E8E3] bg-white p-4"><div className="flex items-center justify-between"><div><h3 className="font-semibold text-[#27362F]">Licence endorsements</h3><p className="mt-1 text-xs text-[#78857F]">Record confirmed endorsements only. Points total is calculated from the entries below.</p></div><Badge variant={totalPoints>=9?"destructive":"outline"}>{totalPoints} points recorded</Badge></div><div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><div><Label>Offence code</Label><Input className="mt-1" value={endorsement.offenceCode} onChange={e=>setEndorsement({...endorsement,offenceCode:e.target.value})} placeholder="e.g. SP30"/></div><div><Label>Points</Label><Input className="mt-1" type="number" min="1" max="11" value={endorsement.points} onChange={e=>setEndorsement({...endorsement,points:Number(e.target.value)})}/></div><div><Label>Offence date</Label><Input className="mt-1" type="date" value={endorsement.offenceDate} onChange={e=>setEndorsement({...endorsement,offenceDate:e.target.value})}/></div><div><Label>Expiry date (if known)</Label><Input className="mt-1" type="date" value={endorsement.expiryDate||""} onChange={e=>setEndorsement({...endorsement,expiryDate:e.target.value})}/></div></div><Button className="mt-3" variant="outline" size="sm" onClick={addEndorsement}>Add endorsement</Button>{(form.endorsements||[]).length>0&&<div className="mt-3 divide-y">{form.endorsements!.map((item,index)=><div key={index} className="flex items-center justify-between py-2 text-sm"><span><strong>{item.offenceCode}</strong>, {item.points} points, offence {dateLabel(item.offenceDate)}, expiry {dateLabel(item.expiryDate)}</span><Button size="sm" variant="ghost" onClick={()=>setForm({...form,endorsements:form.endorsements!.filter((_,i)=>i!==index)})}>Remove</Button></div>)}</div>}</div><div className="mt-4"><Label>Compliance notes</Label><textarea className="mt-1.5 min-h-20 w-full rounded-md border border-input bg-white px-3 py-2 text-sm" value={form.notes||""} onChange={e=>setForm({...form,notes:e.target.value})} placeholder="Record factual notes, source and follow-up required."/></div><div className="mt-5 flex flex-wrap gap-2"><Button disabled={saving} onClick={()=>void saveRecord()}><Save className="mr-2 h-4 w-4"/>{saving?"Saving…":"Save compliance record"}</Button><Button variant="outline" onClick={closeEditor}>Cancel</Button></div></section>}
+    <section className="mt-6 rounded-2xl border border-[#E0E8E3] bg-white p-5 shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold text-[#27362F]">Driver compliance register</h2><p className="mt-1 text-xs text-[#78857F]">Records link to the existing driver directory. Select a driver to maintain their compliance details.</p></div><div className="relative w-full sm:w-72"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/><Input className="pl-9" placeholder="Search drivers…" value={search} onChange={e=>setSearch(e.target.value)}/></div></div><div className="mt-4 overflow-x-auto"><table className="w-full min-w-[900px] text-left text-sm"><thead><tr className="border-b text-xs uppercase tracking-wide text-[#78857F]"><th className="py-3 pr-4">Driver</th><th className="py-3 pr-4">Licence expiry</th><th className="py-3 pr-4">Medical</th><th className="py-3 pr-4">CPC</th><th className="py-3 pr-4">Tacho card</th><th className="py-3 pr-4">Points</th><th className="py-3 pr-4">Status</th><th className="py-3 pr-4"></th></tr></thead><tbody>{rows.map(({driver,record,duplicate})=>{const status=statusFor(record?.licenceValidTo);const points=(record?.endorsements||[]).reduce((sum,item)=>sum+Number(item.points||0),0);return <tr key={driver._docId} className="border-b border-[#EDF1EE]"><td className="py-3 pr-4 font-medium text-[#27362F]">{driver.name}{duplicate&&<span className="ml-2 text-xs text-red-600">Duplicate record, review</span>}</td><td className="py-3 pr-4">{dateLabel(record?.licenceValidTo)}</td><td className="py-3 pr-4">{dateLabel(record?.medicalExpiry)}</td><td className="py-3 pr-4">{dateLabel(record?.cpcExpiry)}</td><td className="py-3 pr-4">{dateLabel(record?.tachoCardExpiry)}</td><td className="py-3 pr-4"><Badge variant={points>=9?"destructive":"outline"}>{points} pts</Badge></td><td className="py-3 pr-4"><Badge variant={status.tone as any}>{status.label}</Badge></td><td className="py-3 pr-4"><Button size="sm" variant="outline" onClick={()=>openEditor(driver,record)}><Pencil className="mr-1 h-3 w-3"/>Manage</Button></td></tr>})}</tbody></table></div>{!rows.length&&<div className="py-10 text-center text-sm text-muted-foreground">No drivers match this search.</div>}</section>
+    <p className="mt-4 flex items-start gap-2 text-xs text-[#78857F]"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0"/>Importing updates the compliance register only. It does not alter the driver directory or original spreadsheet. Automated DVLA checks and email alerts are not connected yet.</p>
   </div>;
 }
