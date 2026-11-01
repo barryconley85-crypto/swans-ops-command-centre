@@ -25,7 +25,8 @@ const emptyForm = (driverId: string, driverName: string): ComplianceForm => ({
 const normalise = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 const nameKey = (value: string) => { const parts=normalise(value).split(" ").filter(Boolean); return parts.length>1 ? `${parts[0]} ${parts[parts.length-1]}` : parts[0]||""; };
 const excludedCpcNames = new Set(["joanne marshall","krzysztof rojek","steven woodward","keith merrick","jordan sharples"]);
-const endorsementNameAliases: Record<string,string> = { "c tilson":"coral tilson", "welby m":"marcus welby", "487":"steven poolton", "steven brian r poolton":"steven poolton" };
+const endorsementNameAliases: Record<string,string> = { "c tilson":"coral tilson" };
+const excludedEndorsementDriverIds = new Set(["487","welby m"]);
 const cpcAliases: Record<string,string> = { "mike todd":"michael todd", "michael todd":"mike todd", "tom sayce":"thomas sayce", "sale griffiths":"dale griffiths", "craig hobin":"steven craig hobin", "andrew ellis":"andy ellis", "patrick nottage":"pat nottage", "stephen hobin":"craig hobin", "mccall aaron":"aaron mccall", "steven king":"steve king", "carleam nuttall":"carl nuttall", "darren lewis":"darren lewis" };
 const parseDate = (value: string) => {
   const raw = value.trim(); if (!raw) return "";
@@ -132,9 +133,10 @@ export default function ComplianceCentre() {
         disqualified:disqualifiedCol>=0?(cells[disqualifiedCol]||""):"",
         disqualificationEndDate:disqualificationEndCol>=0?parseDate(cells[disqualificationEndCol]||""):""
       })).filter(row=>row.driverId||row.code);
-      let imported=0,alreadyPresent=0,unmatched:string[]=[];
+      let imported=0,alreadyPresent=0,excluded=0,unmatched:string[]=[];
       const byDriver=new Map<string,any>();
       for(const row of parsed){
+        if(excludedEndorsementDriverIds.has(row.driverId.trim().toLowerCase())||["steven poolton","marcus welby"].includes(nameKey(row.driverName))){excluded++;continue;}
         if(!row.driverId||!row.code||!row.offenceDate||!row.expiryDate||!Number.isInteger(row.points)||row.points<1||row.points>11)throw new Error("Invalid endorsement data on CSV line "+row.line+". Check the driver ID, dates and points.");
         const idMatches=allDrivers.filter((d:any)=>[d.id,d.driverId,d.driverCode].some(value=>value!==undefined&&String(value).trim().toLowerCase()===row.driverId.toLowerCase()));
         const resolvedName=endorsementNameAliases[nameKey(row.driverName)]||nameKey(row.driverName);
@@ -162,7 +164,7 @@ export default function ComplianceCentre() {
         else await addDoc(collection(firebaseDb,"ops_driver_compliance"),{...payload,createdAt:now,createdBy:profile.displayName||profile.userId});
       }
       await refresh();
-      const summary=imported+" endorsements imported, "+alreadyPresent+" already present"+(unmatched.length?", "+unmatched.length+" unmatched IDs":"")+".";
+      const summary=imported+" endorsements imported, "+alreadyPresent+" already present, "+excluded+" excluded (former drivers)"+(unmatched.length?", "+unmatched.length+" unmatched IDs":"")+".";
       if(unmatched.length)toast.warning(summary+" Unmatched: "+unmatched.join(", "));
       else toast.success(summary);
     }catch(error){toast.error(error instanceof Error?error.message:"Endorsement import failed.");}
