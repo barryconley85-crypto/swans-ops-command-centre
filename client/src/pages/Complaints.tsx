@@ -157,12 +157,12 @@ export default function Complaints() {
         isDeleted: true,
         deletedAt,
         deletedByUserId: workspace.authUser?.uid || "",
-        deletedByName: workspace.profile.displayName,
+        deletedByName: workspace.profile?.displayName || "Unknown user",
         deletionReason: reason.trim(),
       });
       await workspace.add("auditLogs", {
         actorUserId: workspace.authUser?.uid || "",
-        actorName: workspace.profile.displayName,
+        actorName: workspace.profile?.displayName || "Unknown user",
         action: "deleted",
         targetType: "complaint",
         targetId: selected._docId,
