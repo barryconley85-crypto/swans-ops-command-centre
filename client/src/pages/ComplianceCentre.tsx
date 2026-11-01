@@ -22,7 +22,10 @@ const emptyForm = (driverId: string, driverName: string): ComplianceForm => ({
   driverId, driverName, licenceNumber: "", licenceValidFrom: "", licenceValidTo: "", consentExpiry: "",
   medicalExpiry: "", cpcExpiry: "", tachoCardExpiry: "", dbsDate: "", trainingExpiry: "", endorsements: [], notes: ""
 });
-const normalise = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");\nconst nameKey = (value: string) => { const parts=normalise(value).split(" ").filter(Boolean); return parts.length>1 ? `${parts[0]} ${parts[parts.length-1]}` : parts[0]||""; };\nconst excludedCpcNames = new Set(["joanne marshall","krzysztof rojek","steven woodward"]);\nconst cpcAliases: Record<string,string> = { "mike todd":"michael todd", "tom sayce":"thomas sayce", "sale griffiths":"dale griffiths", "craig hobin":"steven craig hobin" };
+const normalise = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+const nameKey = (value: string) => { const parts=normalise(value).split(" ").filter(Boolean); return parts.length>1 ? `${parts[0]} ${parts[parts.length-1]}` : parts[0]||""; };
+const excludedCpcNames = new Set(["joanne marshall","krzysztof rojek","steven woodward"]);
+const cpcAliases: Record<string,string> = { "mike todd":"michael todd", "tom sayce":"thomas sayce", "sale griffiths":"dale griffiths", "craig hobin":"steven craig hobin" };
 const parseDate = (value: string) => {
   const raw = value.trim(); if (!raw) return "";
   const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/); if (iso) return iso[0];
