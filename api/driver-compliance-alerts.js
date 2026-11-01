@@ -84,7 +84,7 @@ function buildReport(records, drivers, now = new Date()) {
   const complianceDue = rows.filter(row => row.dateAlerts.length);
   const missing = rows.filter(row => !row.record?.licenceValidTo);
   const newEndorsements = records.flatMap(record => (record.endorsements || []).filter(item => {
-    const created = Number(item.createdAt || item.addedAt || record.updatedAt || 0);
+    const created = Number(item.createdAt || item.addedAt || 0);
     return created >= now.getTime() - 24*60*60*1000;
   }).map(item => ({ name: record.driverName || "Unknown driver", ...item })));
   const lines = [];
