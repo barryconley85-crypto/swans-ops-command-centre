@@ -143,34 +143,70 @@ function buildReport(records, drivers, now = new Date()) {
 }
 export default async function handler(request, response) {
   if (request.method !== "GET" && request.method !== "POST") return response.status(405).json({ error: "Method not allowed" });
-  const supplied = String(request.headers.authorization || "").replace(/^Bearer\s+/i, "");
+  const supplied = String(request.headers.authorization || "").replace(/^Bearer\\s+/i, "");
   const testMode = request.method === "POST";
+
   if (testMode) {
     const email = await verifiedLeadEmail(supplied);
-    if (email !== "bc@swanstravel.com") return response.status(403).json({ error: "Only the signed-in operations lead can send a test email." });
+    if (email !== TEST_RECIPIENT) return response.status(403).json({ error: "Only the signed-in operations lead can send a test email." });
   } else if (!process.env.CRON_SECRET || supplied !== process.env.CRON_SECRET) {
     return response.status(401).json({ error: "Unauthorised scheduled compliance alert." });
   }
-  const required = ["FIREBASE_SERVICE_ACCOUNT_JSON_BASE64","GOOGLE_MAILER_URL","GOOGLE_MAILER_SHARED_SECRET"];
-  if (required.some(key => !process.env[key])) return response.status(503).json({ error: "Firebase or the existing Google Apps Script mailer is not configured." });
+
+  const mailerRequired = ["GOOGLE_MAILER_URL", "GOOGLE_MAILER_SHARED_SECRET"];
+  if (mailerRequired.some(key => !process.env[key])) {
+    return response.status(503).json({ error: "The existing Google Apps Script mailer is not configured." });
+  }
+  if (!testMode && !process.env.FIREBASE_SERVICE_ACCOUNT_JSON_BASE64) {
+    return response.status(503).json({ error: "Scheduled reports require the Firebase service account configuration." });
+  }
+
   try {
-    const account = serviceAccount();
-    if (!account?.private_key || !account?.client_email) throw new Error("Firebase service account configuration is invalid.");
-    const token = await accessToken(account);
-    const [records, drivers] = await Promise.all([listCollection(token,"ops_driver_compliance"),listCollection(token,"ops_drivers")]);
+    let records;
+    let drivers;
+    if (testMode) {
+      // The signed-in lead's browser already reads these collections under
+      // the app's Firestore security rules. Reuse that authorised data for
+      // the one-off test, avoiding a separate Admin SDK credential.
+      records = request.body?.records;
+      drivers = request.body?.drivers;
+      if (!Array.isArray(records) || !Array.isArray(drivers)) {
+        return response.status(400).json({ error: "The compliance records and active driver list were not supplied." });
+      }
+      if (records.length > 1000 || drivers.length > 1000) {
+        return response.status(413).json({ error: "The supplied compliance data is larger than the supported test limit." });
+      }
+      records = records.map(({ _docId, ...record }) => record);
+      drivers = drivers.map(({ _docId, ...driver }) => driver);
+    } else {
+      const account = serviceAccount();
+      if (!account?.private_key || !account?.client_email) throw new Error("Firebase service account configuration is invalid.");
+      const token = await accessToken(account);
+      [records, drivers] = await Promise.all([listCollection(token, "ops_driver_compliance"), listCollection(token, "ops_drivers")]);
+    }
+
     const report = buildReport(records, drivers);
     const dryRun = request.query?.dryRun === "1";
     const recipients = testMode ? [TEST_RECIPIENT] : RECIPIENTS;
-    if (dryRun) return response.status(200).json({ status:"dry_run", recipients, totals:report.totals, preview:report.summary, detail:report.detail });
+    if (dryRun) return response.status(200).json({ status: "dry_run", recipients, totals: report.totals, preview: report.summary, detail: report.detail });
+
     const today = dateKey(new Date());
     const mail = await fetch(process.env.GOOGLE_MAILER_URL, {
-      method:"POST", headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({ secret:process.env.GOOGLE_MAILER_SHARED_SECRET, eventKey:`driver-compliance-daily-${today}`, to:recipients, subject:`Swans Compliance | ${testMode ? "TEST " : ""}Daily driver alert | ${today}`, text:[ "SWANS TRAVEL | COMPLIANCE CENTRE", "DAILY DRIVER COMPLIANCE ALERT", ...report.summary, "", "ITEMS REQUIRING ATTENTION", report.detail, "", `Open Compliance Centre: ${APP_URL}/compliance` ].join("\n"), html:report.html })
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        secret: process.env.GOOGLE_MAILER_SHARED_SECRET,
+        eventKey: `driver-compliance-daily-${today}`,
+        to: recipients,
+        subject: `Swans Compliance | ${testMode ? "TEST " : ""}Daily driver alert | ${today}`,
+        text: ["SWANS TRAVEL | COMPLIANCE CENTRE", "DAILY DRIVER COMPLIANCE ALERT", ...report.summary, "", "ITEMS REQUIRING ATTENTION", report.detail, "", `Open Compliance Centre: ${APP_URL}/compliance`].join("\\n"),
+        html: report.html
+      })
     });
-    const result = await mail.json().catch(()=>({}));
+    const result = await mail.json().catch(() => ({}));
     if (!mail.ok || result.ok !== true) throw new Error(result.error || "The existing mailer rejected the compliance alert.");
-    return response.status(200).json({ status:"sent", recipients, totals:report.totals, emailId:result.id });
+    return response.status(200).json({ status: "sent", recipients, totals: report.totals, emailId: result.id });
   } catch (error) {
-    return response.status(502).json({ error:error instanceof Error ? error.message : "Daily compliance alert failed." });
+    return response.status(502).json({ error: error instanceof Error ? error.message : "Daily compliance alert failed." });
   }
 }

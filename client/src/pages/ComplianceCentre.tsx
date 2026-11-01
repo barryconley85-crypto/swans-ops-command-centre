@@ -192,7 +192,7 @@ export default function ComplianceCentre() {
     setSendingTestEmail(true);
     try{
       const idToken=await user.getIdToken();
-      const result=await fetch("/api/driver-compliance-alerts",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+idToken},body:JSON.stringify({})});
+      const result=await fetch("/api/driver-compliance-alerts",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+idToken},body:JSON.stringify({records,drivers})});
       const body=await result.json().catch(()=>({}));
       if(!result.ok||body.status!=="sent")throw new Error(body.error||"The test email could not be sent.");
       toast.success("Test compliance email sent to bc@swanstravel.com only.");
