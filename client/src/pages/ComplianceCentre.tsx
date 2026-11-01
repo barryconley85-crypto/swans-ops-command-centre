@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
-type Endorsement = { offenceCode: string; points: number; offenceDate: string; expiryDate?: string; convictionDate?: string; description?: string; disqualified?: string; disqualificationEndDate?: string; };
+type Endorsement = { offenceCode: string; points: number; offenceDate: string; expiryDate?: string; convictionDate?: string; description?: string; disqualified?: string; disqualificationEndDate?: string; createdAt?: number; };
 type ComplianceRecord = {
   _docId: string; driverId?: string; driverName: string; licenceNumber?: string; licenceValidFrom?: string;
   licenceValidTo?: string; consentExpiry?: string; cpcExpiry?: string; cpcRiskGroup?: string; cpcPriority?: string; cpcBookingStatus?: string; cpcBookedCourseDate?: string; cpcCompletionDate?: string;
@@ -103,7 +103,7 @@ export default function ComplianceCentre() {
     if(existing)await updateDoc(doc(firebaseDb,"ops_driver_compliance",existing._docId),payload);else await addDoc(collection(firebaseDb,"ops_driver_compliance"),{...payload,createdAt:Date.now(),createdBy:profile.displayName||profile.userId});
     await refresh();closeEditor();toast.success("Driver compliance record saved.");
   }catch(error){toast.error(error instanceof Error?error.message:"Compliance record could not be saved.");}finally{setSaving(false);}};
-  const addEndorsement=()=>{if(!form||!endorsement.offenceCode.trim()||!endorsement.offenceDate||!Number.isFinite(endorsement.points)||endorsement.points<1||endorsement.points>11){toast.error("Enter the offence code, date and points (1 to 11).");return;}setForm({...form,endorsements:[...(form.endorsements||[]),{...endorsement,offenceCode:endorsement.offenceCode.trim().toUpperCase()}]});setEndorsement({offenceCode:"",points:3,offenceDate:"",expiryDate:""});};
+  const addEndorsement=()=>{if(!form||!endorsement.offenceCode.trim()||!endorsement.offenceDate||!Number.isFinite(endorsement.points)||endorsement.points<1||endorsement.points>11){toast.error("Enter the offence code, date and points (1 to 11).");return;}setForm({...form,endorsements:[...(form.endorsements||[]),{...endorsement,offenceCode:endorsement.offenceCode.trim().toUpperCase(),createdAt:Date.now()}]});setEndorsement({offenceCode:"",points:3,offenceDate:"",expiryDate:""});};
   const importEndorsementFile=async(file:File)=>{
     if(!firebaseDb||!profile)return;
     setImportingEndorsements(true);
@@ -154,7 +154,7 @@ export default function ComplianceCentre() {
         for(const row of driverRows){
           const duplicate=endorsements.some(item=>item.offenceCode.toUpperCase()===row.code&&item.offenceDate===row.offenceDate&&Number(item.points)===row.points);
           if(duplicate){alreadyPresent++;continue;}
-          endorsements.push({offenceCode:row.code,points:row.points,offenceDate:row.offenceDate,expiryDate:row.expiryDate,convictionDate:row.convictionDate,description:row.description,disqualified:row.disqualified,disqualificationEndDate:row.disqualificationEndDate});
+          endorsements.push({offenceCode:row.code,points:row.points,offenceDate:row.offenceDate,expiryDate:row.expiryDate,convictionDate:row.convictionDate,description:row.description,disqualified:row.disqualified,disqualificationEndDate:row.disqualificationEndDate,createdAt:Date.now()});
           imported++;
         }
         if(endorsements.length===(previous.endorsements||[]).length)continue;
