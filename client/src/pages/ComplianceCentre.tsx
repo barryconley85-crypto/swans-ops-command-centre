@@ -14,11 +14,11 @@ type ComplianceRecord = {
   licenceValidTo?: string; consentExpiry?: string; endorsements?: Array<{ offenceCode: string; points: number; offenceDate: string }>;
   updatedAt?: number; source?: string;
 };
-const normalise = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
+const normalise = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 const parseDate = (value: string) => {
   const raw = value.trim(); if (!raw) return "";
-  const iso = raw.match(/^(\\d{4})-(\\d{2})-(\\d{2})/); if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
-  const uk = raw.match(/^(\\d{1,2})[/-](\\d{1,2})[/-](\\d{4})/); if (uk) return `${uk[3]}-${uk[2].padStart(2,"0")}-${uk[1].padStart(2,"0")}`;
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/); if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const uk = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/); if (uk) return `${uk[3]}-${uk[2].padStart(2,"0")}-${uk[1].padStart(2,"0")}`;
   return "";
 };
 const daysUntil = (value?: string) => value ? Math.ceil((new Date(value+"T00:00:00").getTime()-new Date(new Date().toDateString()).getTime())/86400000) : null;
@@ -43,9 +43,9 @@ export default function ComplianceCentre() {
   const expired=rows.filter(x=>{const d=daysUntil(x.record?.licenceValidTo);return d!==null&&d<0;}).length;
   const missing=rows.filter(x=>!x.record?.licenceValidTo).length;
   const parseFile=async(file:File)=>{
-    const text=await file.text(); const lines=text.replace(/^\\uFEFF/,"").split(/\\r?\\n/).filter(Boolean);
+    const text=await file.text(); const lines=text.replace(/^\uFEFF/,"").split(/\r?\n/).filter(Boolean);
     if(lines.length<2)return toast.error("The file does not contain any driver rows.");
-    const delimiter=lines[0].includes("\\t")?"\\t":",";
+    const delimiter=lines[0].includes("\t")?"\\t":",";
     const split=(line:string)=>line.split(delimiter).map(v=>v.trim().replace(/^"|"$/g,""));
     const headers=split(lines[0]).map(h=>h.toLowerCase());
     const index=(...names:string[])=>headers.findIndex(h=>names.includes(h));
