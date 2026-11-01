@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { WorkEmailGate } from "@/components/WorkEmailGate";
 import { useIsMobile } from "@/hooks/useMobile";
-import { AlertTriangle, BarChart3, Bell, CalendarDays, CheckCheck, CircleUserRound, ClipboardCheck, FileBarChart, HandHeart, Headphones, History, LayoutDashboard, LogOut, MessageCircleMore, Monitor, PanelLeft, QrCode, Users, Volume2, VolumeX, Waypoints, MessageSquareWarning, CarFront } from "lucide-react";
+import { AlertTriangle, BarChart3, Bell, CalendarDays, CheckCheck, CircleUserRound, ClipboardCheck, FileBarChart, HandHeart, Headphones, History, LayoutDashboard, LogOut, MessageCircleMore, Monitor, PanelLeft, QrCode, Users, Volume2, VolumeX, Waypoints, MessageSquareWarning, CarFront, ShieldCheck } from "lucide-react";
 import { CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -44,6 +44,7 @@ const menuItems = [
   { icon: ClipboardCheck, label: "Tasks", path: "/tasks" },
   { icon: QrCode, label: "Driver sign-on", path: "/driver-sign-on", managerOnly: true },
   { icon: FileBarChart, label: "Driver attendance", path: "/driver-attendance" },
+  { icon: ShieldCheck, label: "Compliance Centre", path: "/compliance", managerOnly: true },
   { icon: CalendarDays, label: "Rota & on-call", path: "/rota" },
   { icon: Headphones, label: "On-call portal", path: "/on-call" },
   { icon: HandHeart, label: "Help & cover", path: "/help" },
