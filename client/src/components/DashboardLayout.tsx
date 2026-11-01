@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { WorkEmailGate } from "@/components/WorkEmailGate";
 import { useIsMobile } from "@/hooks/useMobile";
-import { AlertTriangle, BarChart3, Bell, CalendarDays, CheckCheck, CircleUserRound, ClipboardCheck, FileBarChart, HandHeart, Headphones, History, LayoutDashboard, LogOut, MessageCircleMore, Monitor, PanelLeft, QrCode, Users, Volume2, VolumeX, Waypoints, MessageSquareWarning } from "lucide-react";
+import { AlertTriangle, BarChart3, Bell, CalendarDays, CheckCheck, CircleUserRound, ClipboardCheck, FileBarChart, HandHeart, Headphones, History, LayoutDashboard, LogOut, MessageCircleMore, Monitor, PanelLeft, QrCode, Users, Volume2, VolumeX, Waypoints, MessageSquareWarning, CarFront } from "lucide-react";
 import { CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -50,6 +50,7 @@ const menuItems = [
   { icon: Waypoints, label: "Handovers", path: "/handover" },
   { icon: AlertTriangle, label: "Issue log", path: "/issues" },
   { icon: MessageSquareWarning, label: "Complaints", path: "/complaints" },
+  { icon: CarFront, label: "Accident management", path: "external:accident-management", externalUrl: "https://swans-accident-management.vercel.app", allowedEmails: ["bc@swanstravel.com", "clt@swanstravel.com", "pww@swanstravel.com"] },
   { icon: BarChart3, label: "Reports", path: "/reports" },
   { icon: MessageCircleMore, label: "Team chat", path: "/chat" },
   { icon: Users, label: "Team & performance", path: "/people" },
@@ -185,13 +186,13 @@ function DashboardLayoutContent({
 
           <SidebarContent className="gap-0">
             <SidebarMenu className="px-2 py-2">
-              {menuItems.filter(item => (!item.leadOnly || user?.isSuperuser) && (!item.managerOnly || user?.canManageOperations)).map(item => {
+              {menuItems.filter(item => (!item.leadOnly || user?.isSuperuser) && (!item.managerOnly || user?.canManageOperations) && (!("allowedEmails" in item) || item.allowedEmails.includes((user?.email || "").toLowerCase()))).map(item => {
                 const isActive = location === item.path;
                 return (
                   <SidebarMenuItem key={item.path}>
                     <SidebarMenuButton
                       isActive={isActive}
-                      onClick={() => setLocation(item.path)}
+                      onClick={() => { if ("externalUrl" in item) window.open(item.externalUrl, "_blank", "noopener,noreferrer"); else setLocation(item.path); }}
                       tooltip={item.label}
                       className={`h-10 rounded-xl transition-all font-medium ${isActive ? "bg-[#E7F0ED] text-[#1A5D59]" : "text-[#5F6C66] hover:bg-[#EEF3F0] hover:text-[#29453B]"}`}
                     >
