@@ -50,7 +50,7 @@ const menuItems = [
   { icon: Waypoints, label: "Handovers", path: "/handover" },
   { icon: AlertTriangle, label: "Issue log", path: "/issues" },
   { icon: MessageSquareWarning, label: "Complaints", path: "/complaints" },
-  { icon: CarFront, label: "Accident management", path: "external:accident-management", externalUrl: "https://swans-accident-management.vercel.app", allowedEmails: ["bc@swanstravel.com", "clt@swanstravel.com", "pww@swanstravel.com"] },
+  { icon: CarFront, label: "Accident management", path: "external:accident-management", externalUrl: "https://swans-accident-management.vercel.app", allowedEmails: ["bc@swanstravel.com", "clt@swanstravel.com", "pww@swanstravel.com", "swh@swanstravel.com"] },
   { icon: BarChart3, label: "Reports", path: "/reports" },
   { icon: MessageCircleMore, label: "Team chat", path: "/chat" },
   { icon: Users, label: "Team & performance", path: "/people" },
