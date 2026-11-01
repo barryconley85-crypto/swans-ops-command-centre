@@ -25,6 +25,7 @@ const emptyForm = (driverId: string, driverName: string): ComplianceForm => ({
 const normalise = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 const nameKey = (value: string) => { const parts=normalise(value).split(" ").filter(Boolean); return parts.length>1 ? `${parts[0]} ${parts[parts.length-1]}` : parts[0]||""; };
 const excludedCpcNames = new Set(["joanne marshall","krzysztof rojek","steven woodward","keith merrick","jordan sharples"]);
+const endorsementNameAliases: Record<string,string> = { "c tilson":"coral tilson", "welby m":"marcus welby" };
 const cpcAliases: Record<string,string> = { "mike todd":"michael todd", "michael todd":"mike todd", "tom sayce":"thomas sayce", "sale griffiths":"dale griffiths", "craig hobin":"steven craig hobin", "andrew ellis":"andy ellis", "patrick nottage":"pat nottage", "stephen hobin":"craig hobin", "mccall aaron":"aaron mccall", "steven king":"steve king", "carleam nuttall":"carl nuttall", "darren lewis":"darren lewis" };
 const parseDate = (value: string) => {
   const raw = value.trim(); if (!raw) return "";
@@ -112,6 +113,7 @@ export default function ComplianceCentre() {
       const headers=table[0].map(h=>h.toLowerCase().replace(/[^a-z0-9]/g,""));
       const idx=(...names:string[])=>headers.findIndex(h=>names.includes(h));
       const idCol=idx("driverid","drivercode");
+      const nameCol=idx("drivername","name","fullname");
       const codeCol=idx("endorsementcode","offencecode","code");
       const offenceCol=idx("offencedate");
       const convictionCol=idx("convictiondate");
@@ -122,7 +124,7 @@ export default function ComplianceCentre() {
       const disqualificationEndCol=idx("disqualificationenddate");
       if(idCol<0||codeCol<0||offenceCol<0||pointsCol<0||expiryCol<0)throw new Error("Required columns missing. Include DriverID, EndorsementCode, OffenceDate, Points and PointsExpiry.");
       const parsed=table.slice(1).map((cells,index)=>({
-        line:index+2,driverId:(cells[idCol]||"").trim(),code:(cells[codeCol]||"").trim().toUpperCase(),
+        line:index+2,driverId:(cells[idCol]||"").trim(),driverName:nameCol>=0?(cells[nameCol]||"").trim():"",code:(cells[codeCol]||"").trim().toUpperCase(),
         offenceDate:parseDate(cells[offenceCol]||""),convictionDate:convictionCol>=0?parseDate(cells[convictionCol]||""):"",
         points:Number(cells[pointsCol]),expiryDate:parseDate(cells[expiryCol]||""),
         description:descriptionCol>=0?(cells[descriptionCol]||""):"",
@@ -133,8 +135,11 @@ export default function ComplianceCentre() {
       const byDriver=new Map<string,any>();
       for(const row of parsed){
         if(!row.driverId||!row.code||!row.offenceDate||!row.expiryDate||!Number.isInteger(row.points)||row.points<1||row.points>11)throw new Error("Invalid endorsement data on CSV line "+row.line+". Check the driver ID, dates and points.");
-        const driver=drivers.find((d:any)=>[d.id,d.driverId,d.driverCode].some(value=>value!==undefined&&String(value).trim().toLowerCase()===row.driverId.toLowerCase()));
-        if(!driver){unmatched.push(row.driverId+" (line "+row.line+")");continue;}
+        const idMatches=drivers.filter((d:any)=>[d.id,d.driverId,d.driverCode].some(value=>value!==undefined&&String(value).trim().toLowerCase()===row.driverId.toLowerCase()));
+        const resolvedName=endorsementNameAliases[nameKey(row.driverName)]||nameKey(row.driverName);
+        const nameMatches=row.driverName?drivers.filter((d:any)=>nameKey(d.name)===resolvedName):[];
+        const driver=idMatches.length===1?idMatches[0]:idMatches.length>1?undefined:nameMatches.length===1?nameMatches[0]:undefined;
+        if(!driver){unmatched.push(row.driverId+(row.driverName?" / "+row.driverName:"")+" (line "+row.line+")");continue;}
         const key=driver._docId;
         if(!byDriver.has(key))byDriver.set(key,{driver,rows:[]});
         byDriver.get(key).rows.push(row);
