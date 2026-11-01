@@ -4,6 +4,14 @@ const PROJECT_ID = "swans-ops-command-centre";
 const FIRESTORE = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
 const APP_URL = (process.env.APP_BASE_URL || "https://swans-ops-command-centre-barry-s-projects22.vercel.app").replace(/\/$/, "");
 const RECIPIENTS = ["bc@swanstravel.com", "swh@swanstravel.com"];
+const TEST_RECIPIENT = "bc@swanstravel.com";
+async function verifiedLeadEmail(idToken) {
+  if (!idToken || !process.env.FIREBASE_WEB_API_KEY) return null;
+  const result = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${process.env.FIREBASE_WEB_API_KEY}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken }) });
+  if (!result.ok) return null;
+  const body = await result.json();
+  return body.users?.[0]?.email?.trim().toLowerCase() || null;
+}
 
 function decodeValue(value) {
   if (!value || typeof value !== "object") return null;
@@ -108,10 +116,14 @@ function buildReport(records, drivers, now = new Date()) {
 }
 export default async function handler(request, response) {
   if (request.method !== "GET" && request.method !== "POST") return response.status(405).json({ error: "Method not allowed" });
-  const secret = process.env.CRON_SECRET;
   const supplied = String(request.headers.authorization || "").replace(/^Bearer\s+/i, "");
-  const manual = request.method === "POST";
-  if (!manual && (!secret || supplied !== secret)) return response.status(401).json({ error: "Unauthorised compliance alert trigger" });
+  const testMode = request.method === "POST";
+  if (testMode) {
+    const email = await verifiedLeadEmail(supplied);
+    if (email !== "bc@swanstravel.com") return response.status(403).json({ error: "Only the signed-in operations lead can send a test email." });
+  } else if (!process.env.CRON_SECRET || supplied !== process.env.CRON_SECRET) {
+    return response.status(401).json({ error: "Unauthorised scheduled compliance alert." });
+  }
   const required = ["FIREBASE_SERVICE_ACCOUNT_JSON_BASE64","GOOGLE_MAILER_URL","GOOGLE_MAILER_SHARED_SECRET"];
   if (required.some(key => !process.env[key])) return response.status(503).json({ error: "Firebase or the existing Google Apps Script mailer is not configured." });
   try {
@@ -121,15 +133,16 @@ export default async function handler(request, response) {
     const [records, drivers] = await Promise.all([listCollection(token,"ops_driver_compliance"),listCollection(token,"ops_drivers")]);
     const report = buildReport(records, drivers);
     const dryRun = request.query?.dryRun === "1";
-    if (dryRun) return response.status(200).json({ status:"dry_run", recipients:RECIPIENTS, totals:report.totals, preview:report.summary, detail:report.detail });
+    const recipients = testMode ? [TEST_RECIPIENT] : RECIPIENTS;
+    if (dryRun) return response.status(200).json({ status:"dry_run", recipients, totals:report.totals, preview:report.summary, detail:report.detail });
     const today = dateKey(new Date());
     const mail = await fetch(process.env.GOOGLE_MAILER_URL, {
       method:"POST", headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({ secret:process.env.GOOGLE_MAILER_SHARED_SECRET, eventKey:`driver-compliance-daily-${today}`, to:RECIPIENTS, subject:`Swans Compliance | Daily driver alert | ${today}`, text:[ "SWANS TRAVEL | COMPLIANCE CENTRE", "DAILY DRIVER COMPLIANCE ALERT", ...report.summary, "", "ITEMS REQUIRING ATTENTION", report.detail, "", `Open Compliance Centre: ${APP_URL}/compliance` ].join("\n"), html:report.html })
+      body:JSON.stringify({ secret:process.env.GOOGLE_MAILER_SHARED_SECRET, eventKey:`driver-compliance-daily-${today}`, to:recipients, subject:`Swans Compliance | ${testMode ? "TEST " : ""}Daily driver alert | ${today}`, text:[ "SWANS TRAVEL | COMPLIANCE CENTRE", "DAILY DRIVER COMPLIANCE ALERT", ...report.summary, "", "ITEMS REQUIRING ATTENTION", report.detail, "", `Open Compliance Centre: ${APP_URL}/compliance` ].join("\n"), html:report.html })
     });
     const result = await mail.json().catch(()=>({}));
     if (!mail.ok || result.ok !== true) throw new Error(result.error || "The existing mailer rejected the compliance alert.");
-    return response.status(200).json({ status:"sent", recipients:RECIPIENTS, totals:report.totals, emailId:result.id });
+    return response.status(200).json({ status:"sent", recipients, totals:report.totals, emailId:result.id });
   } catch (error) {
     return response.status(502).json({ error:error instanceof Error ? error.message : "Daily compliance alert failed." });
   }
