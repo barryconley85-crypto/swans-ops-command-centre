@@ -30,8 +30,34 @@ function decodeFields(fields) {
   return Object.fromEntries(Object.entries(fields || {}).map(([key, value]) => [key, decodeValue(value)]));
 }
 function serviceAccount() {
-  try { return JSON.parse(Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_JSON_BASE64, "base64").toString("utf8")); }
-  catch { return null; }
+  const configured = process.env.FIREBASE_SERVICE_ACCOUNT_JSON_BASE64;
+  if (!configured || typeof configured !== "string") return null;
+
+  const raw = configured.trim();
+  const candidates = [raw];
+
+  // Accept both raw service-account JSON and Base64-encoded JSON.
+  // Also tolerate URL-safe Base64 and whitespace introduced by secret entry.
+  try {
+    const normalised = raw.replace(/-/g, "+").replace(/_/g, "/").replace(/\\s/g, "");
+    const decoded = Buffer.from(normalised, "base64").toString("utf8").trim();
+    if (decoded && decoded !== raw) candidates.push(decoded);
+  } catch {}
+
+  for (const candidate of candidates) {
+    try {
+      const account = JSON.parse(candidate);
+      if (
+        account &&
+        typeof account === "object" &&
+        typeof account.client_email === "string" &&
+        account.client_email.includes("@") &&
+        typeof account.private_key === "string" &&
+        account.private_key.includes("PRIVATE KEY")
+      ) return account;
+    } catch {}
+  }
+  return null;
 }
 function base64url(value) { return Buffer.from(value).toString("base64url"); }
 async function accessToken(account) {
