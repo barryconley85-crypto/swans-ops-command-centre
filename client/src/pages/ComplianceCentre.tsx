@@ -35,9 +35,7 @@ const parseDate = (value: string) => {
 };
 const parseCsv = (source: string, delimiter: string) => {
   const rows: string[][] = []; let row: string[] = []; let cell = ""; let quoted = false;
-  for (let i = 0; i < source.length; i++) { const char = source[i]; if (char === '"' && quoted && source[i + 1] === '"') { cell += '"'; i++; } else if (char === '"') quoted = !quoted; else if (char === delimiter && !quoted) { row.push(cell.trim()); cell = ""; } else if ((char === "
-" || char === "\r") && !quoted) { if (char === "\r" && source[i + 1] === "
-") i++; row.push(cell.trim()); if (row.some(value => value !== "")) rows.push(row); row = []; cell = ""; } else cell += char; }
+  for (let i = 0; i < source.length; i++) { const char = source[i]; if (char === '"' && quoted && source[i + 1] === '"') { cell += '"'; i++; } else if (char === '"') quoted = !quoted; else if (char === delimiter && !quoted) { row.push(cell.trim()); cell = ""; } else if ((char === "\n" || char === "\r") && !quoted) { if (char === "\r" && source[i + 1] === "\n") i++; row.push(cell.trim()); if (row.some(value => value !== "")) rows.push(row); row = []; cell = ""; } else cell += char; }
   row.push(cell.trim()); if (row.some(value => value !== "")) rows.push(row); return rows;
 };
 const daysUntil = (value?: string) => {
