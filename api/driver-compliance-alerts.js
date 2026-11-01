@@ -6,8 +6,9 @@ const APP_URL = (process.env.APP_BASE_URL || "https://swans-ops-command-centre-b
 const RECIPIENTS = ["bc@swanstravel.com", "swh@swanstravel.com"];
 const TEST_RECIPIENT = "bc@swanstravel.com";
 async function verifiedLeadEmail(idToken) {
-  if (!idToken || !process.env.FIREBASE_WEB_API_KEY) return null;
-  const result = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${process.env.FIREBASE_WEB_API_KEY}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken }) });
+  if (!idToken) return null;
+  const apiKey = process.env.FIREBASE_WEB_API_KEY || "AIzaSyAF6KhLk9CJvIbBjM0KHEzPO2dMAc1_OLY";
+  const result = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken }) });
   if (!result.ok) return null;
   const body = await result.json();
   return body.users?.[0]?.email?.trim().toLowerCase() || null;
