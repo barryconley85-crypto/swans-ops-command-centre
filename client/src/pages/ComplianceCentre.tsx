@@ -35,7 +35,9 @@ const parseDate = (value: string) => {
 };
 const parseCsv = (source: string, delimiter: string) => {
   const rows: string[][] = []; let row: string[] = []; let cell = ""; let quoted = false;
-  for (let i = 0; i < source.length; i++) { const char = source[i]; if (char === '"' && quoted && source[i + 1] === '"') { cell += '"'; i++; } else if (char === '"') quoted = !quoted; else if (char === delimiter && !quoted) { row.push(cell.trim()); cell = ""; } else if ((char === "\n" || char === "\r") && !quoted) { if (char === "\r" && source[i + 1] === "\n") i++; row.push(cell.trim()); if (row.some(value => value !== "")) rows.push(row); row = []; cell = ""; } else cell += char; }
+  for (let i = 0; i < source.length; i++) { const char = source[i]; if (char === '"' && quoted && source[i + 1] === '"') { cell += '"'; i++; } else if (char === '"') quoted = !quoted; else if (char === delimiter && !quoted) { row.push(cell.trim()); cell = ""; } else if ((char === "
+" || char === "\r") && !quoted) { if (char === "\r" && source[i + 1] === "
+") i++; row.push(cell.trim()); if (row.some(value => value !== "")) rows.push(row); row = []; cell = ""; } else cell += char; }
   row.push(cell.trim()); if (row.some(value => value !== "")) rows.push(row); return rows;
 };
 const daysUntil = (value?: string) => {
@@ -74,7 +76,9 @@ export default function ComplianceCentre() {
   const [form,setForm]=useState<ComplianceForm|null>(null);
   const [saving,setSaving]=useState(false);
   const [endorsement,setEndorsement]=useState<Endorsement>({offenceCode:"",points:3,offenceDate:"",expiryDate:""});
-  const fileRef=useRef<HTMLInputElement>(null);\n  const endorsementFileRef=useRef<HTMLInputElement>(null);\n  const [importingEndorsements,setImportingEndorsements]=useState(false);
+  const fileRef=useRef<HTMLInputElement>(null);
+  const endorsementFileRef=useRef<HTMLInputElement>(null);
+  const [importingEndorsements,setImportingEndorsements]=useState(false);
   useEffect(()=>{ if(!firebaseDb)return; return onSnapshot(query(collection(firebaseDb,"ops_driver_compliance")),snap=>setRecords(snap.docs.map(item=>({_docId:item.id,...item.data()} as ComplianceRecord))),()=>toast.error("Compliance records could not be loaded.")); },[]);
   const drivers=useMemo(()=> (state.drivers||[]).filter((d:any)=>d.active!==false).sort((a:any,b:any)=>a.name.localeCompare(b.name)),[state.drivers]);
   const automaticDriverMatch=(row:any)=>{const byId=row.sourceDriverId?drivers.filter((d:any)=>[d.id,d.driverId,d.driverCode].some(value=>value!==undefined&&String(value).trim()===row.sourceDriverId)):[];if(byId.length)return byId;const target=cpcAliases[nameKey(row.driverName)]||nameKey(row.driverName);return drivers.filter((d:any)=>nameKey(d.name)===target);};
@@ -104,7 +108,8 @@ export default function ComplianceCentre() {
     setImportingEndorsements(true);
     try{
       const source=(await file.text()).replace(/^\uFEFF/,"");
-      const delimiter=source.split(/\r?\n/,1)[0]?.includes("\t")?"\t":",";
+      const delimiter=source.split(/\r?
+/,1)[0]?.includes("\t")?"\t":",";
       const table=parseCsv(source,delimiter);
       if(table.length<2)throw new Error("The endorsement file contains no data rows.");
       const headers=table[0].map(h=>h.toLowerCase().replace(/[^a-z0-9]/g,""));
@@ -161,7 +166,8 @@ export default function ComplianceCentre() {
     finally{setImportingEndorsements(false);}
   };
   const parseFile=async(file:File)=>{
-    const source=(await file.text()).replace(/^\uFEFF/,"");const delimiter=source.split(/\r?\n/,1)[0]?.includes("\t")?"\t":",";const table=parseCsv(source,delimiter);
+    const source=(await file.text()).replace(/^\uFEFF/,"");const delimiter=source.split(/\r?
+/,1)[0]?.includes("\t")?"\t":",";const table=parseCsv(source,delimiter);
     if(table.length<2)return toast.error("The file does not contain any driver rows.");
     const headers=table[0].map(h=>h.toLowerCase().replace(/[^a-z0-9]/g,""));
     const index=(...names:string[])=>headers.findIndex(h=>names.includes(h));
