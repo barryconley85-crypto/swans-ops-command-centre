@@ -36,7 +36,7 @@ service cloud.firestore {
     match /ops_issues/{issueId} {
       allow read: if member();
       allow create: if sharedEditor() || (complaintsOnly() && request.resource.data.recordType == 'complaint');
-      allow update: if sharedEditor() || (complaintsOnly() && resource.data.recordType == 'complaint' && request.resource.data.recordType == 'complaint');
+      allow update: if lead() || (sharedEditor() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isDeleted', 'deletedAt', 'deletedByUserId', 'deletedByName', 'deletionReason'])) || (complaintsOnly() && resource.data.recordType == 'complaint' && request.resource.data.recordType == 'complaint' && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isDeleted', 'deletedAt', 'deletedByUserId', 'deletedByName', 'deletionReason']));
       allow delete: if lead();
     }
     match /ops_complaints/{complaintId} { allow read: if member(); allow create, update: if sharedEditor() || complaintsOnly(); allow delete: if lead(); }
