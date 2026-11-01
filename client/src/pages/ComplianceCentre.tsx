@@ -25,7 +25,7 @@ const emptyForm = (driverId: string, driverName: string): ComplianceForm => ({
 const normalise = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 const nameKey = (value: string) => { const parts=normalise(value).split(" ").filter(Boolean); return parts.length>1 ? `${parts[0]} ${parts[parts.length-1]}` : parts[0]||""; };
 const excludedCpcNames = new Set(["joanne marshall","krzysztof rojek","steven woodward","keith merrick","jordan sharples"]);
-const endorsementNameAliases: Record<string,string> = { "c tilson":"coral tilson", "welby m":"marcus welby" };
+const endorsementNameAliases: Record<string,string> = { "c tilson":"coral tilson", "welby m":"marcus welby", "487":"steven poolton", "steven brian r poolton":"steven poolton" };
 const cpcAliases: Record<string,string> = { "mike todd":"michael todd", "michael todd":"mike todd", "tom sayce":"thomas sayce", "sale griffiths":"dale griffiths", "craig hobin":"steven craig hobin", "andrew ellis":"andy ellis", "patrick nottage":"pat nottage", "stephen hobin":"craig hobin", "mccall aaron":"aaron mccall", "steven king":"steve king", "carleam nuttall":"carl nuttall", "darren lewis":"darren lewis" };
 const parseDate = (value: string) => {
   const raw = value.trim(); if (!raw) return "";
@@ -79,7 +79,8 @@ export default function ComplianceCentre() {
   const endorsementFileRef=useRef<HTMLInputElement>(null);
   const [importingEndorsements,setImportingEndorsements]=useState(false);
   useEffect(()=>{ if(!firebaseDb)return; return onSnapshot(query(collection(firebaseDb,"ops_driver_compliance")),snap=>setRecords(snap.docs.map(item=>({_docId:item.id,...item.data()} as ComplianceRecord))),()=>toast.error("Compliance records could not be loaded.")); },[]);
-  const drivers=useMemo(()=> (state.drivers||[]).filter((d:any)=>d.active!==false).sort((a:any,b:any)=>a.name.localeCompare(b.name)),[state.drivers]);
+  const allDrivers=useMemo(()=>state.drivers||[],[state.drivers]);
+  const drivers=useMemo(()=> allDrivers.filter((d:any)=>d.active!==false).sort((a:any,b:any)=>a.name.localeCompare(b.name)),[allDrivers]);
   const automaticDriverMatch=(row:any)=>{const byId=row.sourceDriverId?drivers.filter((d:any)=>[d.id,d.driverId,d.driverCode].some(value=>value!==undefined&&String(value).trim()===row.sourceDriverId)):[];if(byId.length)return byId;const target=cpcAliases[nameKey(row.driverName)]||nameKey(row.driverName);return drivers.filter((d:any)=>nameKey(d.name)===target);};
   const importDriverFor=(row:any)=>{const automatic=automaticDriverMatch(row);if(automatic.length===1)return automatic[0];const chosen=manualMatches[row.driverName];return chosen?drivers.find((d:any)=>d._docId===chosen):undefined;};
   const readyToImport=preview?preview.rows.filter((row:any)=>!excludedCpcNames.has(nameKey(row.driverName))&&row.licenceValidTo&&!!importDriverFor(row)).length:0;
@@ -135,9 +136,9 @@ export default function ComplianceCentre() {
       const byDriver=new Map<string,any>();
       for(const row of parsed){
         if(!row.driverId||!row.code||!row.offenceDate||!row.expiryDate||!Number.isInteger(row.points)||row.points<1||row.points>11)throw new Error("Invalid endorsement data on CSV line "+row.line+". Check the driver ID, dates and points.");
-        const idMatches=drivers.filter((d:any)=>[d.id,d.driverId,d.driverCode].some(value=>value!==undefined&&String(value).trim().toLowerCase()===row.driverId.toLowerCase()));
+        const idMatches=allDrivers.filter((d:any)=>[d.id,d.driverId,d.driverCode].some(value=>value!==undefined&&String(value).trim().toLowerCase()===row.driverId.toLowerCase()));
         const resolvedName=endorsementNameAliases[nameKey(row.driverName)]||nameKey(row.driverName);
-        const nameMatches=row.driverName?drivers.filter((d:any)=>nameKey(d.name)===resolvedName):[];
+        const nameMatches=row.driverName?allDrivers.filter((d:any)=>nameKey(d.name)===resolvedName||nameKey(d.name).endsWith(" "+resolvedName)):[];
         const driver=idMatches.length===1?idMatches[0]:idMatches.length>1?undefined:nameMatches.length===1?nameMatches[0]:undefined;
         if(!driver){unmatched.push(row.driverId+(row.driverName?" / "+row.driverName:"")+" (line "+row.line+")");continue;}
         const key=driver._docId;
