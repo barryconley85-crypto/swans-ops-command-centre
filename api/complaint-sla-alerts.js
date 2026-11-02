@@ -82,10 +82,20 @@ export function complaintMilestones(complaint, now, holidays = STATIC_BANK_HOLID
   const acknowledgementDueAt = Number(complaint.acknowledgementDueAt) || workingDeadline(receivedAt, 8 * 60, holidays);
   const responseDueAt = Number(complaint.responseDueAt) || workingDeadline(receivedAt, 40 * 60, holidays);
   const candidates = [
-    { kind: "acknowledgement", dueAt: acknowledgementDueAt, complete: Boolean(complaint.acknowledgedAt), marker: "acknowledgementEmailAlertedAt", legacyMarker: "acknowledgementWarningSentAt", threshold: 120 },
-    { kind: "response", dueAt: responseDueAt, complete: Boolean(String(complaint.clientResponse || "").trim()), marker: "responseEmailAlertedAt", legacyMarker: "responseWarningSentAt", threshold: 240 },
+    { kind: "acknowledgement", dueAt: acknowledgementDueAt, complete: Boolean(complaint.acknowledgedAt), warningMarker: "acknowledgementEmailAlertedAt", legacyMarker: "acknowledgementWarningSentAt", overdueMarker: "acknowledgementOverdueEmailAlertedAt", threshold: 120 },
+    { kind: "response", dueAt: responseDueAt, complete: Boolean(String(complaint.clientResponse || "").trim()), warningMarker: "responseEmailAlertedAt", legacyMarker: "responseWarningSentAt", overdueMarker: "responseOverdueEmailAlertedAt", threshold: 240 },
   ];
-  return candidates.filter(item => !item.complete && !complaint[item.marker] && !complaint[item.legacyMarker] && Number.isFinite(item.dueAt) && workingMinutesBetween(now, item.dueAt, holidays) <= item.threshold);
+  return candidates.flatMap(item => {
+    if (item.complete || !Number.isFinite(item.dueAt)) return [];
+    const remaining = workingMinutesBetween(now, item.dueAt, holidays);
+    if (item.dueAt <= now) {
+      return complaint[item.overdueMarker] ? [] : [{ kind: item.kind, status: "overdue", dueAt: item.dueAt, marker: item.overdueMarker }];
+    }
+    if (remaining <= item.threshold && !complaint[item.warningMarker] && !complaint[item.legacyMarker]) {
+      return [{ kind: item.kind, status: "warning", dueAt: item.dueAt, marker: item.warningMarker }];
+    }
+    return [];
+  });
 }
 
 function workingDeadline(from, minutes, holidays) {
@@ -211,10 +221,10 @@ function activeRecipient(members, firstName) {
 
 const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 
-function emailContent(complaint, kind, dueAt, remaining) {
+function emailContent(complaint, kind, status, dueAt, remaining) {
   const acknowledgement = kind === "acknowledgement";
   const label = acknowledgement ? "Client acknowledgement" : "Full client response";
-  const overdue = dueAt <= Date.now();
+  const overdue = status === "overdue";
   const remainingText = overdue ? "SLA deadline has passed" : `${Math.floor(remaining / 60)}h ${remaining % 60}m of working time remaining`;
   const dueText = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", dateStyle: "medium", timeStyle: "short" }).format(new Date(dueAt));
   const subject = `Swans Ops | SLA ${overdue ? "overdue" : "warning"} | ${complaint.reference} | ${label}`;
@@ -255,7 +265,11 @@ export default async function handler(request, response) {
     if (!account?.private_key || !account?.client_email) throw new Error("The Firebase service account configuration is invalid.");
     const holidays = await getEnglandWalesBankHolidays();
     const now = Date.now();
-    if (!isWorkingDay(now, holidays)) return response.status(200).json({ status: "outside_working_days", sent: 0 });
+    const london = dateInLondon(now);
+    const localMinute = Number(london.hour) * 60 + Number(london.minute);
+    if (!isWorkingDay(now, holidays) || localMinute < 540 || localMinute >= 1080) {
+      return response.status(200).json({ status: "outside_alert_window", sent: 0 });
+    }
     const token = await googleAccessToken(account);
     const [complaints, members] = await Promise.all([listCollection(token, "ops_issues"), listCollection(token, "ops_members")]);
     const stephen = activeRecipient(members, "Stephen");
@@ -271,9 +285,9 @@ export default async function handler(request, response) {
       for (const milestone of milestones) {
         if (dryRun) { sent++; continue; }
         try {
-          const content = emailContent(complaint, milestone.kind, milestone.dueAt, workingMinutesBetween(now, milestone.dueAt, holidays));
+          const content = emailContent(complaint, milestone.kind, milestone.status, milestone.dueAt, workingMinutesBetween(now, milestone.dueAt, holidays));
           await sendMail({
-            eventKey: `complaint-sla-${complaint.reference}-${milestone.kind}`,
+            eventKey: `complaint-sla-${complaint.reference}-${milestone.kind}-${milestone.status}`,
             subject: content.subject, text: content.text, html: content.html, to: recipients,
           });
           await markEmailAlertSent(token, complaint.path, milestone.marker, now);
