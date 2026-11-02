@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { firebaseConfigured } from "@/lib/firebase";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
-import { ShieldCheck, ArrowUpRight } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { useState } from "react";
 
 export function WorkEmailGate() {
@@ -35,12 +35,12 @@ export function WorkEmailGate() {
     }
   };
 
-  const heading = mode === "signin" ? "Welcome back" : mode === "signup" ? "Create your access" : "Reset your password";
+  const heading = mode === "signin" ? "Staff login" : mode === "signup" ? "Create account" : "Reset password";
   const description = mode === "signup"
-    ? "Use the work email you have been invited with. Your team lead manages access."
+    ? "Enter your name, work email and choose a password."
     : mode === "reset"
-      ? "Enter your Swans Travel work email and we’ll send reset instructions."
-      : "Sign in with your approved Swans Travel work email.";
+      ? "Enter your work email and we’ll send you a reset link."
+      : "Sign in with your Swans Travel work email and password.";
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-[#F7F6F3] px-4 py-5 text-[#171717] sm:px-6 sm:py-8">
@@ -59,24 +59,19 @@ export function WorkEmailGate() {
             </div>
 
             <div className="mt-12 max-w-lg sm:mt-16 lg:mt-24">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#9A782D]">
-                Operations workspace
-              </p>
-              <h1 className="mt-5 max-w-md text-[2.45rem] font-light leading-[1.12] tracking-[-0.055em] text-[#171717] sm:text-5xl">
-                Keeping every part of the operation <span className="font-medium">connected.</span>
-              </h1>
-              <div className="mt-7 h-px w-16 bg-[#B08B3B]" />
-              <p className="mt-6 max-w-sm text-sm leading-7 text-[#77746E]">
-                One place for daily operations, team coordination and compliance oversight across Swans Travel.
-              </p>
+              <div className="mt-12 max-w-lg sm:mt-16 lg:mt-24">
+                <h1 className="text-3xl font-light tracking-[-0.04em] text-[#171717] sm:text-4xl">
+                  Staff login
+                </h1>
+                <p className="mt-4 max-w-sm text-sm leading-6 text-[#77746E]">
+                  Use your Swans Travel work email to access the system.
+                </p>
+              </div>
             </div>
           </div>
 
-          <div className="mt-12 flex items-start gap-3 border-t border-[#EEECE7] pt-5">
-            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#A17D32]" />
-            <p className="max-w-sm text-xs leading-5 text-[#77746E]">
-              Private team access. Sign in using an approved <strong className="font-semibold text-[#45433E]">@swanstravel.com</strong> work email.
-            </p>
+          <div className="mt-12 border-t border-[#EEECE7] pt-5">
+            <p className="text-xs text-[#77746E]">For Swans Travel staff.</p>
           </div>
 
           <div className="pointer-events-none absolute -bottom-24 -right-16 h-64 w-64 rotate-[-35deg] border-l-[22px] border-[#E9E1D1]/60" />
@@ -85,10 +80,7 @@ export function WorkEmailGate() {
         <section className="flex flex-1 items-center justify-center border-t border-[#EEECE7] bg-[#FBFAF8] px-6 py-10 sm:px-10 lg:border-l lg:border-t-0 lg:px-12">
           <div className="w-full max-w-[390px]">
             <div className="mb-9">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#A17D32]">
-                Secure team access
-              </p>
-              <h2 className="mt-3 text-3xl font-light tracking-[-0.045em] text-[#191919]">{heading}</h2>
+              <h2 className="text-3xl font-light tracking-[-0.045em] text-[#191919]">{heading}</h2>
               <p className="mt-3 text-sm leading-6 text-[#77746E]">{description}</p>
             </div>
 
@@ -160,7 +152,7 @@ export function WorkEmailGate() {
                 className="group h-12 w-full rounded-xl bg-[#202020] text-sm font-semibold text-white shadow-none transition-colors hover:bg-[#3A352B] disabled:opacity-50"
                 disabled={busy || !firebaseConfigured}
               >
-                {busy ? "Please wait…" : mode === "signin" ? "Sign in to Command Centre" : mode === "signup" ? "Create account" : "Send reset link"}
+                {busy ? "Please wait…" : mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Send reset link"}
                 <ArrowUpRight className="ml-2 h-4 w-4 text-[#D7B96F] transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
               </Button>
             </form>
@@ -172,7 +164,7 @@ export function WorkEmailGate() {
                 </button>
               ) : (
                 <button type="button" onClick={() => { setMode("signup"); setMessage(""); }} className="transition-colors hover:text-[#4C3B18]">
-                  First time here?
+                  Create account
                 </button>
               )}
               {mode !== "reset" ? (
@@ -183,7 +175,7 @@ export function WorkEmailGate() {
             </div>
 
             <p className="mt-12 border-t border-[#EAE7E0] pt-5 text-[10px] leading-5 tracking-[0.04em] text-[#9A978F]">
-              SWANS TRAVEL <span className="px-1.5 text-[#B08B3B]">/</span> OPERATIONS COMMAND CENTRE
+              SWANS TRAVEL
             </p>
           </div>
         </section>
