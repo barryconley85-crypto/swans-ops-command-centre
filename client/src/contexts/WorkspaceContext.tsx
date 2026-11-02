@@ -96,7 +96,17 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const workspaceState = useMemo(() => { const members = [...memberProfiles, ...invitations.filter(invitation => !memberProfiles.some(member => member.email === invitation.email))]; return { ...state, members }; }, [state, memberProfiles, invitations]);
   const refresh = useCallback(async () => {
     const database = firebaseDb;
-    if (!database || !authUser || !activeKeys.length) return;
+    if (!database || !authUser) return;
+    if (!activeKeys.length) {
+      try {
+        const snapshot = await getDoc(doc(database, "ops_members", authUser.uid));
+        setProfile(snapshot.exists() ? { userId: authUser.uid, ...snapshot.data() } as Member : null);
+        setError(null);
+      } catch (reason) {
+        setError(reason instanceof Error ? reason : new Error("Unable to reload your operations profile."));
+      }
+      return;
+    }
     const grouped = new Map<string, WorkspaceCollection[]>();
     for (const key of activeKeys) grouped.set(collectionMap[key], [...(grouped.get(collectionMap[key]) || []), key]);
     const pairs = await Promise.all([...grouped.entries()].map(async ([name, keys]) => {
