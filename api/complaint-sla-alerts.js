@@ -204,7 +204,7 @@ async function listCollection(token, collection) {
   do {
     const url = `${FIRESTORE}/${collection}?pageSize=1000${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`;
     const result = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    if (!result.ok) throw new Error(`Could not read the ${collection} records from Firebase (HTTP ${result.status}).`);
+    if (!result.ok) { const errorBody = await result.json().catch(() => ({})); const reason = errorBody?.error?.status || errorBody?.error?.errors?.[0]?.reason; throw new Error(`Could not read the ${collection} records from Firebase (HTTP ${result.status}${reason ? ` ${reason}` : ""}).`); }
     const body = await result.json();
     for (const doc of body.documents || []) documents.push({ path: doc.name, id: doc.name.split("/").pop(), ...decodeFields(doc.fields) });
     pageToken = body.nextPageToken || "";
