@@ -47,41 +47,20 @@ export function WorkEmailGate() {
       <div className="pointer-events-none absolute -right-28 -top-32 h-80 w-80 rounded-full border border-[#D8C9A3]/40" />
       <div className="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full border border-[#D8C9A3]/30" />
 
-      <div className="relative mx-auto flex min-h-[calc(100svh-2.5rem)] w-full max-w-6xl flex-col overflow-hidden rounded-[1.6rem] border border-[#E8E5DE] bg-white shadow-[0_28px_80px_-48px_rgba(31,29,24,0.28)] sm:min-h-[calc(100svh-4rem)] lg:grid lg:grid-cols-[1.05fr_0.95fr]">
-        <section className="relative flex flex-col justify-between overflow-hidden bg-white px-7 py-8 sm:px-10 sm:py-10 lg:px-14 lg:py-12">
-          <div>
-            <div className="flex min-h-20 items-center">
-              <img
-                src="/swans-travel-logo-header.png"
-                alt="Swans Travel, part of the Coach Travel Group"
-                className="h-auto w-[230px] max-w-full object-contain object-left"
-              />
-            </div>
-
-            <div className="mt-12 max-w-lg sm:mt-16 lg:mt-24">
-              <div className="mt-12 max-w-lg sm:mt-16 lg:mt-24">
-                <h1 className="text-3xl font-light tracking-[-0.04em] text-[#171717] sm:text-4xl">
-                  Staff login
-                </h1>
-                <p className="mt-4 max-w-sm text-sm leading-6 text-[#77746E]">
-                  Use your Swans Travel work email to access the system.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-12 border-t border-[#EEECE7] pt-5">
-            <p className="text-xs text-[#77746E]">For Swans Travel staff.</p>
-          </div>
-
-          <div className="pointer-events-none absolute -bottom-24 -right-16 h-64 w-64 rotate-[-35deg] border-l-[22px] border-[#E9E1D1]/60" />
+      <div className="relative mx-auto flex w-full max-w-6xl flex-col overflow-hidden rounded-[1.6rem] border border-[#E8E5DE] bg-white shadow-[0_20px_60px_-44px_rgba(31,29,24,0.24)] lg:min-h-[calc(100svh-4rem)] lg:grid lg:grid-cols-[1.05fr_0.95fr]">
+        <section className="relative bg-white px-7 py-6 sm:px-10 sm:py-8 lg:flex lg:items-start lg:px-14 lg:py-12">
+          <img
+            src="/swans-travel-logo-header.png"
+            alt="Swans Travel, part of the Coach Travel Group"
+            className="h-auto w-[210px] max-w-full object-contain object-left sm:w-[230px]"
+          />
         </section>
 
-        <section className="flex flex-1 items-center justify-center border-t border-[#EEECE7] bg-[#FBFAF8] px-6 py-10 sm:px-10 lg:border-l lg:border-t-0 lg:px-12">
+        <section className="flex flex-1 items-center justify-center border-t border-[#EEECE7] bg-[#FBFAF8] px-6 py-8 sm:px-10 sm:py-10 lg:border-l lg:border-t-0 lg:px-12">
           <div className="w-full max-w-[390px]">
-            <div className="mb-9">
+            <div className="mb-7">
               <h2 className="text-3xl font-light tracking-[-0.045em] text-[#191919]">{heading}</h2>
-              <p className="mt-3 text-sm leading-6 text-[#77746E]">{description}</p>
+              <p className="mt-2 text-sm leading-6 text-[#77746E]">{description}</p>
             </div>
 
             {!firebaseConfigured ? (
@@ -174,7 +153,7 @@ export function WorkEmailGate() {
               ) : null}
             </div>
 
-            <p className="mt-12 border-t border-[#EAE7E0] pt-5 text-[10px] leading-5 tracking-[0.04em] text-[#9A978F]">
+            <p className="mt-8 border-t border-[#EAE7E0] pt-4 text-[10px] leading-5 tracking-[0.04em] text-[#9A978F]">
               SWANS TRAVEL
             </p>
           </div>
