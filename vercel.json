@@ -9,7 +9,7 @@
   "crons": [
     {
       "path": "/api/complaint-sla-alerts",
-      "schedule": "0 18 * * 1-5"
+      "schedule": "*/15 8-18 * * 1-5"
     },
     {
       "path": "/api/driver-compliance-alerts",
