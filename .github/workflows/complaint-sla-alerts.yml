@@ -1,5 +1,5 @@
 name: Complaint SLA email monitor
-# Production alias refreshed after CRON_SECRET update, trigger a verification run.
+# Production alias refreshed after CRON_SECRET update, verification run.
 
 on:
   push:
