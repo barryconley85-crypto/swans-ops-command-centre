@@ -17,7 +17,7 @@ const depotName = (slug: string) => depots.find(depot => depot.slug === slug)?.n
 const csvEscape = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
 
 export default function DriverSignOn() {
-  const { profile, state, refresh } = useWorkspace();
+  const { profile, state, refresh } = useWorkspace(["signOns", "drivers"]);
   const [name, setName] = useState("");
   const [driverDepot, setDriverDepot] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
@@ -39,19 +39,19 @@ export default function DriverSignOn() {
     try {
       if (editing) await updateDoc(doc(firebaseDb, "ops_drivers", editing), { name: trimmed, depot: driverDepot, updatedAt: Date.now() });
       else await addDoc(collection(firebaseDb, "ops_drivers"), { name: trimmed, depot: driverDepot, active: true, createdAt: Date.now(), updatedAt: Date.now() });
-      setName(""); setDriverDepot(""); setEditing(null); setShowForm(false); await refresh(); toast.success(editing ? "Driver updated." : "Driver added.");
+      setName(""); setDriverDepot(""); setEditing(null); setShowForm(false);  toast.success(editing ? "Driver updated." : "Driver added.");
     } catch (error) { toast.error(error instanceof Error ? error.message : "Driver could not be saved."); }
   };
   const removeDriver = async (driver: any) => {
     if (!firebaseDb || !window.confirm(`Remove ${driver.name} from the active driver list? Existing sign-on history will remain.`)) return;
-    try { await updateDoc(doc(firebaseDb, "ops_drivers", driver._docId), { active: false, updatedAt: Date.now() }); await refresh(); toast.success("Driver removed from the active list."); } catch (error) { toast.error(error instanceof Error ? error.message : "Driver could not be removed."); }
+    try { await updateDoc(doc(firebaseDb, "ops_drivers", driver._docId), { active: false, updatedAt: Date.now() });  toast.success("Driver removed from the active list."); } catch (error) { toast.error(error instanceof Error ? error.message : "Driver could not be removed."); }
   };
   const importCsv = async (file: File) => {
     if (!firebaseDb) return;
     const lines = (await file.text()).split(/\r?\n/).map(line => line.trim()).filter(Boolean);
     const rows = lines.slice(/^name\s*(,|$)/i.test(lines[0] || "") ? 1 : 0).map(line => { const columns = line.split(",").map(value => value.replace(/^"|"$/g, "").trim()); const depotValue = columns[1]?.toLowerCase(); const depot = depotValue === "alderly park" ? "alderly-park" : depotValue === "travelmaster" ? "travelmaster" : depotValue === "swans" ? "swans" : depotValue === "cheltenham" ? "cheltenham" : depotValue === "unassigned" || !depotValue ? "" : columns[1] || ""; return { name: columns[0], depot }; }).filter(row => row.name);
     if (!rows.length || rows.some(row => row.depot && !depots.some(depot => depot.slug === row.depot))) return toast.error("CSV must include name and depot columns using Travelmaster, Alderly Park, Swans, Cheltenham, or Unassigned.");
-    try { for (const row of rows) { const existing = activeDrivers.find((driver: any) => driver.name.trim().toLowerCase() === row.name.trim().toLowerCase()); if (existing) await updateDoc(doc(firebaseDb, "ops_drivers", existing._docId), { name: row.name, depot: row.depot, active: true, updatedAt: Date.now() }); else await addDoc(collection(firebaseDb, "ops_drivers"), { name: row.name, depot: row.depot, active: true, createdAt: Date.now(), updatedAt: Date.now() }); } await refresh(); toast.success(`${rows.length} driver${rows.length === 1 ? "" : "s"} imported or updated.`); } catch (error) { toast.error(error instanceof Error ? error.message : "CSV import failed."); }
+    try { for (const row of rows) { const existing = activeDrivers.find((driver: any) => driver.name.trim().toLowerCase() === row.name.trim().toLowerCase()); if (existing) await updateDoc(doc(firebaseDb, "ops_drivers", existing._docId), { name: row.name, depot: row.depot, active: true, updatedAt: Date.now() }); else await addDoc(collection(firebaseDb, "ops_drivers"), { name: row.name, depot: row.depot, active: true, createdAt: Date.now(), updatedAt: Date.now() }); }  toast.success(`${rows.length} driver${rows.length === 1 ? "" : "s"} imported or updated.`); } catch (error) { toast.error(error instanceof Error ? error.message : "CSV import failed."); }
   };
   const exportCsv = () => {
     const rows = ["name,depot,active", ...activeDrivers.map((driver: any) => `${csvEscape(driver.name)},${csvEscape(driver.depot ? depotName(driver.depot) : "Unassigned")},${driver.active !== false}`)];
