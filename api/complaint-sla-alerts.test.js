@@ -29,6 +29,26 @@ describe("complaint SLA clock", () => {
     expect(complaintMilestones({ ...complaint, stage: "closed" }, minute("2026-01-05T16:00:00Z"), holidays)).toEqual([]);
   });
 
+  it("sends a separate overdue alert after a warning has already been sent", () => {
+    const complaint = {
+      recordType: "complaint", stage: "investigating", receivedAt: minute("2026-01-05T09:00:00Z"),
+      reference: "CMP-2026-0002", acknowledgementDueAt: minute("2026-01-05T17:00:00Z"),
+      responseDueAt: minute("2026-01-09T17:00:00Z"), acknowledgedAt: null, clientResponse: "",
+      acknowledgementEmailAlertedAt: minute("2026-01-05T15:00:00Z"),
+    };
+    const alerts = complaintMilestones(complaint, minute("2026-01-06T09:00:00Z"), holidays);
+    expect(alerts).toContainEqual(expect.objectContaining({ kind: "acknowledgement", status: "overdue", marker: "acknowledgementOverdueEmailAlertedAt" }));
+  });
+
+  it("does not send a second overdue alert after its delivery marker is set", () => {
+    const complaint = {
+      recordType: "complaint", stage: "investigating", receivedAt: minute("2026-01-05T09:00:00Z"),
+      acknowledgementDueAt: minute("2026-01-05T17:00:00Z"), responseDueAt: minute("2026-01-09T17:00:00Z"),
+      acknowledgedAt: null, clientResponse: "", acknowledgementOverdueEmailAlertedAt: 1,
+    };
+    expect(complaintMilestones(complaint, minute("2026-01-06T09:00:00Z"), holidays).map(item => item.kind)).not.toContain("acknowledgement");
+  });
+
   it("loads the official England and Wales holiday calendar", async () => {
     const list = await getEnglandWalesBankHolidays(async () => ({ ok: true, json: async () => ({ "england-and-wales": { events: [{ date: "2026-12-25" }, { date: "invalid" }] } }) }));
     expect(list).toEqual(["2026-12-25"]);
