@@ -1,4 +1,5 @@
 name: Complaint SLA email monitor
+# Updated to trigger a fresh check after CRON_SECRET was added to GitHub.
 
 on:
   push:
