@@ -27,9 +27,36 @@ import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 import { trpc } from "@/lib/trpc";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { activePresence } from "@/lib/presence";
 import { InitialsCircle } from "@/components/ColleagueMarker";
 import { toast } from "sonner";
+
+const collectionsForPath = (path: string): string[] => {
+  const common = ["members", "presence", "notifications"];
+  const byPath: Record<string, string[]> = {
+    "/": ["tasks", "rota", "handovers", "issues", "onCallItems", "helpRequests", "readiness", "shiftPrompts", "templates"],
+    "/exceptions": ["tasks", "rota", "handovers", "issues", "onCallItems", "helpRequests", "readiness", "shiftPrompts"],
+    "/my-shift": ["tasks", "rota", "handovers", "helpRequests", "shiftPrompts"],
+    "/shift-check": ["rota", "shiftPrompts"],
+    "/profile": [],
+    "/activity": ["auditLogs"],
+    "/help": ["helpRequests"],
+    "/tasks": ["tasks", "activities", "taskAttachments", "issues", "rota"],
+    "/rota": ["rota", "templates"],
+    "/on-call": ["onCallItems", "rota", "tasks", "helpRequests", "chatMessages"],
+    "/chat": ["chatMessages"],
+    "/handover": ["handovers"],
+    "/issues": ["issues"],
+    "/complaints": ["complaints", "drivers"],
+    "/reports": ["complaints", "reportViews", "drivers", "tasks", "notes"],
+    "/people": ["tasks", "notes"],
+    "/driver-sign-on": ["signOns", "drivers"],
+    "/driver-attendance": ["drivers", "attendance"],
+    "/compliance": ["drivers"]
+  };
+  return [...new Set([...common, ...(byPath[path] || [])])];
+};
 
 const DESKTOP_ALERTS_KEY = "ops-desktop-alerts";
 
@@ -114,6 +141,7 @@ function DashboardLayoutContent({
   const presence = trpc.operations.presence.list.useQuery();
   const activeTeam = activePresence(presence.data || []);
   const [location, setLocation] = useLocation();
+  useWorkspace(collectionsForPath(location));
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
