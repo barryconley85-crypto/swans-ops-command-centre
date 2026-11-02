@@ -17,7 +17,7 @@ const escapeCell = (value: unknown) => `"${String(value ?? "").replaceAll('"', '
 
 export default function Reports() {
   const { user } = useAuth();
-  const workspace = useWorkspace(["complaints", "reportViews", "members"]);
+  const workspace = useWorkspace();
   const today = localDateKey();
   const [reportId, setReportId] = useState("risk-radar");
   const [rangeStart, setRangeStart] = useState(localDateKey(addDays(new Date(), -6)));

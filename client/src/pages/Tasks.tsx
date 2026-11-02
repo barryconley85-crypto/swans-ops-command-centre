@@ -49,7 +49,7 @@ function TaskStatusBadge({ status }: { status: TaskRow["status"] }) {
 
 function TaskDetail({ task, selectedDate, isManager = false, members = [] }: { task: TaskRow; selectedDate: string; isManager?: boolean; members?: any[] }) {
   const utils = trpc.useUtils();
-  const { state, addTaskResource, removeTaskResource } = useWorkspace(["taskAttachments", "activities", "issues", "rota"]);
+  const { state, addTaskResource, removeTaskResource } = useWorkspace();
   const { user: currentUser } = useAuth();
   const canManageTasks = isManager || Boolean(currentUser?.canManageOperations);
   const [comment, setComment] = useState("");
@@ -175,7 +175,7 @@ Reason: ${reason.trim()}`)) deleteMutation.mutate({ taskId: task.id, reason: rea
 
 export default function Tasks() {
   const { user } = useAuth();
-  const { state, addTaskResource } = useWorkspace(["taskAttachments", "activities", "issues", "rota"]);
+  const { state, addTaskResource } = useWorkspace();
   const [selectedDate, setSelectedDate] = useState(localDateKey());
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [showTemplateForm, setShowTemplateForm] = useState(false);
