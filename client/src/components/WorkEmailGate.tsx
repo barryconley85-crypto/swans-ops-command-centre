@@ -49,11 +49,16 @@ export function WorkEmailGate() {
 
       <div className="relative mx-auto flex w-full max-w-6xl flex-col overflow-hidden rounded-[1.6rem] border border-[#E8E5DE] bg-white shadow-[0_20px_60px_-44px_rgba(31,29,24,0.24)] lg:min-h-[calc(100svh-4rem)] lg:grid lg:grid-cols-[1.05fr_0.95fr]">
         <section className="relative bg-white px-7 py-6 sm:px-10 sm:py-8 lg:flex lg:items-start lg:px-14 lg:py-12">
-          <img
-            src="/swans-travel-logo-header.png"
-            alt="Swans Travel, part of the Coach Travel Group"
-            className="h-auto w-[210px] max-w-full object-contain object-left sm:w-[230px]"
-          />
+          <div>
+            <img
+              src="/swans-travel-logo-header.png"
+              alt="Swans Travel, part of the Coach Travel Group"
+              className="h-auto w-[210px] max-w-full object-contain object-left sm:w-[230px]"
+            />
+            <p className="mt-3 text-sm font-medium tracking-wide text-[#55534E]">
+              Operations Command Centre
+            </p>
+          </div>
         </section>
 
         <section className="flex flex-1 items-center justify-center border-t border-[#EEECE7] bg-[#FBFAF8] px-6 py-8 sm:px-10 sm:py-10 lg:border-l lg:border-t-0 lg:px-12">
