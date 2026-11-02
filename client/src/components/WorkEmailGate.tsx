@@ -3,7 +3,167 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { firebaseConfigured } from "@/lib/firebase";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
-import { ShieldCheck } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { useState } from "react";
 
-export function WorkEmailGate() { const { signIn, signUp, resetPassword } = useWorkspace(); const [mode, setMode] = useState<"signin" | "signup" | "reset">("signin"); const [email, setEmail] = useState(""); const [password, setPassword] = useState(""); const [name, setName] = useState(""); const [busy, setBusy] = useState(false); const [message, setMessage] = useState(""); const submit = async () => { setBusy(true); setMessage(""); try { if (mode === "signin") await signIn(email, password); else if (mode === "signup") { await signUp(name, email, password); setMessage("Your account is ready. Check your work inbox to verify the email address."); } else { await resetPassword(email); setMessage("Password reset instructions have been sent if that work email is registered."); } } catch (reason) { setMessage(reason instanceof Error ? reason.message : "Sign-in could not be completed."); } finally { setBusy(false); } }; return <div className="min-h-screen bg-[#F8FAF8] p-5"><div className="mx-auto grid min-h-[calc(100vh-40px)] max-w-5xl overflow-hidden rounded-3xl border border-[#E0E8E3] bg-white shadow-[0_32px_80px_-48px_rgba(14,51,43,0.65)] lg:grid-cols-[1.05fr_0.95fr]"><section className="bg-[#1B3933] p-8 text-white md:p-12"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 text-sm font-bold tracking-[0.1em]">SW</span><p className="mt-12 text-[11px] font-bold uppercase tracking-[0.18em] text-[#BBD5CB]">Swans Travel</p><h1 className="mt-3 max-w-md text-4xl font-semibold leading-tight tracking-[-0.05em]">Operations command centre.</h1><p className="mt-5 max-w-sm text-sm leading-6 text-[#C7DAD3]">A focused private workspace for daily control, team continuity and operational accountability.</p><div className="mt-14 border-t border-white/15 pt-5 text-xs leading-5 text-[#B8D0C7]"><ShieldCheck className="mb-2 h-4 w-4" />Access is restricted to approved <strong>@swanstravel.com</strong> work-email accounts.</div></section><section className="flex items-center p-7 md:p-12"><div className="w-full max-w-sm"><p className="text-[11px] font-bold uppercase tracking-[0.15em] text-[#708078]">Secure team access</p><h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-[#1F2C27]">{mode === "signin" ? "Welcome back" : mode === "signup" ? "Create your access" : "Reset your password"}</h2><p className="mt-2 text-sm leading-6 text-[#6D7873]">{mode === "signup" ? "Use the email you have been invited with. Your lead manages the team directory." : "Use your approved Swans Travel work email to continue."}</p>{!firebaseConfigured ? <p className="mt-5 rounded-xl bg-[#FFF2E8] p-3 text-xs leading-5 text-[#A15F1F]">Firebase is not configured. Add the Vercel environment variables from `.env.example` before production login.</p> : null}<form className="mt-7 space-y-4" onSubmit={event => { event.preventDefault(); if (!busy && firebaseConfigured) void submit(); }}>{mode === "signup" ? <div className="space-y-2"><Label>Name</Label><Input value={name} onChange={event => setName(event.target.value)} placeholder="Your name" /></div> : null}<div className="space-y-2"><Label>Work email</Label><Input type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="name@swanstravel.com" /></div>{mode !== "reset" ? <div className="space-y-2"><Label>Password</Label><Input type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="Your password" /></div> : null}{message ? <p className="rounded-xl bg-[#F1F6F3] p-3 text-xs leading-5 text-[#426D5B]">{message}</p> : null}<Button type="submit" className="w-full bg-[#1D5C63] hover:bg-[#164B50]" disabled={busy || !firebaseConfigured}>{busy ? "Please wait…" : mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Send reset link"}</Button></form><div className="mt-5 flex flex-wrap gap-x-4 gap-y-2 text-xs font-semibold text-[#25646A]">{mode !== "signin" ? <button onClick={() => setMode("signin")}>Sign in</button> : <button onClick={() => setMode("signup")}>First time here?</button>}{mode !== "reset" ? <button onClick={() => setMode("reset")}>Forgot password?</button> : null}</div></div></section></div></div>; }
+export function WorkEmailGate() {
+  const { signIn, signUp, resetPassword } = useWorkspace();
+  const [mode, setMode] = useState<"signin" | "signup" | "reset">("signin");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+
+  const submit = async () => {
+    setBusy(true);
+    setMessage("");
+    try {
+      if (mode === "signin") {
+        await signIn(email, password);
+      } else if (mode === "signup") {
+        await signUp(name, email, password);
+        setMessage("Your account is ready. Check your work inbox to verify the email address.");
+      } else {
+        await resetPassword(email);
+        setMessage("Password reset instructions have been sent if that work email is registered.");
+      }
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Sign-in could not be completed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const heading = mode === "signin" ? "Staff login" : mode === "signup" ? "Create account" : "Reset password";
+  const description = mode === "signup"
+    ? "Enter your name, work email and choose a password."
+    : mode === "reset"
+      ? "Enter your work email and we’ll send you a reset link."
+      : "Sign in with your Swans Travel work email and password.";
+
+  return (
+    <main className="relative min-h-screen overflow-hidden bg-[#F7F6F3] px-4 py-5 text-[#171717] sm:px-6 sm:py-8">
+      <div className="pointer-events-none absolute -right-28 -top-32 h-80 w-80 rounded-full border border-[#D8C9A3]/40" />
+      <div className="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full border border-[#D8C9A3]/30" />
+
+      <div className="relative mx-auto flex w-full max-w-6xl flex-col overflow-hidden rounded-[1.6rem] border border-[#E8E5DE] bg-white shadow-[0_20px_60px_-44px_rgba(31,29,24,0.24)] lg:min-h-[calc(100svh-4rem)] lg:grid lg:grid-cols-[1.05fr_0.95fr]">
+        <section className="relative bg-white px-7 py-6 sm:px-10 sm:py-8 lg:flex lg:items-start lg:px-14 lg:py-12">
+          <div>
+            <img
+              src="/swans-travel-logo-header.png"
+              alt="Swans Travel, part of the Coach Travel Group"
+              className="h-auto w-[210px] max-w-full object-contain object-left sm:w-[230px]"
+            />
+            <p className="mt-3 text-sm font-medium tracking-wide text-[#55534E]">
+              Operations Command Centre
+            </p>
+          </div>
+        </section>
+
+        <section className="flex flex-1 items-center justify-center border-t border-[#EEECE7] bg-[#FBFAF8] px-6 py-8 sm:px-10 sm:py-10 lg:border-l lg:border-t-0 lg:px-12">
+          <div className="w-full max-w-[390px]">
+            <div className="mb-7">
+              <h2 className="text-3xl font-light tracking-[-0.045em] text-[#191919]">{heading}</h2>
+              <p className="mt-2 text-sm leading-6 text-[#77746E]">{description}</p>
+            </div>
+
+            {!firebaseConfigured ? (
+              <p className="mb-5 rounded-xl border border-[#E8D6B8] bg-[#FBF4E8] p-3 text-xs leading-5 text-[#8A6425]">
+                Firebase is not configured. Add the Vercel environment variables from <code>.env.example</code> before production login.
+              </p>
+            ) : null}
+
+            <form
+              className="space-y-5"
+              onSubmit={event => {
+                event.preventDefault();
+                if (!busy && firebaseConfigured) void submit();
+              }}
+            >
+              {mode === "signup" ? (
+                <div className="space-y-2">
+                  <Label htmlFor="swans-name" className="text-xs font-semibold text-[#4C4A45]">Your name</Label>
+                  <Input
+                    id="swans-name"
+                    value={name}
+                    onChange={event => setName(event.target.value)}
+                    placeholder="Your name"
+                    autoComplete="name"
+                    className="h-12 rounded-xl border-[#E4E0D7] bg-white px-4 text-sm shadow-none placeholder:text-[#AAA69D] focus-visible:border-[#B08B3B] focus-visible:ring-[#B08B3B]/20"
+                  />
+                </div>
+              ) : null}
+
+              <div className="space-y-2">
+                <Label htmlFor="swans-email" className="text-xs font-semibold text-[#4C4A45]">Work email</Label>
+                <Input
+                  id="swans-email"
+                  type="email"
+                  value={email}
+                  onChange={event => setEmail(event.target.value)}
+                  placeholder="name@swanstravel.com"
+                  autoComplete="email"
+                  required
+                  className="h-12 rounded-xl border-[#E4E0D7] bg-white px-4 text-sm shadow-none placeholder:text-[#AAA69D] focus-visible:border-[#B08B3B] focus-visible:ring-[#B08B3B]/20"
+                />
+              </div>
+
+              {mode !== "reset" ? (
+                <div className="space-y-2">
+                  <Label htmlFor="swans-password" className="text-xs font-semibold text-[#4C4A45]">Password</Label>
+                  <Input
+                    id="swans-password"
+                    type="password"
+                    value={password}
+                    onChange={event => setPassword(event.target.value)}
+                    placeholder="Your password"
+                    autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                    required
+                    className="h-12 rounded-xl border-[#E4E0D7] bg-white px-4 text-sm shadow-none placeholder:text-[#AAA69D] focus-visible:border-[#B08B3B] focus-visible:ring-[#B08B3B]/20"
+                  />
+                </div>
+              ) : null}
+
+              {message ? (
+                <p role="status" className="rounded-xl border border-[#E8E2D5] bg-[#F5F2EB] p-3 text-xs leading-5 text-[#62563D]">
+                  {message}
+                </p>
+              ) : null}
+
+              <Button
+                type="submit"
+                className="group h-12 w-full rounded-xl bg-[#202020] text-sm font-semibold text-white shadow-none transition-colors hover:bg-[#3A352B] disabled:opacity-50"
+                disabled={busy || !firebaseConfigured}
+              >
+                {busy ? "Please wait…" : mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Send reset link"}
+                <ArrowUpRight className="ml-2 h-4 w-4 text-[#D7B96F] transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+              </Button>
+            </form>
+
+            <div className="mt-6 flex flex-wrap gap-x-5 gap-y-3 text-xs font-semibold text-[#8A6B2D]">
+              {mode !== "signin" ? (
+                <button type="button" onClick={() => { setMode("signin"); setMessage(""); }} className="transition-colors hover:text-[#4C3B18]">
+                  Back to sign in
+                </button>
+              ) : (
+                <button type="button" onClick={() => { setMode("signup"); setMessage(""); }} className="transition-colors hover:text-[#4C3B18]">
+                  Create account
+                </button>
+              )}
+              {mode !== "reset" ? (
+                <button type="button" onClick={() => { setMode("reset"); setMessage(""); }} className="transition-colors hover:text-[#4C3B18]">
+                  Forgot password?
+                </button>
+              ) : null}
+            </div>
+
+            <p className="mt-8 border-t border-[#EAE7E0] pt-4 text-[10px] leading-5 tracking-[0.04em] text-[#9A978F]">
+              SWANS TRAVEL
+            </p>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
