@@ -49,7 +49,7 @@ export default function Rota() {
   const applyTemplate = trpc.operations.rota.applyTemplate.useMutation({ onSuccess: async result => { await rota.refetch(); toast.success(`${result?.created || "Template"} assignments added to this week.`); }, onError: error => toast.error(error.message) });
   const removeTemplate = trpc.operations.rota.removeTemplate.useMutation({ onSuccess: async () => { await templates.refetch(); toast.success("Rota template deleted."); }, onError: error => toast.error(error.message) });
   const days = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(new Date(`${weekStart}T12:00:00`), index)), [weekStart]);
-  const activeMembers = team.data?.filter(member => member.status !== "inactive") ?? [];
+  const activeMembers = team.data?.filter(member => member.status !== "inactive" && member.memberRole !== "complaints") ?? [];
   const assignmentFor = (memberId: number, date: Date) => rota.data?.assignments.filter(item => item.teamMemberId === memberId && item.workDate === localDateKey(date)) ?? [];
   const onCallGaps = days.filter(day => !(rota.data?.assignments.some(item => item.workDate === localDateKey(day) && item.assignmentType === "on_call")));
   const counts = activeMembers.map(member => ({ member, onCall: rota.data?.assignments.filter(item => item.teamMemberId === member.id && item.assignmentType === "on_call").length ?? 0, shifts: rota.data?.assignments.filter(item => item.teamMemberId === member.id && ["early", "core", "late"].includes(item.assignmentType)).length ?? 0 }));
@@ -64,6 +64,7 @@ export default function Rota() {
 
   const submit = async () => {
     if (!form.teamMemberId) return toast.error("Choose the team member who owns this shift.");
+    if (!activeMembers.some(member => member.id === Number(form.teamMemberId))) return toast.error("Only active operations-team members can be allocated on the rota.");
     const isTimedShift = !["leave", "unavailable", "on_call", "escalation_manager", "holiday"].includes(form.assignmentType);
     const basePayload = {
       teamMemberId: Number(form.teamMemberId),
