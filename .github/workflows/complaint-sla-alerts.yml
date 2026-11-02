@@ -1,6 +1,11 @@
 name: Complaint SLA email monitor
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/complaint-sla-alerts.yml"
   schedule:
     - cron: "*/15 7-17 * * 1-5"
   workflow_dispatch:
