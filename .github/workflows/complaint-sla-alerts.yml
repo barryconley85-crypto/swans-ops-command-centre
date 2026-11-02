@@ -1,0 +1,23 @@
+name: Complaint SLA email monitor
+
+on:
+  schedule:
+    - cron: "*/15 8-17 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-complaints:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check complaint deadlines
+        if: ${{ secrets.CRON_SECRET != '' }}
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl --fail-with-body --silent --show-error \
+            --retry 2 --retry-delay 5 \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "https://swans-ops-command-centre.vercel.app/api/complaint-sla-alerts"
