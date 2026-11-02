@@ -1,5 +1,5 @@
 name: Complaint SLA email monitor
-# Updated to trigger a fresh check after CRON_SECRET was added to GitHub.
+# Production alias refreshed after CRON_SECRET update, trigger a verification run.
 
 on:
   push:
