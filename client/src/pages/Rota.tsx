@@ -15,14 +15,14 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 const assignmentStyle: Record<string, string> = {
-  early: "border-[#B8D5C8] bg-[#E8F3EE] text-[#276D57]",
-  core: "border-[#BCD8DF] bg-[#E9F4F6] text-[#327183]",
-  late: "border-[#DED0B6] bg-[#FFF5E7] text-[#9A641D]",
-  on_call: "border-[#C7C5DF] bg-[#F0EFFA] text-[#625996]",
-  escalation_manager: "border-[#B8D7F0] bg-[#EAF5FF] text-[#245D8C]",
-  leave: "border-[#F1C9C3] bg-[#FFF0EE] text-[#B44C40]",
-  unavailable: "border-[#F1C9C3] bg-[#FFF0EE] text-[#B44C40]",
-  holiday: "border-[#D6C8E9] bg-[#F6F0FB] text-[#79589C]",
+  early: "border-[#A9CDBD] bg-[#E7F2EC] text-[#245B49]",
+  core: "border-[#B7CDE5] bg-[#E8F0FA] text-[#244F7B]",
+  late: "border-[#DCCBAE] bg-[#F7F0E5] text-[#76521E]",
+  on_call: "border-[#C9C5E0] bg-[#F0EFF8] text-[#514A7E]",
+  escalation_manager: "border-[#B7CFE5] bg-[#EAF2FA] text-[#244F70]",
+  leave: "border-[#E6C6C0] bg-[#F9EFED] text-[#8D453D]",
+  unavailable: "border-[#E6C6C0] bg-[#F9EFED] text-[#8D453D]",
+  holiday: "border-[#D9CBE5] bg-[#F4EFF8] text-[#624B79]",
 };
 
 export default function Rota() {
@@ -158,17 +158,17 @@ export default function Rota() {
     <section className="mb-6"><GapCard icon={<CircleAlert className="h-5 w-5" />} label="On-call gaps" description={onCallGaps.length ? `${onCallGaps.map(day => format(day, "EEE d")).join(", ")} currently has no named on-call lead.` : "Every day this week has a named on-call lead."} alert={Boolean(onCallGaps.length)} /></section>
     <Panel className="overflow-x-auto">
       <div className="min-w-[910px]">
-        <div className="grid grid-cols-[200px_repeat(7,minmax(100px,1fr))] border-b border-[#E1E8F0] bg-[#FAFBFA]">
-          <div className="px-5 py-4 text-[10px] font-bold uppercase tracking-[0.14em] text-[#718096]">Team</div>
-          {days.map(day => <div key={day.toISOString()} className={`border-l border-[#E1E8F0] px-3 py-3 ${localDateKey(day) === localDateKey() ? "bg-[#EDF6F1]" : ""}`}><p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#718096]">{format(day, "EEE")}</p><p className="mt-1 text-sm font-semibold text-[#24364B]">{format(day, "d MMM")}</p></div>)}
+        <div className="grid grid-cols-[200px_repeat(7,minmax(100px,1fr))] border-b border-[#173B63] bg-[#173B63]">
+          <div className="px-5 py-4 text-[10px] font-bold uppercase tracking-[0.14em] text-white">Team</div>
+          {days.map(day => <div key={day.toISOString()} className={`border-l border-white/20 px-3 py-3 ${localDateKey(day) === localDateKey() ? "bg-[#315F91]" : "bg-[#21466F]"}`}><p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#DCEAF8]">{format(day, "EEE")}</p><p className="mt-1 text-sm font-semibold text-white">{format(day, "d MMM")}</p></div>)}
         </div>
         {activeMembers.length ? activeMembers.map(member => (
           <div key={member.id} className="grid grid-cols-[200px_repeat(7,minmax(100px,1fr))] border-b border-[#E9EEF5] last:border-0">
             <div className="flex items-center gap-3 px-5 py-4"><ColleagueMarker member={member} showRole /></div>
             {days.map(day => {
               const assignments = assignmentFor(member.id, day);
-              return <div key={day.toISOString()} className={`min-h-[86px] border-l border-[#E9EEF5] p-2 ${assignments.some(item => item.assignmentType === "on_call") ? "bg-[#FAF9FF]" : localDateKey(day) === localDateKey() ? "bg-[#F8FAFD]" : ""}`}>
-                {assignments.map(item => <div key={item.id} className={`relative mb-1 rounded-lg border px-2 py-1.5 pr-10 text-[10px] font-semibold capitalize ${assignmentStyle[item.assignmentType]} ${item.assignmentType === "on_call" ? "ring-1 ring-[#B9B6DF]" : ""}`}><p>{item.assignmentType === "on_call" ? "On-call · highlighted" : item.assignmentType === "escalation_manager" ? "Escalation Manager" : item.assignmentType === "leave" ? "Rest Day" : item.assignmentType.replace("_", " ")}</p>{item.startTime ? <p className="mt-0.5 text-[9px] font-medium opacity-75">{item.startTime}–{item.endTime}</p> : null}{isManager ? <div className="absolute right-1 top-1 flex gap-0.5"><button title="Edit rota assignment" aria-label="Edit rota assignment" onClick={() => editAssignment(item)} className="flex h-4 w-4 items-center justify-center rounded bg-white/80 text-[#344A65] hover:bg-white"><Pencil className="h-2.5 w-2.5" /></button><button title="Remove rota assignment" aria-label="Remove rota assignment" onClick={() => setAssignmentPendingRemoval(item)} className="flex h-4 w-4 items-center justify-center rounded bg-[#24364B] text-white hover:bg-[#172A43]"><Trash2 className="h-2.5 w-2.5" /></button></div> : null}</div>)}
+              return <div key={day.toISOString()} className={`min-h-[86px] border-l border-[#DCE5EF] p-2 ${assignments.some(item => item.assignmentType === "on_call") ? "bg-[#F4F2FA]" : localDateKey(day) === localDateKey() ? "bg-[#EDF4FB]" : "bg-[#F8FAFD]"}`}>
+                {assignments.map(item => <div key={item.id} className={`relative mb-1 rounded-lg border px-2 py-1.5 pr-10 text-[11px] font-semibold capitalize leading-4 ${assignmentStyle[item.assignmentType]} ${item.assignmentType === "on_call" ? "ring-1 ring-[#B9B6DF]" : ""}`}><p>{item.assignmentType === "on_call" ? "On-call · highlighted" : item.assignmentType === "escalation_manager" ? "Escalation Manager" : item.assignmentType === "leave" ? "Rest Day" : item.assignmentType.replace("_", " ")}</p>{item.startTime ? <p className="mt-0.5 text-[10px] font-medium opacity-100">{item.startTime}–{item.endTime}</p> : null}{isManager ? <div className="absolute right-1 top-1 flex gap-0.5"><button title="Edit rota assignment" aria-label="Edit rota assignment" onClick={() => editAssignment(item)} className="flex h-4 w-4 items-center justify-center rounded bg-white/80 text-[#344A65] hover:bg-white"><Pencil className="h-2.5 w-2.5" /></button><button title="Remove rota assignment" aria-label="Remove rota assignment" onClick={() => setAssignmentPendingRemoval(item)} className="flex h-4 w-4 items-center justify-center rounded bg-[#24364B] text-white hover:bg-[#172A43]"><Trash2 className="h-2.5 w-2.5" /></button></div> : null}</div>)}
               </div>;
             })}
           </div>
