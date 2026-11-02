@@ -127,6 +127,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     const database = firebaseDb;
     if (!database || !authUser || !profile) return;
     const requested = new Set(activeKeys);
+    setError(null);
     setState(current => Object.fromEntries(Object.entries(current).map(([key, rows]) => [key, requested.has(key as WorkspaceCollection) ? rows : emptyState[key]])) as State);
     if (!requested.has("members")) setMemberProfiles([]);
     if (!activeKeys.length) return;
@@ -142,7 +143,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           for (const key of keys) next[key] = key === "complaints" ? rows.filter(item => !item.isDeleted) : rows;
           return next;
         });
-        setError(null);
       }, reason => setError(reason instanceof Error ? reason : new Error("Unable to load workspace data.")));
     });
     return () => unsubscribers.forEach(unsubscribe => unsubscribe());
