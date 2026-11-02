@@ -13,10 +13,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check complaint deadlines
-        if: ${{ secrets.CRON_SECRET != '' }}
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "CRON_SECRET is not configured yet, skipping this run."
+            exit 0
+          fi
           curl --fail-with-body --silent --show-error \
             --retry 2 --retry-delay 5 \
             -H "Authorization: Bearer ${CRON_SECRET}" \
