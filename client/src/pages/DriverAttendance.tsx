@@ -20,7 +20,7 @@ const sixMonthsAgo = () => { const date = new Date(); date.setMonth(date.getMont
 const csvEscape = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
 
 export default function DriverAttendance() {
-  const { profile, state, refresh, error: workspaceError } = useWorkspace();
+  const { profile, state, refresh, error: workspaceError } = useWorkspace(["drivers", "attendance"]);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [selectedDriverId, setSelectedDriverId] = useState("");
@@ -52,7 +52,7 @@ export default function DriverAttendance() {
     if (!firebaseDb || !selectedDriverId || !form.firstDaySick || !form.expectedReturnDate) return toast.error("Choose a driver, first day sick, and expected return date.");
     const driver = drivers.find((item: any) => item._docId === selectedDriverId); if (!driver) return toast.error("Choose a driver from the directory.");
     const payload = { driverId: driver._docId, driverName: driver.name, firstDaySick: form.firstDaySick, expectedReturnDate: form.expectedReturnDate, actualReturnDate: form.actualReturnDate || null, reasonCategory: form.reasonCategory, notes: form.notes.trim() || null, recordedByName: profile.displayName, updatedAt: Date.now() };
-    try { if (editing) await updateDoc(doc(firebaseDb, "ops_driver_attendance", editing), payload); else await addDoc(collection(firebaseDb, "ops_driver_attendance"), { ...payload, recordedByUserId: profile.userId, createdAt: Date.now() }); await refresh(); resetForm(); toast.success(editing ? "Attendance record updated." : "Sickness record recorded."); } catch (error) { toast.error(error instanceof Error ? error.message : "Attendance record could not be saved."); }
+    try { if (editing) await updateDoc(doc(firebaseDb, "ops_driver_attendance", editing), payload); else await addDoc(collection(firebaseDb, "ops_driver_attendance"), { ...payload, recordedByUserId: profile.userId, createdAt: Date.now() });  resetForm(); toast.success(editing ? "Attendance record updated." : "Sickness record recorded."); } catch (error) { toast.error(error instanceof Error ? error.message : "Attendance record could not be saved."); }
   };
   const editRecord = (record: any) => { setEditing(record._docId); setSelectedDriverId(record.driverId); setForm({ firstDaySick: record.firstDaySick, expectedReturnDate: record.expectedReturnDate, actualReturnDate: record.actualReturnDate || "", reasonCategory: record.reasonCategory || "Illness", notes: record.notes || "" }); setShowForm(true); };
   const exportAttendance = () => { const rows = ["driver,first_day_sick,expected_return_date,actual_return_date,reason,notes", ...records.map((record: any) => [record.driverName, record.firstDaySick, record.expectedReturnDate, record.actualReturnDate || "", record.reasonCategory, record.notes || ""].map(csvEscape).join(","))]; const url = URL.createObjectURL(new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8" })); const link = document.createElement("a"); link.href = url; link.download = "driver-attendance-six-months.csv"; link.click(); URL.revokeObjectURL(url); };

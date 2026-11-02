@@ -3,7 +3,7 @@ import { omitUndefinedFields } from "@/lib/firestorePayload";
 import { buildTaskAssignmentNotification } from "@/lib/collaboration";
 import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, query, setDoc, updateDoc, where } from "firebase/firestore";
 import { createUserWithEmailAndPassword, deleteUser, onAuthStateChanged, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signOut, type User } from "firebase/auth";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { activitySummary } from "@/lib/auditHistory";
 
 type Member = { id: number; userId: string; displayName: string; email: string; jobTitle: string; memberRole: "lead" | "manager" | "coordinator" | "dispatcher" | "on_call" | "viewer" | "support" | "complaints"; initials: string; colour: string; status: "active" | "inactive" | "invited" };
@@ -15,8 +15,10 @@ type State = Record<string, any[]>;
 const emptyState: State = { members: [], tasks: [], activities: [], taskAttachments: [], templates: [], rota: [], handovers: [], issues: [], readiness: [], notes: [], chatMessages: [], notifications: [], onCallItems: [], helpRequests: [], shiftPrompts: [], presence: [], reportViews: [], auditLogs: [], drivers: [], signOns: [], attendance: [], complaints: [] };
 const leadEmail = "bc@swanstravel.com";
 
+type WorkspaceCollection = keyof typeof collectionMap;
 type WorkspaceContextValue = {
   authUser: User | null; profile: Member | null; loading: boolean; error: Error | null; state: State; refresh: () => Promise<void>;
+  registerDemand: (id: string, collections: WorkspaceCollection[]) => void; unregisterDemand: (id: string) => void;
   signIn: (email: string, password: string) => Promise<void>; signUp: (name: string, email: string, password: string) => Promise<void>; resetPassword: (email: string) => Promise<void>; logout: () => Promise<void>;
   add: (collectionName: string, value: Record<string, unknown>) => Promise<any>; patch: (collectionName: string, id: string, value: Record<string, unknown>) => Promise<void>; remove: (collectionName: string, id: string) => Promise<void>; addTaskResource: (input: TaskResourceInput) => Promise<TaskResource>; removeTaskResource: (resource: TaskResource) => Promise<void>; createTeamMember: (value: Record<string, unknown>) => Promise<any>; cancelTeamInvitation: (email: string) => Promise<void>;
 };
@@ -86,12 +88,70 @@ async function queueTaskAssignmentEmail(authUser: User | null, task: Record<stri
 }
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
-  const [authUser, setAuthUser] = useState<User | null>(null); const [profile, setProfile] = useState<Member | null>(null); const [state, setState] = useState<State>(emptyState); const [memberProfiles, setMemberProfiles] = useState<Member[]>([]); const [invitations, setInvitations] = useState<Member[]>([]); const [loading, setLoading] = useState(true); const [error, setError] = useState<Error | null>(null); const signedInAuditUid = useRef<string | null>(null);
+  const [authUser, setAuthUser] = useState<User | null>(null); const [profile, setProfile] = useState<Member | null>(null); const [state, setState] = useState<State>(emptyState); const [memberProfiles, setMemberProfiles] = useState<Member[]>([]); const [invitations, setInvitations] = useState<Member[]>([]); const [demands, setDemands] = useState<Record<string, WorkspaceCollection[]>>({}); const [loading, setLoading] = useState(true); const [error, setError] = useState<Error | null>(null); const signedInAuditUid = useRef<string | null>(null);
+  const registerDemand = useCallback((id: string, collections: WorkspaceCollection[]) => setDemands(current => current[id]?.join(",") === collections.join(",") ? current : { ...current, [id]: collections }), []);
+  const unregisterDemand = useCallback((id: string) => setDemands(current => { if (!(id in current)) return current; const next = { ...current }; delete next[id]; return next; }), []);
+  const activeKeysSignature = useMemo(() => [...new Set(Object.values(demands).flat())].filter(key => (key !== "reportViews" && key !== "auditLogs") || profile?.memberRole === "lead").sort().join(","), [demands, profile?.memberRole]);
+  const activeKeys = useMemo(() => activeKeysSignature ? activeKeysSignature.split(",") as WorkspaceCollection[] : [], [activeKeysSignature]);
   const workspaceState = useMemo(() => { const members = [...memberProfiles, ...invitations.filter(invitation => !memberProfiles.some(member => member.email === invitation.email))]; return { ...state, members }; }, [state, memberProfiles, invitations]);
-  const refresh = useCallback(async () => { const database = firebaseDb; if (!database || !authUser) return; const pairs = await Promise.all(Object.entries(collectionMap).filter(([key]) => (key !== "reportViews" && key !== "auditLogs") || profile?.memberRole === "lead").map(async ([key, name]) => { const source = key === "notifications" ? query(collection(database, name), where("recipientEmail", "==", authUser.email || "")) : collection(database, name); const rows = (await getDocs(source)).docs.map(snapshot => ({ _docId: snapshot.id, ...snapshot.data() })); return [key, key === "complaints" ? rows.filter(row => !row.isDeleted) : rows] as const; })); const records = Object.fromEntries(pairs) as State; setMemberProfiles((records.members ?? []) as Member[]); setState({ ...records, members: [] }); }, [authUser, profile]);
+  const refresh = useCallback(async () => {
+    const database = firebaseDb;
+    if (!database || !authUser) return;
+    if (!activeKeys.length) {
+      try {
+        const snapshot = await getDoc(doc(database, "ops_members", authUser.uid));
+        setProfile(snapshot.exists() ? { userId: authUser.uid, ...snapshot.data() } as Member : null);
+        setError(null);
+      } catch (reason) {
+        setError(reason instanceof Error ? reason : new Error("Unable to reload your operations profile."));
+      }
+      return;
+    }
+    const grouped = new Map<string, WorkspaceCollection[]>();
+    for (const key of activeKeys) grouped.set(collectionMap[key], [...(grouped.get(collectionMap[key]) || []), key]);
+    const pairs = await Promise.all([...grouped.entries()].map(async ([name, keys]) => {
+      const source = name === "ops_notifications" ? query(collection(database, name), where("recipientEmail", "==", profile?.email || authUser.email || "")) : collection(database, name);
+      const rows = (await getDocs(source)).docs.map(snapshot => ({ _docId: snapshot.id, ...snapshot.data() }));
+      return [keys, rows] as const;
+    }));
+    setMemberProfiles(pairs.find(([keys]) => keys.includes("members"))?.[1].map(asMember) || []);
+    setState(current => {
+      const next = { ...current };
+      for (const [keys, rows] of pairs) for (const key of keys) next[key] = key === "complaints" ? rows.filter(row => !row.isDeleted) : rows;
+      return next;
+    });
+    setError(null);
+  }, [authUser, profile?.email, activeKeysSignature]);
   useEffect(() => { const database = firebaseDb; if (!firebaseAuth || !database) { setLoading(false); return; } return onAuthStateChanged(firebaseAuth, async user => { setAuthUser(user); setProfile(null); setState(emptyState); setMemberProfiles([]); setInvitations([]); setError(null); if (!user) { signedInAuditUid.current = null; setLoading(false); return; } try { const snapshot = await getDoc(doc(database, "ops_members", user.uid)); if (snapshot.exists()) { const memberProfile = { userId: user.uid, ...snapshot.data() } as Member; setProfile(memberProfile); if (signedInAuditUid.current !== user.uid) { signedInAuditUid.current = user.uid; void addDoc(collection(database, "ops_audit_logs"), { actorUserId: user.uid, actorName: memberProfile.displayName, actorInitials: memberProfile.initials, actorColour: memberProfile.colour, action: "signed_in", targetType: "session", summary: "Signed in to the Command Centre.", createdAt: now() }); } } setLoading(false); } catch (reason) { setError(reason instanceof Error ? reason : new Error("Unable to load your operations profile.")); setLoading(false); } }); }, []);
-  useEffect(() => { const database = firebaseDb; if (!database || !authUser || !profile) return; const unsubscribers = Object.entries(collectionMap).filter(([key]) => (key !== "reportViews" && key !== "auditLogs") || profile.memberRole === "lead").map(([key, name]) => { const source = key === "notifications" ? query(collection(database, name), where("recipientEmail", "==", profile.email)) : collection(database, name); return onSnapshot(source, snapshot => { const allRows = snapshot.docs.map(item => ({ _docId: item.id, ...item.data() })); const rows = key === "complaints" ? allRows.filter(item => !item.isDeleted) : allRows; if (key === "members") setMemberProfiles(rows.map(asMember)); else setState(current => ({ ...current, [key]: rows })); }, reason => setError(reason instanceof Error ? reason : new Error("Unable to load workspace data."))); }); return () => unsubscribers.forEach(unsubscribe => unsubscribe()); }, [authUser, profile]);
-  useEffect(() => { const database = firebaseDb; if (!database || profile?.memberRole !== "lead") { setInvitations([]); return; } return onSnapshot(collection(database, "ops_invites"), snapshot => setInvitations(snapshot.docs.map(item => asMember({ _docId: item.id, userId: "", ...item.data(), status: "invited" }))), reason => setError(reason instanceof Error ? reason : new Error("Unable to load invited team profiles."))); }, [profile]);
+  useEffect(() => {
+    const database = firebaseDb;
+    if (!database || !authUser || !profile) return;
+    const requested = new Set(activeKeys);
+    setError(null);
+    setState(current => Object.fromEntries(Object.entries(current).map(([key, rows]) => [key, requested.has(key as WorkspaceCollection) ? rows : emptyState[key]])) as State);
+    if (!requested.has("members")) setMemberProfiles([]);
+    if (!activeKeys.length) return;
+    const grouped = new Map<string, WorkspaceCollection[]>();
+    for (const key of activeKeys) grouped.set(collectionMap[key], [...(grouped.get(collectionMap[key]) || []), key]);
+    const unsubscribers = [...grouped.entries()].map(([name, keys]) => {
+      const source = name === "ops_notifications" ? query(collection(database, name), where("recipientEmail", "==", profile.email)) : collection(database, name);
+      return onSnapshot(source, snapshot => {
+        const rows = snapshot.docs.map(item => ({ _docId: item.id, ...item.data() }));
+        if (keys.includes("members")) setMemberProfiles(rows.map(asMember));
+        setState(current => {
+          const next = { ...current };
+          for (const key of keys) next[key] = key === "complaints" ? rows.filter(item => !item.isDeleted) : rows;
+          return next;
+        });
+      }, reason => setError(reason instanceof Error ? reason : new Error("Unable to load workspace data.")));
+    });
+    return () => unsubscribers.forEach(unsubscribe => unsubscribe());
+  }, [authUser, profile, activeKeysSignature]);
+  useEffect(() => {
+    const database = firebaseDb;
+    if (!database || profile?.memberRole !== "lead" || !activeKeys.includes("members")) { setInvitations([]); return; }
+    return onSnapshot(collection(database, "ops_invites"), snapshot => setInvitations(snapshot.docs.map(item => asMember({ _docId: item.id, userId: "", ...item.data(), status: "invited" }))), reason => setError(reason instanceof Error ? reason : new Error("Unable to load invited team profiles.")));
+  }, [profile?.memberRole, activeKeysSignature]);
   useEffect(() => { const database = firebaseDb; if (!database || !authUser || !profile) return; const updatePresence = () => { if (document.visibilityState === "visible") void setDoc(doc(database, "ops_presence", authUser.uid), { userId: authUser.uid, teamMemberId: profile.id, displayName: profile.displayName, initials: profile.initials, colour: profile.colour, lastActiveAt: now() }, { merge: true }); }; updatePresence(); const interval = window.setInterval(updatePresence, 60_000); document.addEventListener("visibilitychange", updatePresence); return () => { window.clearInterval(interval); document.removeEventListener("visibilitychange", updatePresence); }; }, [authUser, profile]);
   const signIn = useCallback(async (email: string, password: string) => {
     if (!firebaseAuth || !firebaseDb) throw new Error("Firebase is not configured yet.");
@@ -147,9 +207,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [profile, writeAudit]);
   const createTeamMember = useCallback(async (value: Record<string, unknown>) => { if (!firebaseDb || !profile || profile.memberRole !== "lead") throw new Error("Only the operations lead can add a team member."); const email = String(value.email || "").trim().toLowerCase(); if (!email.endsWith("@swanstravel.com")) throw new Error("Use the colleague’s Swans Travel work email."); const memberId = numericId(); const invitation: Member & { createdAt: number; createdBy: string } = { id: memberId, userId: "", email, displayName: String(value.displayName), jobTitle: String(value.jobTitle), memberRole: value.memberRole as Member["memberRole"], initials: String(value.initials), colour: String(value.colour), status: "invited", createdAt: now(), createdBy: profile.userId }; await setDoc(doc(firebaseDb, "ops_invites", email), invitation); writeAudit("created", "members", email, invitation); setInvitations(current => [...current.filter(member => member.email !== email), invitation]); return invitation; }, [profile, writeAudit]);
   const cancelTeamInvitation = useCallback(async (email: string) => { if (!firebaseDb || profile?.memberRole !== "lead") throw new Error("Only the operations lead can cancel an invitation."); await deleteDoc(doc(firebaseDb, "ops_invites", email)); writeAudit("deleted", "members", email, { email }); setInvitations(current => current.filter(member => member.email !== email)); }, [profile, writeAudit]);
-  const value = useMemo(() => ({ authUser, profile, loading, error, state: workspaceState, refresh, signIn, signUp, resetPassword, logout, add, patch, remove, addTaskResource, removeTaskResource, createTeamMember, cancelTeamInvitation }), [authUser, profile, loading, error, workspaceState, refresh, signIn, signUp, resetPassword, logout, add, patch, remove, addTaskResource, removeTaskResource, createTeamMember, cancelTeamInvitation]); return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
+  const value = useMemo(() => ({ authUser, profile, loading, error, state: workspaceState, refresh, registerDemand, unregisterDemand, signIn, signUp, resetPassword, logout, add, patch, remove, addTaskResource, removeTaskResource, createTeamMember, cancelTeamInvitation }), [authUser, profile, loading, error, workspaceState, refresh, registerDemand, unregisterDemand, signIn, signUp, resetPassword, logout, add, patch, remove, addTaskResource, removeTaskResource, createTeamMember, cancelTeamInvitation]); return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }
-export function useWorkspace() { const context = useContext(WorkspaceContext); if (!context) throw new Error("WorkspaceProvider is missing."); return context; }
+export function useWorkspace(collections: WorkspaceCollection[] = []) { const context = useContext(WorkspaceContext); const demandId = useId(); const collectionsSignature = [...new Set(collections)].sort().join(","); const registerDemand = context?.registerDemand; const unregisterDemand = context?.unregisterDemand; useEffect(() => { const requested = collectionsSignature ? collectionsSignature.split(",") as WorkspaceCollection[] : []; registerDemand?.(demandId, requested); return () => unregisterDemand?.(demandId); }, [registerDemand, unregisterDemand, demandId, collectionsSignature]); if (!context) throw new Error("WorkspaceProvider is missing."); return context; }
 export function requireLead(profile: Member | null) { if (!profile || profile.memberRole !== "lead") throw new Error("Only the operations lead can perform that action."); }
 export function requireOperationsManager(profile: Member | null) { if (!profile || !["lead", "manager"].includes(profile.memberRole)) throw new Error("Only an operations lead or manager can perform that action."); }
 export function hydrateMember(state: State, memberId?: number | null) { return state.members.find(member => member.id === memberId) ?? null; }

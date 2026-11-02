@@ -68,7 +68,7 @@ const responseDeadline = (item: Complaint) => item.responseDueAt || addWorkingHo
 const freshForm = () => ({ title: "", client: "", clientEmail: "", customerSpend12Months: "", category: "Driver conduct", summary: "", driverId: "", vehicle: "", serviceDate: "", serviceDetails: "", sharePointUrl: "", complaintFolderUrl: "" });
 
 export default function Complaints() {
-  const workspace = useWorkspace();
+  const workspace = useWorkspace(["complaints", "members", "drivers"]);
   const canEditComplaints = hasWorkspacePermission(workspace.profile?.memberRole, "editComplaints");
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(freshForm);
