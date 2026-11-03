@@ -1,9 +1,12 @@
-import { useAuth } from "@/_core/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LoadError } from "@/components/WorkspacePrimitives";
 import { trpc } from "@/lib/trpc";
 import { compactTime, dateTitle, localDateKey, priorityStyle } from "@/lib/operations";
+import { logFirestoreSnapshot, trackFirestoreListener, useWorkspace } from "@/contexts/WorkspaceContext";
+import { firebaseDb } from "@/lib/firebase";
+import { activeExceptionTasks, rotaForExceptionDate } from "@/lib/exceptionData";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { addDays } from "date-fns";
 import { AlertTriangle, ArrowRight, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, CircleAlert, Clock3, HelpCircle, Inbox, RefreshCw, ShieldAlert, UsersRound, Waypoints } from "lucide-react";
 import { Link } from "wouter";
@@ -28,10 +31,54 @@ type Exception = {
 };
 
 export default function Exceptions() {
-  const { user } = useAuth();
+  const workspace = useWorkspace();
   const [selectedDate, setSelectedDate] = useState(localDateKey());
   const [now, setNow] = useState(Date.now());
-  const dashboard = trpc.operations.dashboard.useQuery({ date: selectedDate });
+  const [taskRows, setTaskRows] = useState<any[]>([]);
+  const [rotaRows, setRotaRows] = useState<any[]>([]);
+  const [tasksLoaded, setTasksLoaded] = useState(false);
+  const [rotaLoaded, setRotaLoaded] = useState(false);
+  const [dataError, setDataError] = useState<Error | null>(null);
+  const [queryVersion, setQueryVersion] = useState(0);
+
+  useEffect(() => {
+    if (!firebaseDb || !workspace.authUser || !workspace.profile) return;
+    setTasksLoaded(false);
+    setDataError(null);
+    const source = query(collection(firebaseDb, "ops_tasks"), where("status", "in", ["pending", "in_progress", "blocked", "missed"]));
+    const detachDiagnostic = trackFirestoreListener("ops_tasks");
+    let firstSnapshot = true;
+    const unsubscribe = onSnapshot(source, snapshot => {
+      logFirestoreSnapshot(firstSnapshot ? "initial-snapshot" : "snapshot-update", "ops_tasks", snapshot);
+      firstSnapshot = false;
+      setTaskRows(snapshot.docs.map(item => ({ _docId: item.id, ...item.data() })));
+      setTasksLoaded(true);
+    }, reason => setDataError(reason instanceof Error ? reason : new Error("Unable to load live task exceptions.")));
+    return () => { unsubscribe(); detachDiagnostic(); };
+  }, [workspace.authUser?.uid, workspace.profile?.id, queryVersion]);
+
+  useEffect(() => {
+    if (!firebaseDb || !workspace.authUser || !workspace.profile) return;
+    setRotaLoaded(false);
+    setDataError(null);
+    const source = query(collection(firebaseDb, "ops_rota"), where("workDate", "==", selectedDate));
+    const detachDiagnostic = trackFirestoreListener("ops_rota");
+    let firstSnapshot = true;
+    const unsubscribe = onSnapshot(source, snapshot => {
+      logFirestoreSnapshot(firstSnapshot ? "initial-snapshot" : "snapshot-update", "ops_rota", snapshot);
+      firstSnapshot = false;
+      setRotaRows(snapshot.docs.map(item => ({ _docId: item.id, ...item.data() })));
+      setRotaLoaded(true);
+    }, reason => setDataError(reason instanceof Error ? reason : new Error("Unable to load rota cover exceptions.")));
+    return () => { unsubscribe(); detachDiagnostic(); };
+  }, [workspace.authUser?.uid, workspace.profile?.id, selectedDate, queryVersion]);
+
+  const visibleTasks = useMemo(
+    () => activeExceptionTasks(taskRows, selectedDate, workspace.authUser?.uid || null, workspace.profile?.memberRole === "lead"),
+    [taskRows, selectedDate, workspace.authUser?.uid, workspace.profile?.memberRole],
+  );
+  const visibleRota = useMemo(() => rotaForExceptionDate(rotaRows, selectedDate), [rotaRows, selectedDate]);
+  const dashboard = trpc.operations.dashboard.useQuery({ date: selectedDate, taskRows: visibleTasks, rotaRows: visibleRota });
   const snapshot = dashboard.data;
 
   useEffect(() => {
@@ -73,11 +120,11 @@ export default function Exceptions() {
   const moveDate = (offset: number) => setSelectedDate(localDateKey(addDays(new Date(`${selectedDate}T12:00:00`), offset)));
   const isToday = selectedDate === localDateKey();
 
-  if (dashboard.isLoading) return <div className="flex min-h-[55vh] items-center justify-center"><RefreshCw className="h-6 w-6 animate-spin text-[#2CC6C0]" /></div>;
-  if (dashboard.isError) return <LoadError message="The Live Operations board is temporarily unavailable." onRetry={() => void dashboard.refetch()} />;
+  if (dashboard.isError || dataError) return <LoadError message={dataError?.message || "The Live Operations board is temporarily unavailable."} onRetry={() => { setDataError(null); setQueryVersion(value => value + 1); }} />;
+  if (dashboard.isLoading || !tasksLoaded || !rotaLoaded) return <div className="flex min-h-[55vh] items-center justify-center"><RefreshCw className="h-6 w-6 animate-spin text-[#2CC6C0]" /></div>;
 
   return <div className="mx-auto max-w-[1500px] pb-10">
-    <header className="relative mb-6 flex flex-col gap-5 overflow-hidden rounded-[28px] bg-[#102638] px-6 py-7 text-white shadow-[0_24px_60px_-28px_rgba(10,35,54,0.7)] md:px-8 md:py-8 lg:flex-row lg:items-end lg:justify-between"><div className="pointer-events-none absolute -right-16 -top-28 h-80 w-80 rounded-full border-[42px] border-[#2CC6C0]/10" /><div><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#9FC4D8]">Control room · {dateTitle(selectedDate)}</p><h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-white">Live Operations</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[#C1D4E0]">Manage live operational problems requiring action, ownership or support. All issues should be logged and managed through the Issue Log.</p></div><div className="flex flex-wrap items-center gap-2"><div className="flex h-10 items-center rounded-xl border border-white/20 bg-white/10 p-1 shadow-sm"><Button variant="ghost" size="icon" className="h-8 w-8 text-white hover:bg-white/15 hover:text-white" onClick={() => moveDate(-1)} aria-label="Previous day"><ChevronLeft className="h-4 w-4" /></Button><span className="min-w-32 px-3 text-center text-sm font-semibold text-white">{isToday ? "Today" : dateTitle(selectedDate)}</span><Button variant="ghost" size="icon" className="h-8 w-8 text-white hover:bg-white/15 hover:text-white" onClick={() => moveDate(1)} aria-label="Next day"><ChevronRight className="h-4 w-4" /></Button></div><Button variant="outline" className="h-10 border-[#D6E2DE] bg-white text-[#193448] hover:bg-[#EAF4F8] hover:text-[#193448]" onClick={() => void dashboard.refetch()}><RefreshCw className="mr-2 h-4 w-4" />Refresh</Button><Link href="/tasks"><Button className="h-10 bg-[#1D5C63] hover:bg-[#54D8D0]">Open task board<ArrowRight className="ml-2 h-4 w-4" /></Button></Link></div></header>
+    <header className="relative mb-6 flex flex-col gap-5 overflow-hidden rounded-[28px] bg-[#102638] px-6 py-7 text-white shadow-[0_24px_60px_-28px_rgba(10,35,54,0.7)] md:px-8 md:py-8 lg:flex-row lg:items-end lg:justify-between"><div className="pointer-events-none absolute -right-16 -top-28 h-80 w-80 rounded-full border-[42px] border-[#2CC6C0]/10" /><div><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#9FC4D8]">Control room · {dateTitle(selectedDate)}</p><h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-white">Live Operations</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[#C1D4E0]">Manage live operational problems requiring action, ownership or support. All issues should be logged and managed through the Issue Log.</p></div><div className="flex flex-wrap items-center gap-2"><div className="flex h-10 items-center rounded-xl border border-white/20 bg-white/10 p-1 shadow-sm"><Button variant="ghost" size="icon" className="h-8 w-8 text-white hover:bg-white/15 hover:text-white" onClick={() => moveDate(-1)} aria-label="Previous day"><ChevronLeft className="h-4 w-4" /></Button><span className="min-w-32 px-3 text-center text-sm font-semibold text-white">{isToday ? "Today" : dateTitle(selectedDate)}</span><Button variant="ghost" size="icon" className="h-8 w-8 text-white hover:bg-white/15 hover:text-white" onClick={() => moveDate(1)} aria-label="Next day"><ChevronRight className="h-4 w-4" /></Button></div><Button variant="outline" className="h-10 border-[#D6E2DE] bg-white text-[#193448] hover:bg-[#EAF4F8] hover:text-[#193448]" onClick={() => { void workspace.refresh(); setQueryVersion(value => value + 1); }}><RefreshCw className="mr-2 h-4 w-4" />Refresh</Button><Link href="/tasks"><Button className="h-10 bg-[#1D5C63] hover:bg-[#54D8D0]">Open task board<ArrowRight className="ml-2 h-4 w-4" /></Button></Link></div></header>
 
     <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5"><Metric label="Needs action" value={counts.total} support={counts.total ? "Live exceptions to close" : "Nothing needs attention"} icon={<AlertTriangle className="h-5 w-5" />} tint="red" /><Metric label="Critical" value={counts.critical} support="Immediate management attention" icon={<ShieldAlert className="h-5 w-5" />} tint="red" /><Metric label="Overdue" value={counts.overdue} support="Open tasks past their due time" icon={<Clock3 className="h-5 w-5" />} tint="amber" /><Metric label="Unowned" value={counts.unowned} support="Work or cover without ownership" icon={<UsersRound className="h-5 w-5" />} tint="amber" /><Metric label="Blocked" value={counts.blocked} support="Named work that cannot progress" icon={<CircleAlert className="h-5 w-5" />} tint="teal" /></section>
 

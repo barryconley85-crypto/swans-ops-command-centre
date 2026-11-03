@@ -28,8 +28,30 @@ const collectionMap: Record<string, string> = { members: "ops_members", tasks: "
 const firestoreDiagnosticActive = new Set<string>();
 const logFirestoreDiagnostic = (event: string, details: Record<string, unknown>) => {
   if (typeof window === "undefined") return;
-  console.info("[Firestore read audit]", { time: new Date().toISOString(), page: window.location.pathname, event, activeListeners: firestoreDiagnosticActive.size, ...details });
+  // Keep the payload as text so remote browser log viewers preserve the audit
+  // fields instead of collapsing them to an opaque "Object" entry.
+  console.info("[Firestore read audit]", JSON.stringify({ time: new Date().toISOString(), page: window.location.pathname, event, activeListeners: firestoreDiagnosticActive.size, ...details }));
 };
+export function trackFirestoreListener(collectionName: string) {
+  if (typeof window === "undefined") return () => undefined;
+  const key = `${window.location.pathname}:${collectionName}`;
+  firestoreDiagnosticActive.add(key);
+  logFirestoreDiagnostic("listener-attached", { collection: collectionName });
+  return () => {
+    if (firestoreDiagnosticActive.delete(key)) logFirestoreDiagnostic("listener-detached", { collection: collectionName });
+  };
+}
+export function logFirestoreSnapshot(event: "initial-snapshot" | "snapshot-update", collectionName: string, snapshot: { size: number; docChanges: () => Array<{ type: string }> }) {
+  const changes = snapshot.docChanges();
+  logFirestoreDiagnostic(event, {
+    collection: collectionName,
+    documentsInSnapshot: snapshot.size,
+    changedDocuments: changes.length,
+    added: changes.filter(change => change.type === "added").length,
+    modified: changes.filter(change => change.type === "modified").length,
+    removed: changes.filter(change => change.type === "removed").length,
+  });
+}
 const safeArray = (value: any) => Array.isArray(value) ? value : [];
 const now = () => Date.now();
 const numericId = () => Date.now() + Math.floor(Math.random() * 1_000);
