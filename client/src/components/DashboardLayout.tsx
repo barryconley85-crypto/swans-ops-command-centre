@@ -33,11 +33,6 @@ import { InitialsCircle } from "@/components/ColleagueMarker";
 import { toast } from "sonner";
 
 const collectionsForPath = (path: string): string[] => {
-  // The home dashboard is served by the dedicated operations.dashboard query.
-  // It does not consume WorkspaceContext collections, so opening broad Firestore
-  // listeners here duplicates data loading for every user landing on the dashboard.
-  if (path === "/") return [];
-
   const common = ["members", "presence", "notifications"];
   const byPath: Record<string, string[]> = {
     "/": ["tasks", "rota", "handovers", "issues", "onCallItems", "helpRequests", "readiness", "shiftPrompts", "templates"],
