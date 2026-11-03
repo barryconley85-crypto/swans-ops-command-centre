@@ -36,7 +36,7 @@ const collectionsForPath = (path: string): string[] => {
   const common = ["members", "presence", "notifications"];
   const byPath: Record<string, string[]> = {
     "/": ["tasks", "rota", "handovers", "issues", "onCallItems", "helpRequests", "readiness", "shiftPrompts", "templates"],
-    "/exceptions": ["tasks", "rota", "handovers", "issues", "onCallItems", "helpRequests", "readiness", "shiftPrompts"],
+    "/exceptions": [],
     "/my-shift": ["tasks", "rota", "handovers", "helpRequests", "shiftPrompts"],
     "/shift-check": ["rota", "shiftPrompts"],
     "/profile": [],
