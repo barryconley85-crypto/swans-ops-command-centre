@@ -175,7 +175,7 @@ Reason: ${reason.trim()}`)) deleteMutation.mutate({ taskId: task.id, reason: rea
 
 export default function Tasks() {
   const { user } = useAuth();
-  const { state, addTaskResource } = useWorkspace();
+  const { state, addTaskResource } = useWorkspace(["tasks", "templates", "members", "taskAttachments", "activities", "issues", "rota"]);
   const [selectedDate, setSelectedDate] = useState(localDateKey());
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [showTemplateForm, setShowTemplateForm] = useState(false);
