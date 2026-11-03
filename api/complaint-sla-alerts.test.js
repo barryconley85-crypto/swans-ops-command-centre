@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { complaintMilestones, getEnglandWalesBankHolidays, isWorkingDay, isWorkingMinute, workingMinutesBetween } from "./complaint-sla-alerts.js";
+import { buildOpenComplaintsQuery, complaintMilestones, getEnglandWalesBankHolidays, isWorkingDay, isWorkingMinute, workingMinutesBetween } from "./complaint-sla-alerts.js";
 
 const minute = value => Date.parse(value);
 const holidays = ["2026-05-04"];
@@ -52,5 +52,16 @@ describe("complaint SLA clock", () => {
   it("loads the official England and Wales holiday calendar", async () => {
     const list = await getEnglandWalesBankHolidays(async () => ({ ok: true, json: async () => ({ "england-and-wales": { events: [{ date: "2026-12-25" }, { date: "invalid" }] } }) }));
     expect(list).toEqual(["2026-12-25"]);
+  });
+});
+
+describe("open complaint query", () => {
+  it("limits SLA reads to complaint records that are not closed", () => {
+    const query = buildOpenComplaintsQuery().structuredQuery;
+    expect(query.from).toEqual([{ collectionId: "ops_issues" }]);
+    expect(query.where.compositeFilter.filters).toEqual([
+      { fieldFilter: { field: { fieldPath: "recordType" }, op: "EQUAL", value: { stringValue: "complaint" } } },
+      { fieldFilter: { field: { fieldPath: "stage" }, op: "NOT_EQUAL", value: { stringValue: "closed" } } },
+    ]);
   });
 });

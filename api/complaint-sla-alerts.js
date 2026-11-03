@@ -198,18 +198,39 @@ async function googleAccessToken(account) {
   return (await tokenResponse.json()).access_token;
 }
 
-async function listCollection(token, collection) {
-  const documents = [];
-  let pageToken = "";
-  do {
-    const url = `${FIRESTORE}/${collection}?pageSize=1000${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`;
-    const result = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    if (!result.ok) { const errorBody = await result.json().catch(() => ({})); const reason = errorBody?.error?.status || errorBody?.error?.errors?.[0]?.reason; throw new Error(`Could not read the ${collection} records from Firebase (HTTP ${result.status}${reason ? ` ${reason}` : ""}).`); }
-    const body = await result.json();
-    for (const doc of body.documents || []) documents.push({ path: doc.name, id: doc.name.split("/").pop(), ...decodeFields(doc.fields) });
-    pageToken = body.nextPageToken || "";
-  } while (pageToken);
-  return documents;
+export function buildOpenComplaintsQuery() {
+  return {
+    structuredQuery: {
+      from: [{ collectionId: "ops_issues" }],
+      where: {
+        compositeFilter: {
+          op: "AND",
+          filters: [
+            { fieldFilter: { field: { fieldPath: "recordType" }, op: "EQUAL", value: { stringValue: "complaint" } } },
+            { fieldFilter: { field: { fieldPath: "stage" }, op: "NOT_EQUAL", value: { stringValue: "closed" } } },
+          ],
+        },
+      },
+    },
+  };
+}
+
+async function listOpenComplaints(token) {
+  const result = await fetch(`${FIRESTORE}:runQuery`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(buildOpenComplaintsQuery()),
+  });
+  if (!result.ok) {
+    const errorBody = await result.json().catch(() => ({}));
+    const reason = errorBody?.error?.status || errorBody?.error?.errors?.[0]?.reason;
+    throw new Error(`Could not read open complaint records from Firebase (HTTP ${result.status}${reason ? ` ${reason}` : ""}).`);
+  }
+  const rows = await result.json();
+  return rows.filter(row => row.document).map(row => {
+    const doc = row.document;
+    return { path: doc.name, id: doc.name.split("/").pop(), ...decodeFields(doc.fields) };
+  });
 }
 
 function activeRecipient(members, firstName) {
@@ -267,11 +288,11 @@ export default async function handler(request, response) {
     const now = Date.now();
     const london = dateInLondon(now);
     const localMinute = Number(london.hour) * 60 + Number(london.minute);
-    if (!isWorkingDay(now, holidays) || localMinute < 540 || localMinute >= 1080) {
+    if (!isWorkingDay(now, holidays) || localMinute < 540 || localMinute >= 1020) {
       return response.status(200).json({ status: "outside_alert_window", sent: 0 });
     }
     const token = await googleAccessToken(account);
-    const [complaints, members] = await Promise.all([listCollection(token, "ops_issues"), listCollection(token, "ops_members")]);
+    const [complaints, members] = await Promise.all([listOpenComplaints(token), listCollection(token, "ops_members")]);
     const stephen = activeRecipient(members, "Stephen");
     const coral = activeRecipient(members, "Coral");
     if (!stephen || !coral) return response.status(409).json({ error: "Could not uniquely identify active Stephen and Coral email recipients. No alerts were sent." });

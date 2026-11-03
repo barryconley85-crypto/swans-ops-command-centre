@@ -1,6 +1,6 @@
 name: Complaint SLA email monitor
-# Production alias refreshed after CRON_SECRET update, verification run.
-
+# Hourly checks. The API enforces 09:00-17:00 Europe/London, so the
+# 08:00 UTC run is safely ignored during GMT and covers 09:00 during BST.
 on:
   push:
     branches:
@@ -8,7 +8,7 @@ on:
     paths:
       - ".github/workflows/complaint-sla-alerts.yml"
   schedule:
-    - cron: "*/15 7-17 * * 1-5"
+    - cron: "0 8-16 * * 1-5"
   workflow_dispatch:
 
 permissions:
