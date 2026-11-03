@@ -80,7 +80,26 @@ export default function ComplianceCentre() {
   const endorsementFileRef=useRef<HTMLInputElement>(null);
   const [importingEndorsements,setImportingEndorsements]=useState(false);
   const [sendingTestEmail,setSendingTestEmail]=useState(false);
-  useEffect(()=>{ if(!firebaseDb)return; return onSnapshot(query(collection(firebaseDb,"ops_driver_compliance")),snap=>setRecords(snap.docs.map(item=>({_docId:item.id,...item.data()} as ComplianceRecord))),()=>toast.error("Compliance records could not be loaded.")); },[]);
+  useEffect(()=>{
+    if(!firebaseDb)return;
+    console.info("[Firestore read audit]", { time:new Date().toISOString(), page:window.location.pathname, event:"listener-attached", collection:"ops_driver_compliance" });
+    let firstSnapshot=true;
+    const unsubscribe=onSnapshot(query(collection(firebaseDb,"ops_driver_compliance")),snap=>{
+      const changes=snap.docChanges();
+      console.info("[Firestore read audit]", {
+        time:new Date().toISOString(), page:window.location.pathname,
+        event:firstSnapshot?"initial-snapshot":"snapshot-update",
+        collection:"ops_driver_compliance", documentsInSnapshot:snap.size,
+        changedDocuments:changes.length,
+        added:changes.filter(change=>change.type==="added").length,
+        modified:changes.filter(change=>change.type==="modified").length,
+        removed:changes.filter(change=>change.type==="removed").length
+      });
+      firstSnapshot=false;
+      setRecords(snap.docs.map(item=>({_docId:item.id,...item.data()} as ComplianceRecord)));
+    },()=>toast.error("Compliance records could not be loaded."));
+    return ()=>{ unsubscribe(); console.info("[Firestore read audit]", { time:new Date().toISOString(), page:window.location.pathname, event:"listener-detached", collection:"ops_driver_compliance" }); };
+  },[]);
   const allDrivers=useMemo(()=>state.drivers||[],[state.drivers]);
   const drivers=useMemo(()=> allDrivers.filter((d:any)=>d.active!==false).sort((a:any,b:any)=>a.name.localeCompare(b.name)),[allDrivers]);
   const automaticDriverMatch=(row:any)=>{const byId=row.sourceDriverId?drivers.filter((d:any)=>[d.id,d.driverId,d.driverCode].some(value=>value!==undefined&&String(value).trim()===row.sourceDriverId)):[];if(byId.length)return byId;const target=cpcAliases[nameKey(row.driverName)]||nameKey(row.driverName);return drivers.filter((d:any)=>nameKey(d.name)===target);};
