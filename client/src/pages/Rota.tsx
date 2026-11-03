@@ -8,10 +8,11 @@ import { ColleagueMarker } from "@/components/ColleagueMarker";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
 import { hasExactRotaDuplicate, standardShiftPatterns } from "@/lib/collaboration";
-import { isoWeekStart, localDateKey } from "@/lib/operations";
+import { addDaysToDateKey, isoWeekStart, localDateKey } from "@/lib/operations";
 import { addDays, format } from "date-fns";
 import { ChevronLeft, ChevronRight, CircleAlert, Copy, Pencil, Plus, Save, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { toast } from "sonner";
 
 const assignmentStyle: Record<string, string> = {
@@ -29,6 +30,7 @@ export default function Rota() {
   const { user } = useAuth();
   const isManager = user?.canManageOperations;
   const [weekStart, setWeekStart] = useState(isoWeekStart());
+  useWorkspace(["rota"], { rota: { from: weekStart, through: addDaysToDateKey(weekStart, 6) } });
   const [open, setOpen] = useState(false);
   const [editingAssignmentId, setEditingAssignmentId] = useState<number | null>(null);
   const [assignmentPendingRemoval, setAssignmentPendingRemoval] = useState<any>(null);

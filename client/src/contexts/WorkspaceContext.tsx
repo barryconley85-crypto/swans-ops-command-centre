@@ -16,9 +16,11 @@ const emptyState: State = { members: [], tasks: [], activities: [], taskAttachme
 const leadEmail = "bc@swanstravel.com";
 
 type WorkspaceCollection = keyof typeof collectionMap;
+type WorkspaceDateWindow = { from: string; through: string };
+type WorkspaceFilters = Partial<Record<WorkspaceCollection, WorkspaceDateWindow>>;
 type WorkspaceContextValue = {
   authUser: User | null; profile: Member | null; loading: boolean; error: Error | null; state: State; refresh: () => Promise<void>;
-  registerDemand: (id: string, collections: WorkspaceCollection[]) => void; unregisterDemand: (id: string) => void;
+  registerDemand: (id: string, collections: WorkspaceCollection[], filters?: WorkspaceFilters) => void; unregisterDemand: (id: string) => void;
   signIn: (email: string, password: string) => Promise<void>; signUp: (name: string, email: string, password: string) => Promise<void>; resetPassword: (email: string) => Promise<void>; logout: () => Promise<void>;
   add: (collectionName: string, value: Record<string, unknown>) => Promise<any>; patch: (collectionName: string, id: string, value: Record<string, unknown>) => Promise<void>; remove: (collectionName: string, id: string) => Promise<void>; addTaskResource: (input: TaskResourceInput) => Promise<TaskResource>; removeTaskResource: (resource: TaskResource) => Promise<void>; createTeamMember: (value: Record<string, unknown>) => Promise<any>; cancelTeamInvitation: (email: string) => Promise<void>;
 };
@@ -115,11 +117,12 @@ async function queueTaskAssignmentEmail(authUser: User | null, task: Record<stri
 }
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
-  const [authUser, setAuthUser] = useState<User | null>(null); const [profile, setProfile] = useState<Member | null>(null); const [state, setState] = useState<State>(emptyState); const [memberProfiles, setMemberProfiles] = useState<Member[]>([]); const [invitations, setInvitations] = useState<Member[]>([]); const [demands, setDemands] = useState<Record<string, WorkspaceCollection[]>>({}); const [loading, setLoading] = useState(true); const [error, setError] = useState<Error | null>(null); const signedInAuditUid = useRef<string | null>(null); const activeSubscriptions = useRef(new Map<string, { unsubscribe: () => void; keys: WorkspaceCollection[]; rows: any[] }>());
-  const registerDemand = useCallback((id: string, collections: WorkspaceCollection[]) => setDemands(current => current[id]?.join(",") === collections.join(",") ? current : { ...current, [id]: collections }), []);
+  const [authUser, setAuthUser] = useState<User | null>(null); const [profile, setProfile] = useState<Member | null>(null); const [state, setState] = useState<State>(emptyState); const [memberProfiles, setMemberProfiles] = useState<Member[]>([]); const [invitations, setInvitations] = useState<Member[]>([]); const [demands, setDemands] = useState<Record<string, { collections: WorkspaceCollection[]; filters: WorkspaceFilters }>>({}); const [loading, setLoading] = useState(true); const [error, setError] = useState<Error | null>(null); const signedInAuditUid = useRef<string | null>(null); const activeSubscriptions = useRef(new Map<string, { unsubscribe: () => void; keys: WorkspaceCollection[]; rows: any[]; filterKey: string }>());
+  const registerDemand = useCallback((id: string, collections: WorkspaceCollection[], filters: WorkspaceFilters = {}) => setDemands(current => { const normalized = Array.from(new Set(collections)).sort(); const filterKey = JSON.stringify(filters); const existing = current[id]; return existing?.collections.join(",") === normalized.join(",") && JSON.stringify(existing.filters) === filterKey ? current : { ...current, [id]: { collections: normalized, filters } }; }), []);
   const unregisterDemand = useCallback((id: string) => setDemands(current => { if (!(id in current)) return current; const next = { ...current }; delete next[id]; return next; }), []);
-  const activeKeysSignature = useMemo(() => [...new Set(Object.values(demands).flat())].filter(key => (key !== "reportViews" && key !== "auditLogs") || profile?.memberRole === "lead").sort().join(","), [demands, profile?.memberRole]);
-  const activeKeys = useMemo(() => activeKeysSignature ? activeKeysSignature.split(",") as WorkspaceCollection[] : [], [activeKeysSignature]);
+  const activeKeys = useMemo(() => Array.from(new Set(Object.values(demands).flatMap(demand => demand.collections))).filter(key => (key !== "reportViews" && key !== "auditLogs") || profile?.memberRole === "lead").sort(), [demands, profile?.memberRole]);
+  const activeFilters = useMemo(() => Object.fromEntries(Object.values(demands).flatMap(demand => Object.entries(demand.filters))), [demands]);
+  const activeKeysSignature = useMemo(() => JSON.stringify({ keys: activeKeys, filters: activeFilters }), [activeKeys, activeFilters]);
   const workspaceState = useMemo(() => { const members = [...memberProfiles, ...invitations.filter(invitation => !memberProfiles.some(member => member.email === invitation.email))]; return { ...state, members }; }, [state, memberProfiles, invitations]);
   const refresh = useCallback(async () => {
     const database = firebaseDb;
@@ -134,11 +137,23 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       }
       return;
     }
-    const grouped = new Map<string, WorkspaceCollection[]>();
-    for (const key of activeKeys) grouped.set(collectionMap[key], [...(grouped.get(collectionMap[key]) || []), key]);
-    const pairs = await Promise.all([...grouped.entries()].map(async ([name, keys]) => {
-      const source = name === "ops_notifications" ? query(collection(database, name), where("recipientEmail", "==", profile?.email || authUser.email || "")) : collection(database, name);
-      const rows = (await getDocs(source)).docs.map(snapshot => ({ _docId: snapshot.id, ...snapshot.data() }));
+    const grouped = new Map<string, { keys: WorkspaceCollection[]; filter?: WorkspaceDateWindow }>();
+    for (const key of activeKeys) {
+      const name = collectionMap[key];
+      const current = grouped.get(name) || { keys: [] };
+      current.keys.push(key);
+      current.filter = activeFilters[key] || current.filter;
+      grouped.set(name, current);
+    }
+    const pairs = await Promise.all(Array.from(grouped.entries()).map(async ([name, group]) => {
+      const { keys, filter } = group;
+      const baseCollection = collection(database, name);
+      const source = name === "ops_notifications"
+        ? query(baseCollection, where("recipientEmail", "==", profile?.email || authUser.email || ""))
+        : filter
+          ? query(baseCollection, where("workDate", ">=", filter.from), where("workDate", "<=", filter.through))
+          : baseCollection;
+      const rows: any[] = (await getDocs(source)).docs.map(snapshot => ({ _docId: snapshot.id, ...snapshot.data() }));
       return [keys, rows] as const;
     }));
     setMemberProfiles(pairs.find(([keys]) => keys.includes("members"))?.[1].map(asMember) || []);
@@ -154,140 +169,204 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   // implementation tore down every listener whenever the route changed, then
   // re-read all shared collections (members, presence, notifications, etc.).
   useEffect(() => () => {
-    for (const [name, subscription] of activeSubscriptions.current) { subscription.unsubscribe(); firestoreDiagnosticActive.delete(name); logFirestoreDiagnostic("listener-detached", { collection: name, reason: "workspace-reset" }); }
+    for (const [name, subscription] of Array.from(activeSubscriptions.current.entries())) { subscription.unsubscribe(); firestoreDiagnosticActive.delete(name); logFirestoreDiagnostic("listener-detached", { collection: name, reason: "workspace-reset" }); }
     activeSubscriptions.current.clear();
   }, [authUser, profile]);
   useEffect(() => {
     const database = firebaseDb;
     if (!database || !authUser || !profile) return;
-    const requested = new Set(activeKeys);
-    setError(null);
-    setState(current => Object.fromEntries(Object.entries(current).map(([key, rows]) => [key, requested.has(key as WorkspaceCollection) ? rows : emptyState[key]])) as State);
-    if (!requested.has("members")) setMemberProfiles([]);
+    const requested = new Set(activeKeyç[h‘éì¶»§q«^wÛXİ[ÛŠHÈ›İÜÈˆ[\Tİ]VÚÙ^WWJJH\Èİ]JNÃBˆYˆ
+\™\]Y\İYš\Ê›Y[X™\œÈŠJHÙ]Y[X™\”›Ùš[\Ê×JNÃBƒBˆÛÛœİÜ›İ\YH™]ÈX\İš[™ËÈÙ^\ÎˆÛÜšÜÜXÙPÛÛXİ[Û–×NÈš[\ÎˆÛÜšÜÜXÙQ]UÚ[™İÈOŠ
+NÃBˆ›Üˆ
+ÛÛœİÙ^HÙˆXİ]™RÙ^\ÊHÃBˆÛÛœİ˜[YHHÛÛXİ[Û“X\ÚÙ^WNÃBˆÛÛœİİ\œ™[HÜ›İ\Y™Ù]
+˜[YJHÈÙ^\Îˆ×HNÃBˆİ\œ™[šÙ^\Ëœ\Ú
+Ù^JNÃBˆİ\œ™[™š[\ˆHXİ]™Qš[\œÖÚÙ^WHİ\œ™[™š[\ÃBˆÜ›İ\YœÙ]
+˜[YKİ\œ™[
+NÃBˆCBƒBˆËÈ™[[İ™HÛ›HÛÛXİ[ÛœÈ›ÈÛ™Ù\ˆ™YYYHHXİ]™H›İ]KƒBˆ›Üˆ
+ÛÛœİÛ˜[YKİXœØÜš\[Û—HÙˆ\œ˜^K™œ›ÛJXİ]™TİXœØÜš\[ÛœË˜İ\œ™[™[šY\Ê
+JJHÃBˆÛÛœİ™^Ü›İ\HÜ›İ\Y™Ù]
+˜[YJNÃBˆÛÛœİ™^š[\’Ù^HH”ÓÓ‹œİš[™ÚYJ™^Ü›İ\Ë™š[\ˆ[
+NÃBˆYˆ
+[™^Ü›İ\İXœØÜš\[Û‹™š[\’Ù^HOOH™^š[\’Ù^JHÃBˆİXœØÜš\[Û‹[œİXœØÜšX™J
+NÃBˆš\™\İÜ™QXYÛ›ÜİXĞXİ]™K™[]J˜[YJNÃBˆÙÑš\™\İÜ™QXYÛ›ÜİXÊ›\İ[™\‹Y]XÚY‹ÈÛÛXİ[Ûˆ˜[YK™X\ÛÛˆ™^Ü›İ\Èœ]Y\K]Ú[™İËXÚ[™ÙYˆˆ[™Yš[™YJNÃBˆXİ]™TİXœØÜš\[ÛœË˜İ\œ™[™[]J˜[YJNÃBˆCBˆCBƒBˆËÈYÛ›H™]ÛH™\]Y\İYÛÛXİ[ÛœËˆ^\İ[™È\İ[™\œÈ\™H™]Z[™YBˆËÈ[™Z\ˆÙ^HX\[™È\È™Yœ™\ÚYÚ]İ][›İ\ˆš\™\İÜ™H™XYƒBˆ›Üˆ
+ÛÛœİÛ˜[YKÜ›İ\HÙˆ\œ˜^K™œ›ÛJÜ›İ\Y™[šY\Ê
+JJHÃBˆÛÛœİÈÙ^\Ëš[\ˆHHÜ›İ\ÃBˆÛÛœİš[\’Ù^HH”ÓÓ‹œİš[™ÚYJš[\ˆ[
+NÃBˆÛÛœİ^\İ[™ÈHXİ]™TİXœØÜš\[ÛœË˜İ\œ™[™Ù]
+˜[YJNÃBˆYˆ
+^\İ[™ÊHÃBˆ^\İ[™ËšÙ^\ÈHÙ^\ÎÃBˆËÈHÚ\™Yš\™\İÜ™HÛÛXİ[ÛˆØ[ˆ˜XÚÈ[Ü™H[ˆÛ™HÛÜšÜÜXÙHÙ^CBˆËÈ
+›Üˆ^[\K\ÜİY\È[™ÛÛ\Z[ÊKˆ™]\ÙH]ÈØXÚYÛ˜\ÚİÚ[ƒBˆËÈHXİ]™H›İ]HÚ[™Ù\Ëİ\Ú\ÙHH™]ÛH™\]Y\İYÙ^HØ[ˆİ^CBˆËÈ[\H[[š\™\İÜ™H[Z]È[›İ\ˆÚ[™ÙKƒBˆÙ]İ]Jİ\œ™[OˆÃBˆÛÛœİ™^HÈ‹‹˜İ\œ™[NÃBˆ›Üˆ
+ÛÛœİÙ^HÙˆÙ^\ÊH™^ÚÙ^WHHÙ^HOOH˜ÛÛ\Z[ÈˆÈ^\İ[™Ëœ›İÜË™š[\Š›İÈOˆ\›İËš\Ñ[]Y
+Hˆ^\İ[™Ëœ›İÜÎÃBˆ™]\›ˆ™^ÃBˆJNÃBˆYˆ
+Ù^\Ëš[˜ÛY\Ê›Y[X™\œÈŠJHÙ]Y[X™\”›Ùš[\Ê^\İ[™Ëœ›İÜË›X\
+\ÓY[X™\ŠJNÃBˆÛÛ[YNÃBˆCBˆÛÛœİ˜\ÙPÛÛXİ[ÛˆHÛÛXİ[ÛŠ]X˜\ÙK˜[YJNÃBˆÛÛœİÛİ\˜ÙHH˜[YHOOH›Ü×Û›İYšXØ][ÛœÈƒBˆÈ]Y\J˜\ÙPÛÛXİ[Û‹Ú\™Jœ™XÚ\Y[[XZ[‹OH‹›Ùš[K™[XZ[
+JCBˆˆš[\ƒBˆÈ]Y\J˜\ÙPÛÛXİ[Û‹Ú\™JÛÜšÑ]H‹H‹š[\‹™œ›ÛJKÚ\™JÛÜšÑ]H‹H‹š[\‹›İYÚ
+JCBˆˆ˜\ÙPÛÛXİ[ÛÃBˆš\™\İÜ™QXYÛ›ÜİXĞXİ]™K˜Y
+˜[YJNÃBˆÙÑš\™\İÜ™QXYÛ›ÜİXÊ›\İ[™\‹X]XÚY‹ÈÛÛXİ[Ûˆ˜[YHJNÃBˆ]š\œİÛ˜\ÚİHYNÃBˆÛÛœİ[œİXœØÜšX™HHÛ”Û˜\Úİ
+Ûİ\˜ÙKÛ˜\ÚİOˆÃBˆÛÛœİÚ[™Ù\ÈHÛ˜\Úİ™ØĞÚ[™Ù\Ê
+NÃBˆÙÑš\™\İÜ™QXYÛ›ÜİXÊš\œİÛ˜\ÚİÈš[š]X[\Û˜\ÚİˆˆœÛ˜\Úİ]\]H‹ÃBˆÛÛXİ[Ûˆ˜[YKBˆØİ[Y[Ò[”Û˜\ÚİˆÛ˜\ÚİœÚ^™KBˆÚ[™ÙYØİ[Y[ÎˆÚ[™Ù\Ë›[™İBˆYYˆÚ[™Ù\Ë™š[\ŠÚ[™ÙHOˆÚ[™ÙK\HOOH˜YYŠK›[™İBˆ[ÙYšYYˆÚ[™Ù\Ë™š[\ŠÚ[™ÙHOˆÚ[™ÙK\HOOH›[ÙYšYYŠK›[™İBˆ™[[İ™YˆÚ[™Ù\Ë™š[\ŠÚ[™ÙHOˆÚ[™ÙK\HOOHœ™[[İ™YŠK›[™İBˆJNÃBˆš\œİÛ˜\ÚİH˜[ÙNÃBˆÛÛœİ›İÜÎˆ[V×HHÛ˜\Úİ™ØÜË›X\
+][HOˆ
+ÈÙØÒYˆ][KšY‹‹š][K™]J
+HJJNÃBˆÛÛœİİXœØÜš\[ÛˆHXİ]™TİXœØÜš\[ÛœË˜İ\œ™[™Ù]
+˜[YJNÃBˆYˆ
+İXœØÜš\[ÛŠHİXœØÜš\[Û‹œ›İÜÈH›İÜÎÃBˆÛÛœİİ\œ™[Ù^\ÈHİXœØÜš\[ÛËšÙ^\ÈÙ^\ÎÃBˆYˆ
+İ\œ™[Ù^\Ëš[˜ÛY\Ê›Y[X™\œÈŠJHÙ]Y[X™\”›Ùš[\Ê›İÜË›X\
+\ÓY[X™\ŠJNÃBˆÙ]İ]Jİ\œ™[OˆÃBˆÛÛœİ™^HÈ‹‹˜İ\œ™[NÃBˆ›Üˆ
+ÛÛœİÙ^HÙˆİ\œ™[Ù^\ÊH™^ÚÙ^WHHÙ^HOOH˜ÛÛ\Z[ÈˆÈ›İÜË™š[\Š][HOˆZ][Kš\Ñ[]Y
+Hˆ›İÜÎÃBˆ™]\›ˆ™^ÃBˆJNÃBˆK™X\ÛÛˆOˆÙ]\œ›ÜŠ™X\ÛÛˆ[œİ[˜Ù[Ùˆ\œ›ÜˆÈ™X\ÛÛˆˆ™]È\œ›ÜŠ•[˜X›HÈØYÛÜšÜÜXÙH]KˆŠJJNÃBˆXİ]™TİXœØÜš\[ÛœË˜İ\œ™[œÙ]
+˜[YKÈ[œİXœØÜšX™KÙ^\Ëš[\’Ù^K›İÜÎˆ×HJNÃBˆCBˆKØ]]\Ù\‹›Ùš[KXİ]™RÙ^\ÔÚYÛ˜]\™WJNÃBˆ\ÙQY™™Xİ
 
-    const grouped = new Map<string, WorkspaceCollection[]>();
-    for (const key of activeKeys) grouped.set(collectionMap[key], [...(grouped.get(collectionMap[key]) || []), key]);
 
-    // Remove only collections no longer needed by the active route.
-    for (const [name, subscription] of activeSubscriptions.current) {
-      if (!grouped.has(name)) {
-        subscription.unsubscribe();
-        firestoreDiagnosticActive.delete(name);
-        logFirestoreDiagnostic("listener-detached", { collection: name });
-        activeSubscriptions.current.delete(name);
-      }
-    }
+HOˆÃBˆÛÛœİ]X˜\ÙHHš\™X˜\ÙQÃBˆYˆ
+Y]X˜\ÙH›Ùš[OË›Y[X™\”›ÛHOOH›XYˆXXİ]™RÙ^\Ëš[˜ÛY\Ê›Y[X™\œÈŠJHÈÙ][š]][ÛœÊ×JNÈ™]\›ÈCBˆ™]\›ˆÛ”Û˜\Úİ
+ÛÛXİ[ÛŠ]X˜\ÙK›Ü×Ú[š]\ÈŠKÛ˜\ÚİOˆÙ][š]][ÛœÊÛ˜\Úİ™ØÜË›X\
+][HOˆ\ÓY[X™\ŠÈÙØÒYˆ][KšY\Ù\’Yˆˆ‹‹‹š][K™]J
+Kİ]\Îˆš[š]YˆJJJK™X\ÛÛˆOˆÙ]\œ›ÜŠ™X\ÛÛˆ[œİ[˜Ù[Ùˆ\œ›ÜˆÈ™X\ÛÛˆˆ™]È\œ›ÜŠ•[˜X›HÈØY[š]YX[H›Ùš[\ËˆŠJJNÃBˆKÜ›Ùš[OË›Y[X™\”›ÛKXİ]™RÙ^\Ëš[˜ÛY\Ê›Y[X™\œÈŠWJNÃBˆ\ÙQY™™Xİ
 
-    // Add only newly requested collections. Existing listeners are retained,
-    // and their key mapping is refreshed without another Firestore read.
-    for (const [name, keys] of grouped) {
-      const existing = activeSubscriptions.current.get(name);
-      if (existing) {
-        existing.keys = keys;
-        // A shared Firestore collection can back more than one workspace key
-        // (for example, issues and complaints). Reuse its cached snapshot when
-        // the active route changes, otherwise the newly requested key can stay
-        // empty until Firestore emits another change.
-        setState(current => {
-          const next = { ...current };
-          for (const key of keys) next[key] = key === "complaints" ? existing.rows.filter(row => !row.isDeleted) : existing.rows;
-          return next;
-        });
-        if (keys.includes("members")) setMemberProfiles(existing.rows.map(asMember));
-        continue;
-      }
-      const source = name === "ops_notifications" ? query(collection(database, name), where("recipientEmail", "==", profile.email)) : collection(database, name);
-      firestoreDiagnosticActive.add(name);
-      logFirestoreDiagnostic("listener-attached", { collection: name });
-      let firstSnapshot = true;
-      const unsubscribe = onSnapshot(source, snapshot => {
-        const changes = snapshot.docChanges();
-        logFirestoreDiagnostic(firstSnapshot ? "initial-snapshot" : "snapshot-update", {
-          collection: name,
-          documentsInSnapshot: snapshot.size,
-          changedDocuments: changes.length,
-          added: changes.filter(change => change.type === "added").length,
-          modified: changes.filter(change => change.type === "modified").length,
-          removed: changes.filter(change => change.type === "removed").length,
-        });
-        firstSnapshot = false;
-        const rows = snapshot.docs.map(item => ({ _docId: item.id, ...item.data() }));
-        const subscription = activeSubscriptions.current.get(name);
-        if (subscription) subscription.rows = rows;
-        const currentKeys = subscription?.keys || keys;
-        if (currentKeys.includes("members")) setMemberProfiles(rows.map(asMember));
-        setState(current => {
-          const next = { ...current };
-          for (const key of currentKeys) next[key] = key === "complaints" ? rows.filter(item => !item.isDeleted) : rows;
-          return next;
-        });
-      }, reason => setError(reason instanceof Error ? reason : new Error("Unable to load workspace data.")));
-      activeSubscriptions.current.set(name, { unsubscribe, keys });
-    }
-  }, [authUser, profile, activeKeysSignature]);
-  useEffect(() => {
-    const database = firebaseDb;
-    if (!database || profile?.memberRole !== "lead" || !activeKeys.includes("members")) { setInvitations([]); return; }
-    return onSnapshot(collection(database, "ops_invites"), snapshot => setInvitations(snapshot.docs.map(item => asMember({ _docId: item.id, userId: "", ...item.data(), status: "invited" }))), reason => setError(reason instanceof Error ? reason : new Error("Unable to load invited team profiles.")));
-  }, [profile?.memberRole, activeKeys.includes("members")]);
-  useEffect(() => { const database = firebaseDb; if (!database || !authUser || !profile) return; const updatePresence = () => { if (document.visibilityState === "visible") void setDoc(doc(database, "ops_presence", authUser.uid), { userId: authUser.uid, teamMemberId: profile.id, displayName: profile.displayName, initials: profile.initials, colour: profile.colour, lastActiveAt: now() }, { merge: true }); }; updatePresence(); const interval = window.setInterval(updatePresence, 60_000); document.addEventListener("visibilitychange", updatePresence); return () => { window.clearInterval(interval); document.removeEventListener("visibilitychange", updatePresence); }; }, [authUser, profile]);
-  const signIn = useCallback(async (email: string, password: string) => {
-    if (!firebaseAuth || !firebaseDb) throw new Error("Firebase is not configured yet.");
-    const credential = await signInWithEmailAndPassword(firebaseAuth, email.trim().toLowerCase(), password);
-    const memberProfile = await ensureMemberProfile(firebaseDb, credential.user);
-    if (!memberProfile) {
-      await signOut(firebaseAuth);
-      throw new Error("Your work email has not been invited yet. Ask the operations lead to add you to the team directory first.");
-    }
-    setProfile(memberProfile);
-  }, []);
-  const signUp = useCallback(async (name: string, email: string, password: string) => {
-    if (!firebaseAuth || !firebaseDb) throw new Error("Firebase is not configured yet.");
-    const normalized = email.trim().toLowerCase();
-    if (!normalized.endsWith("@swanstravel.com")) throw new Error("This workspace is restricted to approved Swans Travel work-email accounts.");
 
-    const credential = await createUserWithEmailAndPassword(firebaseAuth, normalized, password);
-    let memberProfileCreated = false;
-    try {
-      const memberProfile = await ensureMemberProfile(firebaseDb, credential.user, name);
-      if (!memberProfile) throw new Error("Your work email has not been invited yet. Ask the operations lead to add you to the team directory first, then try again.");
-      memberProfileCreated = true;
-      setProfile(memberProfile);
-      await sendEmailVerification(credential.user);
-    } catch (reason) {
-      if (!memberProfileCreated) {
-        try { await deleteUser(credential.user); } catch { /* Preserve the original error. A later sign-in can recover an invited account. */ }
-      }
-      throw reason;
-    }
-  }, []);
-  const resetPassword = useCallback(async (email: string) => { if (!firebaseAuth) throw new Error("Firebase is not configured yet."); await sendPasswordResetEmail(firebaseAuth, email.trim().toLowerCase()); }, []);
-  const logout = useCallback(async () => { if (firebaseAuth) await signOut(firebaseAuth); }, []);
-  const writeAudit = useCallback((action: "created" | "updated" | "deleted", collectionName: string, targetId: string, value: Record<string, unknown> = {}) => { if (!firebaseDb || !authUser || !profile || !activitySummary || !collectionMap[collectionName]) return; void addDoc(collection(firebaseDb, "ops_audit_logs"), { actorUserId: authUser.uid, actorName: profile.displayName, actorInitials: profile.initials, actorColour: profile.colour, action, targetType: collectionName, targetId, summary: activitySummary(action, collectionName, value), createdAt: now() }); }, [authUser, profile]);
-  const add = useCallback(async (collectionName: string, value: Record<string, unknown>) => { if (!firebaseDb) throw new Error("Firebase is not configured yet."); const payload = omitUndefinedFields({ ...value, createdAt: now(), updatedAt: now() }); const result = await addDoc(collection(firebaseDb, collectionMap[collectionName]), payload); if (collectionName !== "auditLogs" && collectionName !== "notifications") writeAudit("created", collectionName, result.id, payload); if (collectionName === "tasks" && typeof payload.assignedEmail === "string" && payload.assignedEmail) { try { const createdAt = now(); await addDoc(collection(firebaseDb, collectionMap.notifications), buildTaskAssignmentNotification({ id: typeof payload.id === "number" ? payload.id : null, assignedEmail: payload.assignedEmail, title: String(payload.title || "A new task") }, numericId(), createdAt)); } finally { void queueTaskAssignmentEmail(authUser, payload); } } return { _docId: result.id, ...payload }; }, [authUser, writeAudit]);
-  const patch = useCallback(async (collectionName: string, id: string, value: Record<string, unknown>) => { if (!firebaseDb) throw new Error("Firebase is not configured yet."); const changes = omitUndefinedFields({ ...value, updatedAt: now() }); await updateDoc(doc(firebaseDb, collectionMap[collectionName], id), changes); if (collectionName !== "auditLogs" && collectionName !== "notifications" && collectionName !== "presence") writeAudit("updated", collectionName, id, changes); if (collectionName === "members" && id === authUser?.uid) setProfile(current => current ? { ...current, ...changes } as Member : current); }, [authUser, writeAudit]);
-  const remove = useCallback(async (collectionName: string, id: string) => { if (!firebaseDb) throw new Error("Firebase is not configured yet."); await deleteDoc(doc(firebaseDb, collectionMap[collectionName], id)); if (collectionName !== "auditLogs" && collectionName !== "notifications") writeAudit("deleted", collectionName, id); }, [writeAudit]);
-  const addTaskResource = useCallback(async ({ taskId, url, title, note }: TaskResourceInput) => {
-    if (!firebaseDb || !authUser || !profile) throw new Error("You must be signed in to add a resource link.");
-    const normalizedUrl = url.trim();
-    const normalizedTitle = title.trim();
-    if (!isAllowedTaskResourceUrl(normalizedUrl)) throw new Error("Use a secure SharePoint or OneDrive link.");
-    if (!normalizedTitle) throw new Error("Give the resource a clear title.");
-    const payload = { id: numericId(), taskId, url: normalizedUrl, title: normalizedTitle, note: note?.trim() || null, addedByUserId: authUser.uid, addedByTeamMemberId: profile.id, addedByName: profile.displayName };
-    const created = await addDoc(collection(firebaseDb, collectionMap.taskAttachments), { ...payload, createdAt: now(), updatedAt: now() });
-    writeAudit("created", "taskAttachments", created.id, payload);
-    return { _docId: created.id, ...payload, createdAt: now() } as TaskResource;
-  }, [authUser, profile, writeAudit]);
-  const removeTaskResource = useCallback(async (resource: TaskResource) => {
-    if (!firebaseDb || !profile || !["lead", "manager"].includes(profile.memberRole)) throw new Error("Only an operations manager can remove task resource links.");
-    await deleteDoc(doc(firebaseDb, collectionMap.taskAttachments, resource._docId));
-    writeAudit("deleted", "taskAttachments", resource._docId, { taskId: resource.taskId, title: resource.title, url: resource.url });
-  }, [profile, writeAudit]);
-  const createTeamMember = useCallback(async (value: Record<string, unknown>) => { if (!firebaseDb || !profile || profile.memberRole !== "lead") throw new Error("Only the operations lead can add a team member."); const email = String(value.email || "").trim().toLowerCase(); if (!email.endsWith("@swanstravel.com")) throw new Error("Use the colleagueâ€™s Swans Travel work email."); const memberId = numericId(); const invitation: Member & { createdAt: number; createdBy: string } = { id: memberId, userId: "", email, displayName: String(value.displayName), jobTitle: String(value.jobTitle), memberRole: value.memberRole as Member["memberRole"], initials: String(value.initials), colour: String(value.colour), status: "invited", createdAt: now(), createdBy: profile.userId }; await setDoc(doc(firebaseDb, "ops_invites", email), invitation); writeAudit("created", "members", email, invitation); setInvitations(current => [...current.filter(member => member.email !== email), invitation]); return invitation; }, [profile, writeAudit]);
-  const cancelTeamInvitation = useCallback(async (email: string) => { if (!firebaseDb || profile?.memberRole !== "lead") throw new Error("Only the operations lead can cancel an invitation."); await deleteDoc(doc(firebaseDb, "ops_invites", email)); writeAudit("deleted", "members", email, { email }); setInvitations(current => current.filter(member => member.email !== email)); }, [profile, writeAudit]);
-  const value = useMemo(() => ({ authUser, profile, loading, error, state: workspaceState, refresh, registerDemand, unregisterDemand, signIn, signUp, resetPassword, logout, add, patch, remove, addTaskResource, removeTaskResource, createTeamMember, cancelTeamInvitation }), [authUser, profile, loading, error, workspaceState, refresh, registerDemand, unregisterDemand, signIn, signUp, resetPassword, logout, add, patch, remove, addTaskResource, removeTaskResource, createTeamMember, cancelTeamInvitation]); return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
-}
-export function useWorkspace(collections: WorkspaceCollection[] = []) { const context = useContext(WorkspaceContext); const demandId = useId(); const collectionsSignature = [...new Set(collections)].sort().join(","); const registerDemand = context?.registerDemand; const unregisterDemand = context?.unregisterDemand; useEffect(() => { const requested = collectionsSignature ? collectionsSignature.split(",") as WorkspaceCollection[] : []; registerDemand?.(demandId, requested); return () => unregisterDemand?.(demandId); }, [registerDemand, unregisterDemand, demandId, collectionsSignature]); if (!context) throw new Error("WorkspaceProvider is missing."); return context; }
-export function requireLead(profile: Member | null) { if (!profile || profile.memberRole !== "lead") throw new Error("Only the operations lead can perform that action."); }
-export function requireOperationsManager(profile: Member | null) { if (!profile || !["lead", "manager"].includes(profile.memberRole)) throw new Error("Only an operations lead or manager can perform that action."); }
-export function hydrateMember(state: State, memberId?: number | null) { return state.members.find(member => member.id === memberId) ?? null; }
+HOˆÈÛÛœİ]X˜\ÙHHš\™X˜\ÙQÈYˆ
+Y]X˜\ÙHX]]\Ù\ˆ\›Ùš[JH™]\›ÈÛÛœİ\]T™\Ù[˜ÙHH
+
+HOˆÈYˆ
+Øİ[Y[š\ÚXš[]Tİ]HOOHš\ÚX›HŠH›ÚYÙ]ØÊØÊ]X˜\ÙK›Ü×Ü™\Ù[˜ÙH‹]]\Ù\‹ZY
+KÈ\Ù\’Yˆ]]\Ù\‹ZYX[SY[X™\’Yˆ›Ùš[KšY\Ü^S˜[YNˆ›Ùš[K™\Ü^S˜[YK[š]X[Îˆ›Ùš[Kš[š]X[ËÛÛİ\ˆ›Ùš[K˜ÛÛİ\‹\İXİ]™P]ˆ›İÊ
+HKÈY\™ÙNˆYHJNÈNÈ\]T™\Ù[˜ÙJ
+NÈÛÛœİ[\˜[HÚ[™İËœÙ][\˜[
+\]T™\Ù[˜ÙKŒÌ
+NÈØİ[Y[˜Y]™[\İ[™\Šš\ÚXš[]XÚ[™ÙH‹\]T™\Ù[˜ÙJNÈ™]\›ˆ
+
+HOˆÈÚ[™İË˜ÛX\’[\˜[
+[\˜[
+NÈØİ[Y[œ™[[İ™Q]™[\İ[™\Šš\ÚXš[]XÚ[™ÙH‹\]T™\Ù[˜ÙJNÈNÈKØ]]\Ù\‹›Ùš[WJNÃBˆÛÛœİÚYÛ’[ˆH\ÙPØ[˜XÚÊ\Ş[˜È
+[XZ[ˆİš[™Ë\ÜİÛÜ™ˆİš[™ÊHOˆÃBˆYˆ
+Yš\™X˜\ÙP]]Yš\™X˜\ÙQŠH›İÈ™]È\œ›ÜŠ‘š\™X˜\ÙH\È›İÛÛ™šYİ\™YY]ˆŠNÃBˆÛÛœİÜ™Y[X[H]ØZ]ÚYÛ’[•Ú][XZ[[™\ÜİÛÜ™
+š\™X˜\ÙP]][XZ[š[J
+KÓİÙ\Ø\ÙJ
+K\ÜİÛÜ™
+NÃBˆÛÛœİY[X™\”›Ùš[HH]ØZ][œİ\™SY[X™\”›Ùš[Jš\™X˜\ÙQ‹Ü™Y[X[\Ù\ŠNÃBˆYˆ
+[Y[X™\”›Ùš[JHÃBˆ]ØZ]ÚYÛ“İ]
+š\™X˜\ÙP]]
+NÃBˆ›İÈ™]È\œ›ÜŠ–[İ\ˆÛÜšÈ[XZ[\È›İ™Y[ˆ[š]YY]ˆ\ÚÈHÜ\˜][ÛœÈXYÈY[İHÈHX[H\™XİÜHš\œİˆŠNÃBˆCBˆÙ]›Ùš[JY[X™\”›Ùš[JNÃBˆK×JNÃBˆÛÛœİÚYÛ•\H\ÙPØ[˜XÚÊ\Ş[˜È
+˜[YNˆİš[™Ë[XZ[ˆİš[™Ë\ÜİÛÜ™ˆİš[™ÊHOˆÃBˆYˆ
+Yš\™X˜\ÙP]]Yš\™X˜\ÙQŠH›İÈ™]È\œ›ÜŠ‘š\™X˜\ÙH\È›İÛÛ™šYİ\™YY]ˆŠNÃBˆÛÛœİ›Ü›X[^™YH[XZ[š[J
+KÓİÙ\Ø\ÙJ
+NÃBˆYˆ
+[›Ü›X[^™Y™[™ÕÚ]
+İØ[œİ˜]™[˜ÛÛHŠJH›İÈ™]È\œ›ÜŠ•\ÈÛÜšÜÜXÙH\È™\İšXİYÈ\›İ™YİØ[œÈ˜]™[ÛÜšËY[XZ[XØÛİ[ËˆŠNÃBƒBˆÛÛœİÜ™Y[X[H]ØZ]Ü™X]U\Ù\•Ú][XZ[[™\ÜİÛÜ™
+š\™X˜\ÙP]]›Ü›X[^™Y\ÜİÛÜ™
+NÃBˆ]Y[X™\”›Ùš[PÜ™X]YH˜[ÙNÃBˆHÃBˆÛÛœİY[X™\”›Ùš[HH]ØZ][œİ\™SY[X™\”›Ùš[Jš\™X˜\ÙQ‹Ü™Y[X[\Ù\‹˜[YJNÃBˆYˆ
+[Y[X™\”›Ùš[JH›İÈ™]È\œ›ÜŠ–[İ\ˆÛÜšÈ[XZ[\È›İ™Y[ˆ[š]YY]ˆ\ÚÈHÜ\˜][ÛœÈXYÈY[İHÈHX[H\™XİÜHš\œİ[ˆHYØZ[‹ˆŠNÃBˆY[X™\”›Ùš[PÜ™X]YHYNÃBˆÙ]›Ùš[JY[X™\”›Ùš[JNÃBˆ]ØZ]Ù[™[XZ[™\šYšXØ][ÛŠÜ™Y[X[\Ù\ŠNÃBˆHØ]Ú
+™X\ÛÛŠHÃBˆYˆ
+[Y[X™\”›Ùš[PÜ™X]Y
+HÃBˆHÈ]ØZ][]U\Ù\ŠÜ™Y[X[\Ù\ŠNÈHØ]ÚÈÊˆ™\Ù\™HHÜšYÚ[˜[\œ›Ü‹ˆH]\ˆÚYÛ‹Z[ˆØ[ˆ™XÛİ™\ˆ[ˆ[š]YXØÛİ[ˆ
+‹ÈCBˆCBˆ›İÈ™X\ÛÛÃBˆCBˆK×JNÃBˆÛÛœİ™\Ù]\ÜİÛÜ™H\ÙPØ[˜XÚÊ\Ş[˜È
+[XZ[ˆİš[™ÊHOˆÈYˆ
+Yš\™X˜\ÙP]]
+H›İÈ™]È\œ›ÜŠ‘š\™X˜\ÙH\È›İÛÛ™šYİ\™YY]ˆŠNÈ]ØZ]Ù[™\ÜİÛÜ™™\Ù][XZ[
+š\™X˜\ÙP]][XZ[š[J
+KÓİÙ\Ø\ÙJ
+JNÈK×JNÃBˆÛÛœİÙÛİ]H\ÙPØ[˜XÚÊ\Ş[˜È
+
+HOˆÈYˆ
+š\™X˜\ÙP]]
+H]ØZ]ÚYÛ“İ]
+š\™X˜\ÙP]]
+NÈK×JNÃBˆÛÛœİÜš]P]Y]H\ÙPØ[˜XÚÊ
+Xİ[Ûˆ˜Ü™X]Yˆ\]Yˆ™[]Y‹ÛÛXİ[Û“˜[YNˆİš[™Ë\™Ù]Yˆİš[™Ë˜[YNˆ™XÛÜ™İš[™Ë[šÛ›İÛˆHßJHOˆÈYˆ
+Yš\™X˜\ÙQˆX]]\Ù\ˆ\›Ùš[HXXİ]š]Tİ[[X\HXÛÛXİ[Û“X\ØÛÛXİ[Û“˜[YWJH™]\›È›ÚYYØÊÛÛXİ[ÛŠš\™X˜\ÙQ‹›Ü×Ø]Y]ÛÙÜÈŠKÈXİÜ•\Ù\’Yˆ]]\Ù\‹ZYXİÜ“˜[YNˆ›Ùš[K™\Ü^S˜[YKXİÜ’[š]X[Îˆ›Ùš[Kš[š]X[ËXİÜÛÛİ\ˆ›Ùš[K˜ÛÛİ\‹Xİ[Û‹\™Ù]\NˆÛÛXİ[Û“˜[YK\™Ù]Yİ[[X\NˆXİ]š]Tİ[[X\JXİ[Û‹ÛÛXİ[Û“˜[YK˜[YJKÜ™X]Y]ˆ›İÊ
+HJNÈKØ]]\Ù\‹›Ùš[WJNÃBˆÛÛœİYH\ÙPØ[˜XÚÊ\Ş[˜È
+ÛÛXİ[Û“˜[YNˆİš[™Ë˜[YNˆ™XÛÜ™İš[™Ë[šÛ›İÛŠHOˆÈYˆ
+Yš\™X˜\ÙQŠH›İÈ™]È\œ›ÜŠ‘š\™X˜\ÙH\È›İÛÛ™šYİ\™YY]ˆŠNÈÛÛœİ^[ØYHÛZ][™Yš[™YšY[ÊÈ‹‹˜[YKÜ™X]Y]ˆ›İÊ
+K\]Y]ˆ›İÊ
+HJNÈÛÛœİ™\İ[H]ØZ]YØÊÛÛXİ[ÛŠš\™X˜\ÙQ‹ÛÛXİ[Û“X\ØÛÛXİ[Û“˜[YWJK^[ØY
+NÈYˆ
+ÛÛXİ[Û“˜[YHOOH˜]Y]ÙÜÈˆ	‰ˆÛÛXİ[Û“˜[YHOOH››İYšXØ][ÛœÈŠHÜš]P]Y]
+˜Ü™X]Y‹ÛÛXİ[Û“˜[YK™\İ[šY^[ØY
+NÈYˆ
+ÛÛXİ[Û“˜[YHOOH\ÚÜÈˆ	‰ˆ\[Ùˆ^[ØY˜\ÜÚYÛ™Y[XZ[OOHœİš[™Èˆ	‰ˆ^[ØY˜\ÜÚYÛ™Y[XZ[
+HÈHÈÛÛœİÜ™X]Y]H›İÊ
+NÈ]ØZ]YØÊÛÛXİ[ÛŠš\™X˜\ÙQ‹ÛÛXİ[Û“X\››İYšXØ][ÛœÊKZ[\ÚĞ\ÜÚYÛ›Y[›İYšXØ][ÛŠÈYˆ\[Ùˆ^[ØYšYOOH›[X™\ˆˆÈ^[ØYšYˆ[\ÜÚYÛ™Y[XZ[ˆ^[ØY˜\ÜÚYÛ™Y[XZ[]Nˆİš[™Ê^[ØY]HH™]È\ÚÈŠHK[Y\šXÒY
+
+KÜ™X]Y]
+JNÈHš[˜[HÈ›ÚY]Y]YU\ÚĞ\ÜÚYÛ›Y[[XZ[
+]]\Ù\‹^[ØY
+NÈHH™]\›ˆÈÙØÒYˆ™\İ[šY‹‹œ^[ØYNÈKØ]]\Ù\‹Üš]P]Y]JNÃBˆÛÛœİ]ÚH\ÙPØ[˜XÚÊ\Ş[˜È
+ÛÛXİ[Û“˜[YNˆİš[™ËYˆİš[™Ë˜[YNˆ™XÛÜ™İš[™Ë[šÛ›İÛŠHOˆÈYˆ
+Yš\™X˜\ÙQŠH›İÈ™]È\œ›ÜŠ‘š\™X˜\ÙH\È›İÛÛ™šYİ\™YY]ˆŠNÈÛÛœİÚ[™Ù\ÈHÛZ][™Yš[™YšY[ÊÈ‹‹˜[YK\]Y]ˆ›İÊ
+HJNÈ]ØZ]\]QØÊØÊš\™X˜\ÙQ‹ÛÛXİ[Û“X\ØÛÛXİ[Û“˜[YWKY
+KÚ[™Ù\ÊNÈYˆ
+ÛÛXİ[Û“˜[YHOOH˜]Y]ÙÜÈˆ	‰ˆÛÛXİ[Û“˜[YHOOH››İYšXØ][ÛœÈˆ	‰ˆÛÛXİ[Û“˜[YHOOHœ™\Ù[˜ÙHŠHÜš]P]Y]
+\]Y‹ÛÛXİ[Û“˜[YKYÚ[™Ù\ÊNÈYˆ
+ÛÛXİ[Û“˜[YHOOH›Y[X™\œÈˆ	‰ˆYOOH]]\Ù\ËZY
+HÙ]›Ùš[Jİ\œ™[Oˆİ\œ™[ÈÈ‹‹˜İ\œ™[‹‹˜Ú[™Ù\ÈH\ÈY[X™\ˆˆİ\œ™[
+NÈKØ]]\Ù\‹Üš]P]Y]JNÃBˆÛÛœİ™[[İ™HH\ÙPØ[˜XÚÊ\Ş[˜È
+ÛÛXİ[Û“˜[YNˆİš[™ËYˆİš[™ÊHOˆÈYˆ
+Yš\™X˜\ÙQŠH›İÈ™]È\œ›ÜŠ‘š\™X˜\ÙH\È›İÛÛ™šYİ\™YY]ˆŠNÈ]ØZ][]QØÊØÊš\™X˜\ÙQ‹ÛÛXİ[Û“X\ØÛÛXİ[Û“˜[YWKY
+JNÈYˆ
+ÛÛXİ[Û“˜[YHOOH˜]Y]ÙÜÈˆ	‰ˆÛÛXİ[Û“˜[YHOOH››İYšXØ][ÛœÈŠHÜš]P]Y]
+™[]Y‹ÛÛXİ[Û“˜[YKY
+NÈKİÜš]P]Y]JNÃBˆÛÛœİY\ÚÔ™\Ûİ\˜ÙHH\ÙPØ[˜XÚÊ\Ş[˜È
+È\ÚÒY\›]K›İHNˆ\ÚÔ™\Ûİ\˜ÙR[œ]
+HOˆÃBˆYˆ
+Yš\™X˜\ÙQˆX]]\Ù\ˆ\›Ùš[JH›İÈ™]È\œ›ÜŠ–[İH]\İ™HÚYÛ™Y[ˆÈYH™\Ûİ\˜ÙH[šËˆŠNÃBˆÛÛœİ›Ü›X[^™Y\›H\›š[J
+NÃBˆÛÛœİ›Ü›X[^™Y]HH]Kš[J
+NÃBˆYˆ
+Z\Ğ[İÙY\ÚÔ™\Ûİ\˜ÙU\›
+›Ü›X[^™Y\›
+JH›İÈ™]È\œ›ÜŠ•\ÙHHÙXİ\™HÚ\™TÚ[ÜˆÛ™Qš]™H[šËˆŠNÃBˆYˆ
+[›Ü›X[^™Y]JH›İÈ™]È\œ›ÜŠ‘Ú]™HH™\Ûİ\˜ÙHHÛX\ˆ]KˆŠNÃBˆÛÛœİ^[ØYHÈYˆ[Y\šXÒY
+
+K\ÚÒY\›ˆ›Ü›X[^™Y\›]Nˆ›Ü›X[^™Y]K›İNˆ›İOËš[J
+H[YYU\Ù\’Yˆ]]\Ù\‹ZYYYUX[SY[X™\’Yˆ›Ùš[KšYYYS˜[YNˆ›Ùš[K™\Ü^S˜[YHNÃBˆÛÛœİÜ™X]YH]ØZ]YØÊÛÛXİ[ÛŠš\™X˜\ÙQ‹ÛÛXİ[Û“X\\ÚĞ]XÚY[ÊKÈ‹‹œ^[ØYÜ™X]Y]ˆ›İÊ
+K\]Y]ˆ›İÊ
+HJNÃBˆÜš]P]Y]
+˜Ü™X]Y‹\ÚĞ]XÚY[È‹Ü™X]YšY^[ØY
+NÃBˆ™]\›ˆÈÙØÒYˆÜ™X]YšY‹‹œ^[ØYÜ™X]Y]ˆ›İÊ
+HH\È\ÚÔ™\Ûİ\˜ÙNÃBˆKØ]]\Ù\‹›Ùš[KÜš]P]Y]JNÃBˆÛÛœİ™[[İ™U\ÚÔ™\Ûİ\˜ÙHH\ÙPØ[˜XÚÊ\Ş[˜È
+™\Ûİ\˜ÙNˆ\ÚÔ™\Ûİ\˜ÙJHOˆÃBˆYˆ
+Yš\™X˜\ÙQˆ\›Ùš[HVÈ›XY‹›X[˜YÙ\ˆ—Kš[˜ÛY\Ê›Ùš[K›Y[X™\”›ÛJJH›İÈ™]È\œ›ÜŠ“Û›H[ˆÜ\˜][ÛœÈX[˜YÙ\ˆØ[ˆ™[[İ™H\ÚÈ™\Ûİ\˜ÙH[šÜËˆŠNÃBˆ]ØZ][]QØÊØÊš\™X˜\ÙQ‹ÛÛXİ[Û“X\\ÚĞ]XÚY[Ë™\Ûİ\˜ÙK—ÙØÒY
+JNÃBˆÜš]P]Y]
+™[]Y‹\ÚĞ]XÚY[È‹™\Ûİ\˜ÙK—ÙØÒYÈ\ÚÒYˆ™\Ûİ\˜ÙK\ÚÒY]Nˆ™\Ûİ\˜ÙK]K\›ˆ™\Ûİ\˜ÙK\›JNÃBˆKÜ›Ùš[KÜš]P]Y]JNÃBˆÛÛœİÜ™X]UX[SY[X™\ˆH\ÙPØ[˜XÚÊ\Ş[˜È
+˜[YNˆ™XÛÜ™İš[™Ë[šÛ›İÛŠHOˆÈYˆ
+Yš\™X˜\ÙQˆ\›Ùš[H›Ùš[K›Y[X™\”›ÛHOOH›XYŠH›İÈ™]È\œ›ÜŠ“Û›HHÜ\˜][ÛœÈXYØ[ˆYHX[HY[X™\‹ˆŠNÈÛÛœİ[XZ[Hİš[™Ê˜[YK™[XZ[ˆŠKš[J
+KÓİÙ\Ø\ÙJ
+NÈYˆ
+Y[XZ[™[™ÕÚ]
+İØ[œİ˜]™[˜ÛÛHŠJH›İÈ™]È\œ›ÜŠ•\ÙHHÛÛXYİYx &\ÈİØ[œÈ˜]™[ÛÜšÈ[XZ[ˆŠNÈÛÛœİY[X™\’YH[Y\šXÒY
+
+NÈÛÛœİ[š]][ÛˆY[X™\ˆ	ˆÈÜ™X]Y]ˆ[X™\ÈÜ™X]YNˆİš[™ÈHHÈYˆY[X™\’Y\Ù\’Yˆˆ‹[XZ[\Ü^S˜[YNˆİš[™Ê˜[YK™\Ü^S˜[YJK›Ø•]Nˆİš[™Ê˜[YKš›Ø•]JKY[X™\”›ÛNˆ˜[YK›Y[X™\”›ÛH\ÈY[X™\–È›Y[X™\”›ÛH—K[š]X[Îˆİš[™Ê˜[YKš[š]X[ÊKÛÛİ\ˆİš[™Ê˜[YK˜ÛÛİ\ŠKİ]\Îˆš[š]Y‹Ü™X]Y]ˆ›İÊ
+KÜ™X]YNˆ›Ùš[K\Ù\’YNÈ]ØZ]Ù]ØÊØÊš\™X˜\ÙQ‹›Ü×Ú[š]\È‹[XZ[
+K[š]][ÛŠNÈÜš]P]Y]
+˜Ü™X]Y‹›Y[X™\œÈ‹[XZ[[š]][ÛŠNÈÙ][š]][ÛœÊİ\œ™[OˆË‹‹˜İ\œ™[™š[\ŠY[X™\ˆOˆY[X™\‹™[XZ[OOH[XZ[
+K[š]][Û—JNÈ™]\›ˆ[š]][ÛÈKÜ›Ùš[KÜš]P]Y]JNÃBˆÛÛœİØ[˜Ù[X[R[š]][ÛˆH\ÙPØ[˜XÚÊ\Ş[˜È
+[XZ[ˆİš[™ÊHOˆÈYˆ
+Yš\™X˜\ÙQˆ›Ùš[OË›Y[X™\”›ÛHOOH›XYŠH›İÈ™]È\œ›ÜŠ“Û›HHÜ\˜][ÛœÈXYØ[ˆØ[˜Ù[[ˆ[š]][Û‹ˆŠNÈ]ØZ][]QØÊØÊš\™X˜\ÙQ‹›Ü×Ú[š]\È‹[XZ[
+JNÈÜš]P]Y]
+™[]Y‹›Y[X™\œÈ‹[XZ[È[XZ[JNÈÙ][š]][ÛœÊİ\œ™[Oˆİ\œ™[™š[\ŠY[X™\ˆOˆY[X™\‹™[XZ[OOH[XZ[
+JNÈKÜ›Ùš[KÜš]P]Y]JNÃBˆÛÛœİ˜[YHH\ÙSY[[Ê
+
+HOˆ
+È]]\Ù\‹›Ùš[KØY[™Ë\œ›Ü‹İ]NˆÛÜšÜÜXÙTİ]K™Yœ™\Ú™YÚ\İ\‘[X[™[œ™YÚ\İ\‘[X[™ÚYÛ’[‹ÚYÛ•\™\Ù]\ÜİÛÜ™ÙÛİ]Y]Ú™[[İ™KY\ÚÔ™\Ûİ\˜ÙK™[[İ™U\ÚÔ™\Ûİ\˜ÙKÜ™X]UX[SY[X™\‹Ø[˜Ù[X[R[š]][ÛˆJKØ]]\Ù\‹›Ùš[KØY[™Ë\œ›Ü‹ÛÜšÜÜXÙTİ]K™Yœ™\Ú™YÚ\İ\‘[X[™[œ™YÚ\İ\‘[X[™ÚYÛ’[‹ÚYÛ•\™\Ù]\ÜİÛÜ™ÙÛİ]Y]Ú™[[İ™KY\ÚÔ™\Ûİ\˜ÙK™[[İ™U\ÚÔ™\Ûİ\˜ÙKÜ™X]UX[SY[X™\‹Ø[˜Ù[X[R[š]][Û—JNÈ™]\›ˆÛÜšÜÜXÙPÛÛ^”›İšY\ˆ˜[YO^İ˜[Y_OØÚ[™[ŸOÕÛÜšÜÜXÙPÛÛ^”›İšY\ÃBŸCB™^Ü[˜İ[Ûˆ\ÙUÛÜšÜÜXÙJÛÛXİ[ÛœÎˆÛÜšÜÜXÙPÛÛXİ[Û–×HH×Kš[\œÎˆÛÜšÜÜXÙQš[\œÈHßJHÈÛÛœİÛÛ^H\ÙPÛÛ^
+ÛÜšÜÜXÙPÛÛ^
+NÈÛÛœİ[X[™YH\ÙRY
+
+NÈÛÛœİÛÛXİ[ÛœÔÚYÛ˜]\™HH\œ˜^K™œ›ÛJ™]ÈÙ]
+ÛÛXİ[ÛœÊJKœÛÜ
+
+Kš›Ú[Š‹ŠNÈÛÛœİš[\œÔÚYÛ˜]\™HH”ÓÓ‹œİš[™ÚYJš[\œÊNÈÛÛœİ™YÚ\İ\‘[X[™HÛÛ^Ëœ™YÚ\İ\‘[X[™ÈÛÛœİ[œ™YÚ\İ\‘[X[™HÛÛ^Ë[œ™YÚ\İ\‘[X[™È\ÙQY™™Xİ
+
+
+HOˆÈÛÛœİ™\]Y\İYHÛÛXİ[ÛœÔÚYÛ˜]\™HÈÛÛXİ[ÛœÔÚYÛ˜]\™KœÜ]
+‹ŠH\ÈÛÜšÜÜXÙPÛÛXİ[Û–×Hˆ×NÈ™YÚ\İ\‘[X[™ËŠ[X[™Y™\]Y\İY”ÓÓ‹œ\œÙJš[\œÔÚYÛ˜]\™JJNÈ™]\›ˆ
+
+HOˆ[œ™YÚ\İ\‘[X[™ËŠ[X[™Y
+NÈKÜ™YÚ\İ\‘[X[™[œ™YÚ\İ\‘[X[™[X[™YÛÛXİ[ÛœÔÚYÛ˜]\™Kš[\œÔÚYÛ˜]\™WJNÈYˆ
+XÛÛ^
+H›İÈ™]È\œ›ÜŠ•ÛÜšÜÜXÙT›İšY\ˆ\ÈZ\ÜÚ[™ËˆŠNÈ™]\›ˆÛÛ^ÈCB™^Ü[˜İ[Ûˆ™\]Z\™SXY
+›Ùš[NˆY[X™\ˆ[
+HÈYˆ
+\›Ùš[H›Ùš[K›Y[X™\”›ÛHOOH›XYŠH›İÈ™]È\œ›ÜŠ“Û›HHÜ\˜][ÛœÈXYØ[ˆ\™›Ü›H]Xİ[Û‹ˆŠNÈCB™^Ü[˜İ[Ûˆ™\]Z\™SÜ\˜][ÛœÓX[˜YÙ\Š›Ùš[NˆY[X™\ˆ[
+HÈYˆ
+\›Ùš[HVÈ›XY‹›X[˜YÙ\ˆ—Kš[˜ÛY\Ê›Ùš[K›Y[X™\”›ÛJJH›İÈ™]È\œ›ÜŠ“Û›H[ˆÜ\˜][ÛœÈXYÜˆX[˜YÙ\ˆØ[ˆ\™›Ü›H]Xİ[Û‹ˆŠNÈCB™^Ü[˜İ[ÛˆY˜]SY[X™\Šİ]Nˆİ]KY[X™\’YÎˆ[X™\ˆ[
+HÈ™]\›ˆİ]K›Y[X™\œË™š[™
+Y[X™\ˆOˆY[X™\‹šYOOHY[X™\’Y
+HÏÈ[ÈCB

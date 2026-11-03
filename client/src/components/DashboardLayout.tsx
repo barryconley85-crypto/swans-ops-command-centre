@@ -45,8 +45,9 @@ const collectionsForPath = (path: string): string[] => {
     "/profile": [],
     "/activity": ["auditLogs"],
     "/help": ["helpRequests"],
-    "/tasks": ["tasks", "activities", "taskAttachments", "issues", "rota"],
-    "/rota": ["rota", "templates"],
+    // Tasks and rota pages attach date-windowed listeners directly.
+    "/tasks": ["activities", "taskAttachments", "issues"],
+    "/rota": ["templates"],
     "/on-call": ["onCallItems", "rota", "tasks", "helpRequests", "chatMessages"],
     "/chat": ["chatMessages"],
     "/handover": ["handovers"],
