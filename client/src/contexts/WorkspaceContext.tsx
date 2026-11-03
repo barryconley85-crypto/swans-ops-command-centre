@@ -88,7 +88,7 @@ async function queueTaskAssignmentEmail(authUser: User | null, task: Record<stri
 }
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
-  const [authUser, setAuthUser] = useState<User | null>(null); const [profile, setProfile] = useState<Member | null>(null); const [state, setState] = useState<State>(emptyState); const [memberProfiles, setMemberProfiles] = useState<Member[]>([]); const [invitations, setInvitations] = useState<Member[]>([]); const [demands, setDemands] = useState<Record<string, WorkspaceCollection[]>>({}); const [loading, setLoading] = useState(true); const [error, setError] = useState<Error | null>(null); const signedInAuditUid = useRef<string | null>(null);
+  const [authUser, setAuthUser] = useState<User | null>(null); const [profile, setProfile] = useState<Member | null>(null); const [state, setState] = useState<State>(emptyState); const [memberProfiles, setMemberProfiles] = useState<Member[]>([]); const [invitations, setInvitations] = useState<Member[]>([]); const [demands, setDemands] = useState<Record<string, WorkspaceCollection[]>>({}); const [loading, setLoading] = useState(true); const [error, setError] = useState<Error | null>(null); const signedInAuditUid = useRef<string | null>(null); const activeSubscriptions = useRef(new Map<string, { unsubscribe: () => void; keys: WorkspaceCollection[] }>());
   const registerDemand = useCallback((id: string, collections: WorkspaceCollection[]) => setDemands(current => current[id]?.join(",") === collections.join(",") ? current : { ...current, [id]: collections }), []);
   const unregisterDemand = useCallback((id: string) => setDemands(current => { if (!(id in current)) return current; const next = { ...current }; delete next[id]; return next; }), []);
   const activeKeysSignature = useMemo(() => [...new Set(Object.values(demands).flat())].filter(key => (key !== "reportViews" && key !== "auditLogs") || profile?.memberRole === "lead").sort().join(","), [demands, profile?.memberRole]);
@@ -123,6 +123,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setError(null);
   }, [authUser, profile?.email, activeKeysSignature]);
   useEffect(() => { const database = firebaseDb; if (!firebaseAuth || !database) { setLoading(false); return; } return onAuthStateChanged(firebaseAuth, async user => { setAuthUser(user); setProfile(null); setState(emptyState); setMemberProfiles([]); setInvitations([]); setError(null); if (!user) { signedInAuditUid.current = null; setLoading(false); return; } try { const snapshot = await getDoc(doc(database, "ops_members", user.uid)); if (snapshot.exists()) { const memberProfile = { userId: user.uid, ...snapshot.data() } as Member; setProfile(memberProfile); if (signedInAuditUid.current !== user.uid) { signedInAuditUid.current = user.uid; void addDoc(collection(database, "ops_audit_logs"), { actorUserId: user.uid, actorName: memberProfile.displayName, actorInitials: memberProfile.initials, actorColour: memberProfile.colour, action: "signed_in", targetType: "session", summary: "Signed in to the Command Centre.", createdAt: now() }); } } setLoading(false); } catch (reason) { setError(reason instanceof Error ? reason : new Error("Unable to load your operations profile.")); setLoading(false); } }); }, []);
+  // Keep listeners for collections shared between routes alive. The previous
+  // implementation tore down every listener whenever the route changed, then
+  // re-read all shared collections (members, presence, notifications, etc.).
+  useEffect(() => () => {
+    for (const subscription of activeSubscriptions.current.values()) subscription.unsubscribe();
+    activeSubscriptions.current.clear();
+  }, [authUser, profile]);
   useEffect(() => {
     const database = firebaseDb;
     if (!database || !authUser || !profile) return;
@@ -130,28 +137,45 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setError(null);
     setState(current => Object.fromEntries(Object.entries(current).map(([key, rows]) => [key, requested.has(key as WorkspaceCollection) ? rows : emptyState[key]])) as State);
     if (!requested.has("members")) setMemberProfiles([]);
-    if (!activeKeys.length) return;
+
     const grouped = new Map<string, WorkspaceCollection[]>();
     for (const key of activeKeys) grouped.set(collectionMap[key], [...(grouped.get(collectionMap[key]) || []), key]);
-    const unsubscribers = [...grouped.entries()].map(([name, keys]) => {
+
+    // Remove only collections no longer needed by the active route.
+    for (const [name, subscription] of activeSubscriptions.current) {
+      if (!grouped.has(name)) {
+        subscription.unsubscribe();
+        activeSubscriptions.current.delete(name);
+      }
+    }
+
+    // Add only newly requested collections. Existing listeners are retained,
+    // and their key mapping is refreshed without another Firestore read.
+    for (const [name, keys] of grouped) {
+      const existing = activeSubscriptions.current.get(name);
+      if (existing) {
+        existing.keys = keys;
+        continue;
+      }
       const source = name === "ops_notifications" ? query(collection(database, name), where("recipientEmail", "==", profile.email)) : collection(database, name);
-      return onSnapshot(source, snapshot => {
+      const unsubscribe = onSnapshot(source, snapshot => {
         const rows = snapshot.docs.map(item => ({ _docId: item.id, ...item.data() }));
-        if (keys.includes("members")) setMemberProfiles(rows.map(asMember));
+        const currentKeys = activeSubscriptions.current.get(name)?.keys || keys;
+        if (currentKeys.includes("members")) setMemberProfiles(rows.map(asMember));
         setState(current => {
           const next = { ...current };
-          for (const key of keys) next[key] = key === "complaints" ? rows.filter(item => !item.isDeleted) : rows;
+          for (const key of currentKeys) next[key] = key === "complaints" ? rows.filter(item => !item.isDeleted) : rows;
           return next;
         });
       }, reason => setError(reason instanceof Error ? reason : new Error("Unable to load workspace data.")));
-    });
-    return () => unsubscribers.forEach(unsubscribe => unsubscribe());
+      activeSubscriptions.current.set(name, { unsubscribe, keys });
+    }
   }, [authUser, profile, activeKeysSignature]);
   useEffect(() => {
     const database = firebaseDb;
     if (!database || profile?.memberRole !== "lead" || !activeKeys.includes("members")) { setInvitations([]); return; }
     return onSnapshot(collection(database, "ops_invites"), snapshot => setInvitations(snapshot.docs.map(item => asMember({ _docId: item.id, userId: "", ...item.data(), status: "invited" }))), reason => setError(reason instanceof Error ? reason : new Error("Unable to load invited team profiles.")));
-  }, [profile?.memberRole, activeKeysSignature]);
+  }, [profile?.memberRole, activeKeys.includes("members")]);
   useEffect(() => { const database = firebaseDb; if (!database || !authUser || !profile) return; const updatePresence = () => { if (document.visibilityState === "visible") void setDoc(doc(database, "ops_presence", authUser.uid), { userId: authUser.uid, teamMemberId: profile.id, displayName: profile.displayName, initials: profile.initials, colour: profile.colour, lastActiveAt: now() }, { merge: true }); }; updatePresence(); const interval = window.setInterval(updatePresence, 60_000); document.addEventListener("visibilitychange", updatePresence); return () => { window.clearInterval(interval); document.removeEventListener("visibilitychange", updatePresence); }; }, [authUser, profile]);
   const signIn = useCallback(async (email: string, password: string) => {
     if (!firebaseAuth || !firebaseDb) throw new Error("Firebase is not configured yet.");
