@@ -132,7 +132,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   // implementation tore down every listener whenever the route changed, then
   // re-read all shared collections (members, presence, notifications, etc.).
   useEffect(() => () => {
-    for (const subscription of activeSubscriptions.current.values()) subscription.unsubscribe();
+    for (const [name, subscription] of activeSubscriptions.current) { subscription.unsubscribe(); firestoreDiagnosticActive.delete(name); logFirestoreDiagnostic("listener-detached", { collection: name, reason: "workspace-reset" }); }
     activeSubscriptions.current.clear();
   }, [authUser, profile]);
   useEffect(() => {
