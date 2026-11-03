@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
-import { localDateKey } from "@/lib/operations";
+import { addDaysToDateKey, localDateKey } from "@/lib/operations";
 import { trpc } from "@/lib/trpc";
 import { AlertTriangle, ArrowRight, CheckCircle2, Headphones, LockKeyhole, Plus, Send, ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -32,9 +32,14 @@ export default function QuickOnCall() {
   const { user, loading } = useAuth();
   const [, setLocation] = useLocation();
   const date = localDateKey();
+  const rotaWeekStart = isoWeekStartFor(date);
+  useWorkspace(["members", "rota", "onCallItems"], {
+    rota: { from: rotaWeekStart, through: addDaysToDateKey(rotaWeekStart, 6) },
+    onCallItems: { from: date, through: date },
+  });
   const [form, setForm] = useState({ eventType: "Client contact", title: "", detail: "", priority: "normal", owner: "", nextAction: "" });
   const team = trpc.operations.team.list.useQuery();
-  const rota = trpc.operations.rota.week.useQuery({ weekStart: isoWeekStartFor(date) });
+  const rota = trpc.operations.rota.week.useQuery({ weekStart: rotaWeekStart });
   const items = trpc.operations.onCall.list.useQuery({ date });
   const create = trpc.operations.onCall.create.useMutation({ onSuccess: async () => { await items.refetch(); setForm({ eventType: "Client contact", title: "", detail: "", priority: "normal", owner: "", nextAction: "" }); toast.success("On-call issue logged. It is now on the action board."); }, onError: (error: Error) => toast.error(error.message) });
   const activeMembers = useMemo(() => (team.data || []).filter((member: any) => member.status === "active"), [team.data]);

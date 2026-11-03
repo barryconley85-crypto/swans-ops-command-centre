@@ -7,8 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ColleagueMarker } from "@/components/ColleagueMarker";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { trpc } from "@/lib/trpc";
-import { dateTitle, localDateKey, priorityStyle } from "@/lib/operations";
+import { addDaysToDateKey, dateTitle, localDateKey, priorityStyle } from "@/lib/operations";
 import { CheckCheck, ChevronLeft, ChevronRight, ClipboardList, Headphones, Plus, ShieldCheck, UserRoundCheck } from "lucide-react";
 import { addDays, format } from "date-fns";
 import { useEffect, useMemo, useState } from "react";
@@ -20,17 +21,22 @@ export default function OnCallPortal() {
   const { user } = useAuth();
   const canUseOnCall = user?.canUseOnCall;
   const [date, setDate] = useState(localDateKey());
+  const rotaWeekStart = isoWeekStartFor(date);
+  useWorkspace(["tasks", "rota"], {
+    tasks: { from: addDaysToDateKey(date, -4), through: date },
+    rota: { from: rotaWeekStart, through: addDaysToDateKey(rotaWeekStart, 6) },
+  });
   const [open, setOpen] = useState(false);
   const [resolving, setResolving] = useState<number | null>(null);
   const [resolution, setResolution] = useState("");
   const [form, setForm] = useState({ title: "", detail: "", owner: "", priority: "normal", nextAction: "", dueTime: "" });
   const team = trpc.operations.team.list.useQuery();
   const items = trpc.operations.onCall.list.useQuery({ date });
-  const rota = trpc.operations.rota.week.useQuery({ weekStart: isoWeekStartFor(date) });
+  const rota = trpc.operations.rota.week.useQuery({ weekStart: rotaWeekStart });
   const create = trpc.operations.onCall.create.useMutation({ onSuccess: async () => { setOpen(false); setForm({ title: "", detail: "", owner: "", priority: "normal", nextAction: "", dueTime: "" }); await items.refetch(); toast.success("On-call item recorded and assigned."); }, onError: (error: Error) => toast.error(error.message) });
   const acknowledge = trpc.operations.onCall.acknowledge.useMutation({ onSuccess: async () => { await items.refetch(); toast.success("On-call item acknowledged."); }, onError: (error: Error) => toast.error(error.message) });
   const syncTasks = trpc.operations.onCall.syncTasks.useMutation({ onError: (error: Error) => toast.error(error.message) });
-  useEffect(() => { if (canUseOnCall && items.data?.length && user?.canManageOperations) void syncTasks.mutate({}); }, [canUseOnCall, items.data?.length, user?.canManageOperations]);
+  useEffect(() => { if (canUseOnCall && items.data?.length && user?.canManageOperations) void syncTasks.mutate({ date }); }, [canUseOnCall, items.data?.length, user?.canManageOperations, date]);
   const resolve = trpc.operations.onCall.resolve.useMutation({ onSuccess: async () => { setResolving(null); setResolution(""); await items.refetch(); toast.success("On-call item resolved."); }, onError: (error: Error) => toast.error(error.message) });
   const activeMembers = useMemo(() => (team.data || []).filter((member: any) => member.status !== "inactive"), [team.data]);
   const onCallLead = rota.data?.assignments.find((assignment: any) => assignment.workDate === date && assignment.assignmentType === "on_call");

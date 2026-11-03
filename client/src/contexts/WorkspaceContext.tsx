@@ -16,7 +16,7 @@ const emptyState: State = { members: [], tasks: [], activities: [], taskAttachme
 const leadEmail = "bc@swanstravel.com";
 
 type WorkspaceCollection = keyof typeof collectionMap;
-type WorkspaceDateWindow = { from: string; through: string };
+type WorkspaceDateWindow = { from?: string; through?: string; dates?: string[] };
 type WorkspaceFilters = Partial<Record<WorkspaceCollection, WorkspaceDateWindow>>;
 type WorkspaceContextValue = {
   authUser: User | null; profile: Member | null; loading: boolean; error: Error | null; state: State; refresh: () => Promise<void>;
@@ -150,8 +150,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       const baseCollection = collection(database, name);
       const source = name === "ops_notifications"
         ? query(baseCollection, where("recipientEmail", "==", profile?.email || authUser.email || ""))
-        : filter
-          ? query(baseCollection, where("workDate", ">=", filter.from), where("workDate", "<=", filter.through))
+        : filter?.dates
+          ? query(baseCollection, where("workDate", "in", filter.dates))
+          : filter?.from && filter.through
+            ? query(baseCollection, where("workDate", ">=", filter.from), where("workDate", "<=", filter.through))
           : baseCollection;
       const rows: any[] = (await getDocs(source)).docs.map(snapshot => ({ _docId: snapshot.id, ...snapshot.data() }));
       return [keys, rows] as const;
@@ -224,16 +226,19 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       const baseCollection = collection(database, name);
       const source = name === "ops_notifications"
         ? query(baseCollection, where("recipientEmail", "==", profile.email))
-        : filter
-          ? query(baseCollection, where("workDate", ">=", filter.from), where("workDate", "<=", filter.through))
+        : filter?.dates
+          ? query(baseCollection, where("workDate", "in", filter.dates))
+          : filter?.from && filter.through
+            ? query(baseCollection, where("workDate", ">=", filter.from), where("workDate", "<=", filter.through))
           : baseCollection;
       firestoreDiagnosticActive.add(name);
-      logFirestoreDiagnostic("listener-attached", { collection: name });
+      logFirestoreDiagnostic("listener-attached", { collection: name, queryWindow: filter || null });
       let firstSnapshot = true;
       const unsubscribe = onSnapshot(source, snapshot => {
         const changes = snapshot.docChanges();
         logFirestoreDiagnostic(firstSnapshot ? "initial-snapshot" : "snapshot-update", {
           collection: name,
+          queryWindow: filter || null,
           documentsInSnapshot: snapshot.size,
           changedDocuments: changes.length,
           added: changes.filter(change => change.type === "added").length,

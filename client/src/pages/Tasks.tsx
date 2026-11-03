@@ -178,12 +178,10 @@ export default function Tasks() {
   const [selectedDate, setSelectedDate] = useState(localDateKey());
   const [weekStart, setWeekStart] = useState(() => { const date = new Date(); const day = date.getDay(); const diff = day === 0 ? -6 : 1 - day; date.setDate(date.getDate() + diff); return localDateKey(date); });
   const taskWindowStart = addDaysToDateKey(selectedDate, -4);
-  const plannerWeekEnd = addDaysToDateKey(weekStart, 6);
-  const rotaWindowStart = selectedDate < weekStart ? selectedDate : weekStart;
-  const rotaWindowEnd = selectedDate > plannerWeekEnd ? selectedDate : plannerWeekEnd;
+  const rotaDates = Array.from(new Set([...Array.from({ length: 7 }, (_, offset) => addDaysToDateKey(weekStart, offset)), selectedDate]));
   const { state, addTaskResource } = useWorkspace(["tasks", "templates", "members", "taskAttachments", "activities", "issues", "rota"], {
     tasks: { from: taskWindowStart, through: selectedDate },
-    rota: { from: rotaWindowStart, through: rotaWindowEnd },
+    rota: { dates: rotaDates },
   });
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [showTemplateForm, setShowTemplateForm] = useState(false);

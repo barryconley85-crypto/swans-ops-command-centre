@@ -29,6 +29,7 @@ import { Button } from "./ui/button";
 import { trpc } from "@/lib/trpc";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { activePresence } from "@/lib/presence";
+import { addDaysToDateKey, localDateKey } from "@/lib/operations";
 import { InitialsCircle } from "@/components/ColleagueMarker";
 import { toast } from "sonner";
 
@@ -48,18 +49,26 @@ const collectionsForPath = (path: string): string[] => {
     // Tasks and rota pages attach date-windowed listeners directly.
     "/tasks": ["activities", "taskAttachments", "issues"],
     "/rota": ["templates"],
-    "/on-call": ["onCallItems", "rota", "tasks", "helpRequests", "chatMessages"],
+    "/on-call": ["onCallItems", "helpRequests", "chatMessages"],
     "/chat": ["chatMessages"],
     "/handover": ["handovers"],
     "/issues": ["issues"],
     "/complaints": ["complaints", "drivers"],
-    "/reports": ["complaints", "reportViews", "drivers", "tasks", "notes"],
-    "/people": ["tasks", "notes"],
+    "/reports": ["complaints", "reportViews", "drivers", "notes"],
+    "/people": ["tasks", "rota", "notes"],
     "/driver-sign-on": ["signOns", "drivers"],
     "/driver-attendance": ["drivers", "attendance"],
     "/compliance": ["drivers"]
   };
   return [...new Set([...common, ...(byPath[path] || [])])];
+};
+
+const dateFiltersForPath = (path: string) => {
+  const today = localDateKey();
+  const lastThirtyDays = { from: addDaysToDateKey(today, -29), through: today };
+  if (path === "/my-shift" || path === "/shift-check") return { tasks: { from: today, through: today }, rota: { from: today, through: today } };
+  if (path === "/people") return { tasks: lastThirtyDays, rota: lastThirtyDays };
+  return {};
 };
 
 const DESKTOP_ALERTS_KEY = "ops-desktop-alerts";
@@ -145,7 +154,7 @@ function DashboardLayoutContent({
   const presence = trpc.operations.presence.list.useQuery();
   const activeTeam = activePresence(presence.data || []);
   const [location, setLocation] = useLocation();
-  useWorkspace(collectionsForPath(location));
+  useWorkspace(collectionsForPath(location), dateFiltersForPath(location));
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);

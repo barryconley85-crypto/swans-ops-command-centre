@@ -22,6 +22,7 @@ export default function Reports() {
   const [reportId, setReportId] = useState("risk-radar");
   const [rangeStart, setRangeStart] = useState(localDateKey(addDays(new Date(), -6)));
   const [rangeEnd, setRangeEnd] = useState(today);
+  useWorkspace(["tasks", "rota"], { tasks: { from: rangeStart, through: rangeEnd }, rota: { from: rangeStart, through: rangeEnd } });
   const [memberId, setMemberId] = useState("");
   const [taskStatus, setTaskStatus] = useState("");
   const [saveOpen, setSaveOpen] = useState(false);
