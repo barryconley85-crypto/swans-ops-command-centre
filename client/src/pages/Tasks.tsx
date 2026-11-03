@@ -215,7 +215,13 @@ export default function Tasks() {
     onError: error => toast.error(error.message),
   });
   const statusMutation = trpc.operations.tasks.updateStatus.useMutation({
-    onSuccess: async () => { await utils.operations.tasks.list.invalidate({ date: selectedDate }); await utils.operations.dashboard.invalidate(); toast.success("Task updated."); },
+    onSuccess: async result => {
+      await Promise.all([
+        utils.operations.tasks.list.invalidate({ date: selectedDate }),
+        utils.operations.dashboard.invalidate(),
+      ]);
+      toast.success(result.status === "complete" ? "Task completed and moved to Completed." : result.status === "in_progress" ? "Task started." : result.status === "blocked" ? "Task marked as blocked." : "Task reopened.");
+    },
     onError: error => toast.error(error.message),
   });
   const templateMutation = trpc.operations.templates.create.useMutation({

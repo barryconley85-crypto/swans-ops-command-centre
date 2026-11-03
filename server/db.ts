@@ -161,14 +161,37 @@ export async function updateDailyTaskStatus(input: {
   const database = await requireDb();
   const now = Date.now();
   const action = input.status === "complete" ? "completed" : input.status === "blocked" ? "blocked" : input.status === "in_progress" ? "started" : "reopened";
+  const existing = await database.select({ id: dailyTasks.id }).from(dailyTasks).where(eq(dailyTasks.id, input.taskId)).limit(1);
+  if (!existing.length) throw new Error("This task could not be found. Refresh the task board and try again.");
   await database.update(dailyTasks).set({
     status: input.status,
     completedAt: input.status === "complete" ? now : null,
     completedByTeamMemberId: input.status === "complete" ? input.actorTeamMemberId ?? null : null,
     blockedReason: input.status === "blocked" ? input.note ?? "Blocked — action required" : null,
   }).where(eq(dailyTasks.id, input.taskId));
+  const saved = await database.select({ id: dailyTasks.id, status: dailyTasks.status }).from(dailyTasks).where(eq(dailyTasks.id, input.taskId)).limit(1);
+  if (!saved.length || saved[0].status !== input.status) {
+    throw new Error("The task status was not saved. The board has not been marked as updated, please try again.");
+  }
   await database.insert(taskActivity).values({ taskId: input.taskId, action, body: input.note, actorTeamMemberId: input.actorTeamMemberId, actorUserId: input.actorUserId });
-  return { success: true };
+  return { success: true, taskId: saved[0].id, status: saved[0].status };
+}
+
+export async function removeDailyTask(input: { taskId: number; reason: string; actorUserId: number; actorTeamMemberId?: number }) {
+  const database = await requireDb();
+  const existing = await database.select({ id: dailyTasks.id, title: dailyTasks.title }).from(dailyTasks).where(eq(dailyTasks.id, input.taskId)).limit(1);
+  if (!existing.length) throw new Error("This task could not be found. Refresh the task board and try again.");
+  await database.insert(taskActivity).values({
+    taskId: input.taskId,
+    action: "commented",
+    body: `Task deleted: ${input.reason.trim()}`,
+    actorTeamMemberId: input.actorTeamMemberId,
+    actorUserId: input.actorUserId,
+  });
+  await database.delete(dailyTasks).where(eq(dailyTasks.id, input.taskId));
+  const remaining = await database.select({ id: dailyTasks.id }).from(dailyTasks).where(eq(dailyTasks.id, input.taskId)).limit(1);
+  if (remaining.length) throw new Error("The task could not be deleted. It is still on the board.");
+  return { success: true, taskId: input.taskId };
 }
 
 export async function addTaskComment(input: { taskId: number; body: string; actorTeamMemberId?: number; actorUserId: number }) {
