@@ -94,7 +94,21 @@ export default function ComplianceCentre() {
   const expiring=rows.filter(x=>complianceAlerts(x.record).some(alert=>!alert.expired)).length;
   const expired=rows.filter(x=>complianceAlerts(x.record).some(alert=>alert.expired)).length;
   const missing=rows.filter(x=>!x.record?.licenceValidTo).length;
-  const filteredRows=rows.filter(x=>{const alerts=complianceAlerts(x.record);if(activeFilter==="due")return alerts.some(alert=>!alert.expired);if(activeFilter==="expired")return alerts.some(alert=>alert.expired);if(activeFilter==="missing")return !x.record?.licenceValidTo;return true;});
+  const filteredRows=useMemo(()=>rows.filter(x=>{const alerts=complianceAlerts(x.record);if(activeFilter==="due")return alerts.some(alert=>!alert.expired);if(activeFilter==="expired")return alerts.some(alert=>alert.expired);if(activeFilter==="missing")return !x.record?.licenceValidTo;return true;}).sort((a,b)=>{
+    const urgency=(item:typeof rows[number])=>{
+      const alerts=complianceAlerts(item.record);
+      if(alerts.some(alert=>alert.expired))return 0;
+      if(alerts.some(alert=>alert.days<=30))return 1;
+      if(alerts.some(alert=>alert.days<=90))return 2;
+      if(!item.record?.licenceValidTo)return 3;
+      return 4;
+    };
+    const daysToNextExpiry=(item:typeof rows[number])=>{
+      const alerts=complianceAlerts(item.record);
+      return alerts.length?Math.min(...alerts.map(alert=>alert.days)):Number.POSITIVE_INFINITY;
+    };
+    return urgency(a)-urgency(b)||daysToNextExpiry(a)-daysToNextExpiry(b)||a.driver.name.localeCompare(b.driver.name);
+  }),[rows,activeFilter]);
   const selectFilter=(filter:"all"|"due"|"expired"|"missing")=>{setActiveFilter(filter);setSearch("");window.setTimeout(()=>registerRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),50);};
   const openEditor=(driver:any,record?:ComplianceRecord)=>{setSelected(driver);setForm(record?{...emptyForm(driver._docId,driver.name),...record,driverId:driver._docId,driverName:driver.name}:emptyForm(driver._docId,driver.name));setEndorsement({offenceCode:"",points:3,offenceDate:"",expiryDate:""});};
   const closeEditor=()=>{setSelected(null);setForm(null);};
