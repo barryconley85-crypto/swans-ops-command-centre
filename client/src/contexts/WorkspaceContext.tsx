@@ -88,7 +88,7 @@ async function queueTaskAssignmentEmail(authUser: User | null, task: Record<stri
 }
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
-  const [authUser, setAuthUser] = useState<User | null>(null); const [profile, setProfile] = useState<Member | null>(null); const [state, setState] = useState<State>(emptyState); const [memberProfiles, setMemberProfiles] = useState<Member[]>([]); const [invitations, setInvitations] = useState<Member[]>([]); const [demands, setDemands] = useState<Record<string, WorkspaceCollection[]>>({}); const [loading, setLoading] = useState(true); const [error, setError] = useState<Error | null>(null); const signedInAuditUid = useRef<string | null>(null); const activeSubscriptions = useRef(new Map<string, { unsubscribe: () => void; keys: WorkspaceCollection[] }>());
+  const [authUser, setAuthUser] = useState<User | null>(null); const [profile, setProfile] = useState<Member | null>(null); const [state, setState] = useState<State>(emptyState); const [memberProfiles, setMemberProfiles] = useState<Member[]>([]); const [invitations, setInvitations] = useState<Member[]>([]); const [demands, setDemands] = useState<Record<string, WorkspaceCollection[]>>({}); const [loading, setLoading] = useState(true); const [error, setError] = useState<Error | null>(null); const signedInAuditUid = useRef<string | null>(null); const activeSubscriptions = useRef(new Map<string, { unsubscribe: () => void; keys: WorkspaceCollection[]; rows: any[] }>());
   const registerDemand = useCallback((id: string, collections: WorkspaceCollection[]) => setDemands(current => current[id]?.join(",") === collections.join(",") ? current : { ...current, [id]: collections }), []);
   const unregisterDemand = useCallback((id: string) => setDemands(current => { if (!(id in current)) return current; const next = { ...current }; delete next[id]; return next; }), []);
   const activeKeysSignature = useMemo(() => [...new Set(Object.values(demands).flat())].filter(key => (key !== "reportViews" && key !== "auditLogs") || profile?.memberRole === "lead").sort().join(","), [demands, profile?.memberRole]);
@@ -155,12 +155,24 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       const existing = activeSubscriptions.current.get(name);
       if (existing) {
         existing.keys = keys;
+        // A shared Firestore collection can back more than one workspace key
+        // (for example, issues and complaints). Reuse its cached snapshot when
+        // the active route changes, otherwise the newly requested key can stay
+        // empty until Firestore emits another change.
+        setState(current => {
+          const next = { ...current };
+          for (const key of keys) next[key] = key === "complaints" ? existing.rows.filter(row => !row.isDeleted) : existing.rows;
+          return next;
+        });
+        if (keys.includes("members")) setMemberProfiles(existing.rows.map(asMember));
         continue;
       }
       const source = name === "ops_notifications" ? query(collection(database, name), where("recipientEmail", "==", profile.email)) : collection(database, name);
       const unsubscribe = onSnapshot(source, snapshot => {
         const rows = snapshot.docs.map(item => ({ _docId: item.id, ...item.data() }));
-        const currentKeys = activeSubscriptions.current.get(name)?.keys || keys;
+        const subscription = activeSubscriptions.current.get(name);
+        if (subscription) subscription.rows = rows;
+        const currentKeys = subscription?.keys || keys;
         if (currentKeys.includes("members")) setMemberProfiles(rows.map(asMember));
         setState(current => {
           const next = { ...current };
