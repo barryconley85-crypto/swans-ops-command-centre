@@ -4,19 +4,61 @@ import { Button } from "@/components/ui/button";
 import { LoadError } from "@/components/WorkspacePrimitives";
 import { trpc } from "@/lib/trpc";
 import { compactTime, dateTitle, labelForStatus, localDateKey, priorityStyle } from "@/lib/operations";
+import { logFirestoreSnapshot, trackFirestoreListener, useWorkspace } from "@/contexts/WorkspaceContext";
+import { firebaseDb } from "@/lib/firebase";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { AlertTriangle, ArrowRight, Check, ChevronRight, ClipboardCheck, Clock3, Loader2, RadioTower, ShieldCheck, UsersRound, Activity, CalendarDays } from "lucide-react";
 import { Link } from "wouter";
 import { useEffect, useState } from "react";
 
 export default function Home() {
   const { user } = useAuth();
+  const workspace = useWorkspace();
   const [today] = useState(localDateKey());
+  const [taskRows, setTaskRows] = useState<any[]>([]);
+  const [rotaRows, setRotaRows] = useState<any[]>([]);
+  const [tasksLoaded, setTasksLoaded] = useState(false);
+  const [rotaLoaded, setRotaLoaded] = useState(false);
+  const [dataError, setDataError] = useState<Error | null>(null);
+  const [queryVersion, setQueryVersion] = useState(0);
   const [currentHour, setCurrentHour] = useState(() => new Date().getHours());
   useEffect(() => {
     const timer = window.setInterval(() => setCurrentHour(new Date().getHours()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
-  const dashboard = trpc.operations.dashboard.useQuery({ date: today });
+  useEffect(() => {
+    if (!firebaseDb || !workspace.authUser || !workspace.profile) return;
+    setTasksLoaded(false);
+    setDataError(null);
+    const source = query(collection(firebaseDb, "ops_tasks"), where("workDate", "==", today));
+    const detachDiagnostic = trackFirestoreListener("ops_tasks");
+    let firstSnapshot = true;
+    const unsubscribe = onSnapshot(source, snapshot => {
+      logFirestoreSnapshot(firstSnapshot ? "initial-snapshot" : "snapshot-update", "ops_tasks", snapshot);
+      firstSnapshot = false;
+      setTaskRows(snapshot.docs.map(item => ({ _docId: item.id, ...item.data() })));
+      setTasksLoaded(true);
+    }, reason => setDataError(reason instanceof Error ? reason : new Error("Unable to load today's command board tasks.")));
+    return () => { unsubscribe(); detachDiagnostic(); };
+  }, [workspace.authUser?.uid, workspace.profile?.id, today, queryVersion]);
+
+  useEffect(() => {
+    if (!firebaseDb || !workspace.authUser || !workspace.profile) return;
+    setRotaLoaded(false);
+    setDataError(null);
+    const source = query(collection(firebaseDb, "ops_rota"), where("workDate", "==", today));
+    const detachDiagnostic = trackFirestoreListener("ops_rota");
+    let firstSnapshot = true;
+    const unsubscribe = onSnapshot(source, snapshot => {
+      logFirestoreSnapshot(firstSnapshot ? "initial-snapshot" : "snapshot-update", "ops_rota", snapshot);
+      firstSnapshot = false;
+      setRotaRows(snapshot.docs.map(item => ({ _docId: item.id, ...item.data() })));
+      setRotaLoaded(true);
+    }, reason => setDataError(reason instanceof Error ? reason : new Error("Unable to load today's rota cover.")));
+    return () => { unsubscribe(); detachDiagnostic(); };
+  }, [workspace.authUser?.uid, workspace.profile?.id, today, queryVersion]);
+
+  const dashboard = trpc.operations.dashboard.useQuery({ date: today, taskRows, rotaRows });
   const snapshot = dashboard.data;
   const metrics = snapshot?.metrics;
   const firstName = user?.name?.split(" ")[0] || "there";
@@ -26,8 +68,8 @@ export default function Home() {
   const syncOnCallTasks = trpc.operations.onCall.syncTasks.useMutation();
   useEffect(() => { if (user?.canManageOperations && snapshot?.outstandingOnCall?.length) void syncOnCallTasks.mutate({}); }, [user?.canManageOperations, snapshot?.outstandingOnCall?.length]);
 
-  if (dashboard.isLoading) return <div className="flex min-h-[55vh] items-center justify-center"><Loader2 className="h-7 w-7 animate-spin text-[#28C5C0]" /></div>;
-  if (dashboard.isError) return <LoadError message="The live command board is temporarily unavailable." onRetry={() => void dashboard.refetch()} />;
+  if (dashboard.isError || dataError) return <LoadError message={dataError?.message || "The live command board is temporarily unavailable."} onRetry={() => { setDataError(null); setQueryVersion(value => value + 1); }} />;
+  if (dashboard.isLoading || !tasksLoaded || !rotaLoaded) return <div className="flex min-h-[55vh] items-center justify-center"><Loader2 className="h-7 w-7 animate-spin text-[#28C5C0]" /></div>;
 
   const completion = metrics?.totalTasks ? Math.round(((metrics.completeCount ?? 0) / metrics.totalTasks) * 100) : 0;
   const openExceptions = (metrics?.blockedCount ?? 0) + (snapshot?.issues.length ?? 0);
