@@ -177,6 +177,23 @@ export async function updateDailyTaskStatus(input: {
   return { success: true, taskId: saved[0].id, status: saved[0].status };
 }
 
+export async function removeDailyTask(input: { taskId: number; reason: string; actorUserId: number; actorTeamMemberId?: number }) {
+  const database = await requireDb();
+  const existing = await database.select({ id: dailyTasks.id, title: dailyTasks.title }).from(dailyTasks).where(eq(dailyTasks.id, input.taskId)).limit(1);
+  if (!existing.length) throw new Error("This task could not be found. Refresh the task board and try again.");
+  await database.insert(taskActivity).values({
+    taskId: input.taskId,
+    action: "commented",
+    body: `Task deleted: ${input.reason.trim()}`,
+    actorTeamMemberId: input.actorTeamMemberId,
+    actorUserId: input.actorUserId,
+  });
+  await database.delete(dailyTasks).where(eq(dailyTasks.id, input.taskId));
+  const remaining = await database.select({ id: dailyTasks.id }).from(dailyTasks).where(eq(dailyTasks.id, input.taskId)).limit(1);
+  if (remaining.length) throw new Error("The task could not be deleted. It is still on the board.");
+  return { success: true, taskId: input.taskId };
+}
+
 export async function addTaskComment(input: { taskId: number; body: string; actorTeamMemberId?: number; actorUserId: number }) {
   const database = await requireDb();
   await database.insert(taskActivity).values({ ...input, action: "commented" });
