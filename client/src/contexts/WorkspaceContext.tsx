@@ -25,6 +25,11 @@ type WorkspaceContextValue = {
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
 const collectionMap: Record<string, string> = { members: "ops_members", tasks: "ops_tasks", activities: "ops_task_activity", taskAttachments: "ops_task_attachments", templates: "ops_templates", rota: "ops_rota", handovers: "ops_handovers", issues: "ops_issues", readiness: "ops_readiness", notes: "ops_performance_notes", chatMessages: "ops_chat_messages", notifications: "ops_notifications", onCallItems: "ops_on_call_items", helpRequests: "ops_help_requests", shiftPrompts: "ops_shift_prompts", presence: "ops_presence", reportViews: "ops_report_views", auditLogs: "ops_audit_logs", drivers: "ops_drivers", signOns: "ops_driver_sign_ons", attendance: "ops_driver_attendance", complaints: "ops_issues" };
+const firestoreDiagnosticActive = new Set<string>();
+const logFirestoreDiagnostic = (event: string, details: Record<string, unknown>) => {
+  if (typeof window === "undefined") return;
+  console.info("[Firestore read audit]", { time: new Date().toISOString(), page: window.location.pathname, event, activeListeners: firestoreDiagnosticActive.size, ...details });
+};
 const safeArray = (value: any) => Array.isArray(value) ? value : [];
 const now = () => Date.now();
 const numericId = () => Date.now() + Math.floor(Math.random() * 1_000);
@@ -145,6 +150,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     for (const [name, subscription] of activeSubscriptions.current) {
       if (!grouped.has(name)) {
         subscription.unsubscribe();
+        firestoreDiagnosticActive.delete(name);
+        logFirestoreDiagnostic("listener-detached", { collection: name });
         activeSubscriptions.current.delete(name);
       }
     }
@@ -168,7 +175,20 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         continue;
       }
       const source = name === "ops_notifications" ? query(collection(database, name), where("recipientEmail", "==", profile.email)) : collection(database, name);
+      firestoreDiagnosticActive.add(name);
+      logFirestoreDiagnostic("listener-attached", { collection: name });
+      let firstSnapshot = true;
       const unsubscribe = onSnapshot(source, snapshot => {
+        const changes = snapshot.docChanges();
+        logFirestoreDiagnostic(firstSnapshot ? "initial-snapshot" : "snapshot-update", {
+          collection: name,
+          documentsInSnapshot: snapshot.size,
+          changedDocuments: changes.length,
+          added: changes.filter(change => change.type === "added").length,
+          modified: changes.filter(change => change.type === "modified").length,
+          removed: changes.filter(change => change.type === "removed").length,
+        });
+        firstSnapshot = false;
         const rows = snapshot.docs.map(item => ({ _docId: item.id, ...item.data() }));
         const subscription = activeSubscriptions.current.get(name);
         if (subscription) subscription.rows = rows;
