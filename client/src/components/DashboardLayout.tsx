@@ -36,7 +36,7 @@ const collectionsForPath = (path: string): string[] => {
   const common = ["members", "presence", "notifications"];
   const byPath: Record<string, string[]> = {
     // Home reads only today's task and rota rows in its own filtered listeners.
-    "/": ["handovers", "issues", "onCallItems", "helpRequests", "readiness", "shiftPrompts", "templates"],
+    "/": ["handovers", "issues", "onCallItems", "helpRequests", "readiness", "shiftPrompts"],
     // Live Operations loads only the active tasks and today's rota entries in
     // its own filtered listeners. Keep its smaller shared registers here.
     "/exceptions": ["handovers", "issues", "helpRequests"],
