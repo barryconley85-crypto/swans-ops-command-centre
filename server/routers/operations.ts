@@ -110,7 +110,7 @@ export const operationsRouter = router({
       .mutation(({ ctx, input }) => db.updateDailyTaskStatus({ ...input, actorTeamMemberId: ctx.teamMember.id, actorUserId: ctx.user.id })),
     remove: managerProcedure
       .input(z.object({ taskId: z.number().int().positive(), reason: z.string().min(1).max(2000) }))
-      .mutation(({ ctx, input }) => db.removeDailyTask({ ...input, actorTeamMemberId: ctx.teamMember?.id, actorUserId: ctx.user.id })),
+      .mutation(({ ctx, input }) => db.removeDailyTask({ ...input, actorUserId: ctx.user.id })),
     comment: teamMemberProcedure
       .input(z.object({ taskId: z.number().int().positive(), body: z.string().min(1).max(2000) }))
       .mutation(({ ctx, input }) => db.addTaskComment({ ...input, actorTeamMemberId: ctx.teamMember.id, actorUserId: ctx.user.id })),
