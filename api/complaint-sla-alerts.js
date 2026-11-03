@@ -267,7 +267,7 @@ export default async function handler(request, response) {
     const now = Date.now();
     const london = dateInLondon(now);
     const localMinute = Number(london.hour) * 60 + Number(london.minute);
-    if (!isWorkingDay(now, holidays) || localMinute < 540 || localMinute >= 1080) {
+    if (!isWorkingDay(now, holidays) || localMinute < 540 || localMinute >= 1020) {
       return response.status(200).json({ status: "outside_alert_window", sent: 0 });
     }
     const token = await googleAccessToken(account);
