@@ -179,7 +179,7 @@ export default function Tasks() {
   const [weekStart, setWeekStart] = useState(() => { const date = new Date(); const day = date.getDay(); const diff = day === 0 ? -6 : 1 - day; date.setDate(date.getDate() + diff); return localDateKey(date); });
   const taskWindowStart = addDaysToDateKey(selectedDate, -4);
   const rotaDates = Array.from(new Set([...Array.from({ length: 7 }, (_, offset) => addDaysToDateKey(weekStart, offset)), selectedDate]));
-  const { state, addTaskResource } = useWorkspace(["tasks", "templates", "members", "taskAttachments", "activities", "issues", "rota"], {
+  const { state, addTaskResource } = useWorkspace(["tasks", "templates", "members", "taskAttachments", "issues", "rota"], {
     tasks: { from: taskWindowStart, through: selectedDate },
     rota: { dates: rotaDates },
   });
