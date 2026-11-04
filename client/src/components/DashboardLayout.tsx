@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { WorkEmailGate } from "@/components/WorkEmailGate";
 import { useIsMobile } from "@/hooks/useMobile";
-import { AlertTriangle, BarChart3, Bell, CalendarDays, CheckCheck, CircleUserRound, ClipboardCheck, FileBarChart, HandHeart, Headphones, History, LayoutDashboard, LogOut, MessageCircleMore, Monitor, PanelLeft, QrCode, Users, Volume2, VolumeX, Waypoints, MessageSquareWarning, CarFront, ShieldCheck } from "lucide-react";
+import { AlertTriangle, BarChart3, Bell, CalendarDays, CheckCheck, CircleUserRound, ClipboardCheck, FileBarChart, HandHeart, Headphones, History, LayoutDashboard, LogOut, MessageCircleMore, Monitor, PanelLeft, QrCode, Users, Volume2, VolumeX, Waypoints, MessageSquareWarning, CarFront, ShieldCheck, FileText } from "lucide-react";
 import { CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -92,6 +92,7 @@ const menuItems = [
   { icon: AlertTriangle, label: "Issue log", path: "/issues" },
   { icon: MessageSquareWarning, label: "Complaints", path: "/complaints" },
   { icon: CarFront, label: "Accident management", path: "external:accident-management", externalUrl: "https://swans-accident-management.vercel.app", allowedEmails: ["bc@swanstravel.com", "clt@swanstravel.com", "pww@swanstravel.com", "swh@swanstravel.com"] },
+  { icon: FileText, label: "Personal injury", path: "external:personal-injury", externalUrl: "https://swans-accident-management.vercel.app/personal-injury", allowedEmails: ["bc@swanstravel.com", "clt@swanstravel.com", "pww@swanstravel.com", "swh@swanstravel.com"] },
   { icon: BarChart3, label: "Reports", path: "/reports" },
   { icon: MessageCircleMore, label: "Team chat", path: "/chat" },
   { icon: Users, label: "Team & performance", path: "/people" },
