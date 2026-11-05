@@ -202,11 +202,34 @@ export default function Complaints() {
     await patchSelected({ acknowledgedAt: Date.now(), acknowledgementNote: noteDraft.trim() || "Acknowledgement recorded." }, "Acknowledgement recorded.");
     setNoteDraft("");
   };
-  const saveText = async (field: string, value: string, label: string) => patchSelected({ [field]: value.trim() }, `${label} saved.`);
+  const saveText = async (field: string, value: string, label: string) => {
+    if (!selected) return;
+    const changes: Record<string, unknown> = { [field]: value.trim() };
+    // Once the proposed decision is recorded, move the case into the client-response stage.
+    if (field === "decision" && value.trim() && selected.stage === "decision") changes.stage = "client_response";
+    await patchSelected(changes, `${label} saved.`);
+  };
   const updateTask = async (taskId: string, changes: Partial<ComplaintTask>) => {
     if (!selected) return;
     const tasks = selected.tasks.map(task => task.id === taskId ? { ...task, ...changes, ...(changes.status === "complete" || changes.status === "waived" ? { completedAt: Date.now() } : {}) } : task);
-    await patchSelected({ tasks }, "Task updated.");
+    const changedTask = tasks.find(task => task.id === taskId);
+    let stage = selected.stage;
+
+    // Acknowledgement is an SLA milestone, not an investigation task.
+    const isInvestigationWork = changedTask && !/acknowledge complaint|send full response/i.test(changedTask.title);
+    const completedInvestigationWork = tasks.some(task => task.status !== "pending" && /gather evidence|obtain driver|depot account|record findings|investigation/i.test(task.title));
+
+    // Move into Investigation as soon as the team starts completing investigation work.
+    if (stage === "received" && isInvestigationWork && completedInvestigationWork) stage = "investigating";
+
+    // Recording findings and a proposed outcome completes the investigation stage.
+    const findingsTaskComplete = tasks.some(task => task.status !== "pending" && /record findings and proposed outcome/i.test(task.title));
+    if (stage === "investigating" && findingsTaskComplete) stage = "decision";
+
+    // If the decision has already been recorded, move straight on to the client response.
+    if (stage === "decision" && findingsTaskComplete && selected.decision.trim()) stage = "client_response";
+
+    await patchSelected({ tasks, ...(stage !== selected.stage ? { stage } : {}) }, stage !== selected.stage ? `Task updated. Case moved to ${stageLabel(stage)}.` : "Task updated.");
   };
   const addTask = async () => {
     if (!selected || !taskDraft.trim()) return toast.error("Enter a task title.");
