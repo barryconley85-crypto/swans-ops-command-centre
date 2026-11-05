@@ -52,7 +52,7 @@ export default async function handler(request, response) {
   if (!process.env.GOOGLE_MAILER_URL || !process.env.GOOGLE_MAILER_SHARED_SECRET) return response.status(503).json({ emailStatus: "not_configured", error: "The existing Google Apps Script mailer is not connected to this project yet. Copy GOOGLE_MAILER_URL and GOOGLE_MAILER_SHARED_SECRET from the Swans Accident Management Vercel project into this project." });
   const body = typeof request.body === "string" ? JSON.parse(request.body) : request.body || {};
   const recipient = typeof body.recipientEmail === "string" ? body.recipientEmail.trim() : "";
-  if (!/^[^\s@]+@[^\s@]+\\.[^\s@]+$/.test(recipient)) return response.status(400).json({ error: "Enter a valid recipient email address." });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) return response.status(400).json({ error: "Enter a valid recipient email address." });
   if (!body.period?.start || !body.period?.end || !Array.isArray(body.complaints) || !body.summary) return response.status(400).json({ error: "The reporting period and report data are required." });
   if (body.complaints.length > 500) return response.status(413).json({ error: "This report contains too many complaint records to email in one message." });
   const subject = `Swans Travel | MD Weekly Complaints Report | ${body.period.start} to ${body.period.end}`;
