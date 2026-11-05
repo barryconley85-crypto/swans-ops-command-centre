@@ -86,6 +86,24 @@ export default function Complaints() {
   const ordered = useMemo(() => [...complaints].sort((a, b) => (a.stage === "closed" ? 1 : 0) - (b.stage === "closed" ? 1 : 0) || b.receivedAt - a.receivedAt), [complaints]);
   const visible = ordered.filter(item => filter === "all" || (filter === "active" ? item.stage !== "closed" : filter === "overdue" ? item.stage !== "closed" && (now > item.acknowledgementDueAt && !item.acknowledgedAt || now > responseDeadline(item)) : item.stage === filter));
   const selected = complaints.find(item => item._docId === selectedId) || null;
+  // Reconcile existing complaints when opened, including tasks completed before automatic progression was introduced.
+  useEffect(() => {
+    if (!selected || !canEditComplaints || selected.stage === "closed") return;
+    const tasks = selected.tasks || [];
+    const isDone = (task: ComplaintTask) => task.status === "complete" || task.status === "waived";
+    const investigationStarted = tasks.some(task => isDone(task) && /gather evidence|obtain driver|depot account|record findings|investigation/i.test(task.title));
+    const findingsComplete = tasks.some(task => isDone(task) && /record findings and proposed outcome/i.test(task.title));
+    let desiredStage = selected.stage;
+    if (desiredStage === "received" && investigationStarted) desiredStage = "investigating";
+    if (desiredStage === "investigating" && findingsComplete) desiredStage = "decision";
+    if (desiredStage === "decision" && findingsComplete && selected.decision.trim()) desiredStage = "client_response";
+    if (desiredStage !== selected.stage) {
+      void workspace.patch("complaints", selected._docId, { stage: desiredStage }).catch(() => {
+        toast.error("The complaint stage could not be updated. Please try again.");
+      });
+    }
+  }, [selected?._docId, selected?.stage, selected?.tasks, selected?.decision, canEditComplaints]);
+
   const openCount = complaints.filter(item => item.stage !== "closed").length;
   const ackOverdue = complaints.filter(item => item.stage !== "closed" && !item.acknowledgedAt && now > item.acknowledgementDueAt).length;
   const responseOverdue = complaints.filter(item => item.stage !== "closed" && !item.clientResponse.trim() && now > responseDeadline(item)).length;
