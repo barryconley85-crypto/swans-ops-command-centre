@@ -63,7 +63,7 @@ export default async function handler(request, response) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         secret: process.env.GOOGLE_MAILER_SHARED_SECRET,
-        eventKey: `complaints-weekly-${body.period.start}-${body.period.end}-${recipient.toLowerCase()}`,
+        eventKey: `complaints-weekly-${body.period.start}-${body.period.end}-${recipient.toLowerCase()}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
         subject,
         text: textBody,
         html: reportHtml(body),
