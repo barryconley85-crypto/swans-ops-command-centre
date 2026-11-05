@@ -27,12 +27,12 @@ const dateLabel = value => {
 function reportHtml(data) {
   const s = data.summary || {};
   const cards = [
-    ["Complaints received", s.received ?? 0, "#EAF3EF", "#1E6258"],
-    ["Still open", s.open ?? 0, "#FFF4DE", "#925D12"],
-    ["Closed", s.closed ?? 0, "#E8F3FF", "#245D91"],
-    ["Overdue", s.overdue ?? 0, "#FDECEC", "#A22E32"],
-    ["Refund / credit value", money(s.refundTotal), "#EEF0FF", "#414C9B"],
-    ["Subcontracted cost", money((data.complaints || []).reduce((total, item) => total + Math.max(0, Number(item.subcontractedCost) || 0), 0)), "#EAF5F7", "#246575"],
+    ["Complaints received", s.received ?? 0, "#E7F0F7", "#163D5A"],
+    ["Still open", s.open ?? 0, "#EAF4FA", "#245D80"],
+    ["Closed", s.closed ?? 0, "#E2F1F8", "#176B83"],
+    ["Overdue", s.overdue ?? 0, "#FCEEEE", "#A22E32"],
+    ["Refund / credit value", money(s.refundTotal), "#EAF0FA", "#334F83"],
+    ["Subcontracted cost", money((data.complaints || []).reduce((total, item) => total + Math.max(0, Number(item.subcontractedCost) || 0), 0)), "#E5F3F7", "#176B83"],
   ];
   const cardHtml = cards.map(([label,value,bg,fg]) => `<td style="padding:6px;width:16.66%;vertical-align:top"><div style="background:${bg};border-radius:10px;padding:14px 10px;min-height:70px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:${fg};font-weight:700">${escapeHtml(label)}</div><div style="font-size:22px;font-weight:700;color:${fg};margin-top:8px">${escapeHtml(value)}</div></div></td>`).join("");
   const patternRows = (items) => items?.length ? items.map(x => `<tr><td style="padding:9px 12px;border-bottom:1px solid #E1EAF1">${escapeHtml(x.name)}</td><td style="padding:9px 12px;border-bottom:1px solid #E1EAF1;text-align:right;font-weight:700">${escapeHtml(x.count)}</td></tr>`).join("") : '<tr><td colspan="2" style="padding:12px;color:#66756e">No repeat links recorded in this period.</td></tr>';
