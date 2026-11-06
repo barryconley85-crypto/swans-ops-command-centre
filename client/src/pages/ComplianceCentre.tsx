@@ -22,7 +22,7 @@ type ComplianceForm = Omit<ComplianceRecord, "_docId" | "updatedAt" | "source">;
 const emptyForm = (driverId: string, driverName: string): ComplianceForm => ({
   driverId, driverName, licenceNumber: "", licenceValidFrom: "", licenceValidTo: "", consentExpiry: "",
   cpcExpiry: "", tachoCardExpiry: "", dbsDate: "", trainingExpiry: "", endorsements: [], notes: "",
-  section88ApplicationSentDate: "", section88DvlaReceivedDate: "", section88EvidenceType: "recorded-delivery", section88TrackingReference: "", section88EvidenceReceived: false, section88Confirmed: false, section88CheckedBy: "", section88CheckedAt: undefined, section88Ended: false, section88EndReason: ""
+  section88ApplicationSentDate: "", section88DvlaReceivedDate: "", section88EvidenceType: "recorded-delivery", section88TrackingReference: "", section88EvidenceReceived: false, section88Confirmed: false, section88CheckedBy: "", section88Ended: false, section88EndReason: ""
 });
 const normalise = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 const nameKey = (value: string) => { const parts=normalise(value).split(" ").filter(Boolean); return parts.length>1 ? `${parts[0]} ${parts[parts.length-1]}` : parts[0]||""; };
@@ -139,7 +139,7 @@ export default function ComplianceCentre() {
   const openEditor=(driver:any,record?:ComplianceRecord)=>{setSelected(driver);setForm(record?{...emptyForm(driver._docId,driver.name),...record,driverId:driver._docId,driverName:driver.name}:emptyForm(driver._docId,driver.name));setEndorsement({offenceCode:"",points:3,offenceDate:"",expiryDate:""});};
   const closeEditor=()=>{setSelected(null);setForm(null);};
   const saveRecord=async()=>{if(!firebaseDb||!profile||!selected||!form)return;if(form.section88Confirmed&&(!form.section88ApplicationSentDate||!form.section88DvlaReceivedDate||!form.section88EvidenceReceived||!form.section88EvidenceType)){toast.error("To confirm Section 88, record the application date and evidence received first.");return;}if(!form.licenceValidTo){toast.error("Enter the driving licence expiry date, or leave this record unsaved until confirmed.");return;}setSaving(true);try{
-    const payload={...form,driverId:selected._docId,driverName:selected.name,endorsements:form.endorsements||[],section88CheckedBy:form.section88Confirmed?(profile.displayName||profile.userId):"",section88CheckedAt:form.section88Confirmed?(form.section88CheckedAt||Date.now()):undefined,updatedAt:Date.now(),updatedBy:profile.displayName||profile.userId};
+    const payload:any={...form,driverId:selected._docId,driverName:selected.name,endorsements:form.endorsements||[],section88CheckedBy:form.section88Confirmed?(profile.displayName||profile.userId):"",section88CheckedAt:form.section88Confirmed?(form.section88CheckedAt||Date.now()):undefined,updatedAt:Date.now(),updatedBy:profile.displayName||profile.userId};Object.keys(payload).forEach(key=>{if(payload[key]===undefined)delete payload[key];});
     const existing=records.find(r=>r.driverId===selected._docId)||records.find(r=>normalise(r.driverName)===normalise(selected.name));
     if(existing)await updateDoc(doc(firebaseDb,"ops_driver_compliance",existing._docId),payload);else await addDoc(collection(firebaseDb,"ops_driver_compliance"),{...payload,createdAt:Date.now(),createdBy:profile.displayName||profile.userId});
     await refresh();closeEditor();toast.success("Driver compliance record saved.");
