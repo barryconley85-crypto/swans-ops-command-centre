@@ -154,24 +154,35 @@ export default async function handler(request, response) {
   }
   const required = ["FIREBASE_SERVICE_ACCOUNT_JSON_BASE64","GOOGLE_MAILER_URL","GOOGLE_MAILER_SHARED_SECRET"];
   if (required.some(key => !process.env[key])) return response.status(503).json({ error: "Firebase or the existing Google Apps Script mailer is not configured." });
+  let stage = "firebase-service-account";
   try {
+    console.info("[driver-compliance-alerts] request accepted", { mode: testMode ? "test" : "scheduled", mailerConfigured: Boolean(process.env.GOOGLE_MAILER_URL), secretConfigured: Boolean(process.env.GOOGLE_MAILER_SHARED_SECRET) });
     const account = serviceAccount();
     if (!account?.private_key || !account?.client_email) throw new Error("Firebase service account configuration is invalid.");
+    stage = "firebase-authentication";
     const token = await accessToken(account);
+    stage = "firebase-data-read";
     const [records, drivers] = await Promise.all([listCollection(token,"ops_driver_compliance"),listCollection(token,"ops_drivers")]);
+    console.info("[driver-compliance-alerts] data loaded", { complianceRecords: records.length, drivers: drivers.length });
     const report = buildReport(records, drivers);
     const dryRun = request.query?.dryRun === "1";
     const recipients = testMode ? [TEST_RECIPIENT] : RECIPIENTS;
     if (dryRun) return response.status(200).json({ status:"dry_run", recipients, totals:report.totals, preview:report.summary, detail:report.detail });
     const today = dateKey(new Date());
+    stage = "google-apps-script-mailer";
     const mail = await fetch(process.env.GOOGLE_MAILER_URL, {
       method:"POST", headers:{"Content-Type":"application/json"},
       body:JSON.stringify({ secret:process.env.GOOGLE_MAILER_SHARED_SECRET, eventKey:testMode ? `driver-compliance-test-${randomUUID()}` : `driver-compliance-daily-${today}`, to:recipients, subject:`Swans Compliance | ${testMode ? "TEST " : ""}Daily driver alert | ${today}`, text:[ "SWANS TRAVEL | COMPLIANCE CENTRE", "DAILY DRIVER COMPLIANCE ALERT", ...report.summary, "", "ITEMS REQUIRING ATTENTION", report.detail, "", `Open Compliance Centre: ${APP_URL}/compliance` ].join("\n"), html:report.html })
     });
-    const result = await mail.json().catch(()=>({}));
-    if (!mail.ok || result.ok !== true) throw new Error(result.error || "The existing mailer rejected the compliance alert.");
+    const responseText = await mail.text();
+    let result = {};
+    try { result = JSON.parse(responseText); } catch {}
+    console.info("[driver-compliance-alerts] mailer response", { httpStatus: mail.status, accepted: result.ok === true, responseKeys: Object.keys(result), error: typeof result.error === "string" ? result.error.slice(0, 240) : undefined });
+    if (!mail.ok || result.ok !== true) throw new Error(result.error || `The existing mailer rejected the compliance alert (HTTP ${mail.status}).`);
     return response.status(200).json({ status:"sent", recipients, totals:report.totals, emailId:result.id });
   } catch (error) {
-    return response.status(502).json({ error:error instanceof Error ? error.message : "Daily compliance alert failed." });
+    const message = error instanceof Error ? error.message : "Daily compliance alert failed.";
+    console.error("[driver-compliance-alerts] failed", { stage, message });
+    return response.status(502).json({ error:message });
   }
 }
