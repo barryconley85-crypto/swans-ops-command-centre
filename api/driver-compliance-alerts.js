@@ -164,10 +164,6 @@ export default async function handler(request, response) {
   } else if (!process.env.CRON_SECRET || supplied !== process.env.CRON_SECRET) {
     return response.status(401).json({ error: "Unauthorised scheduled compliance alert." });
   }
-  if (!testMode) {
-    const ukHour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", hour: "2-digit", hourCycle: "h23" }).format(new Date()));
-    if (ukHour !== 8) return response.status(200).json({ status: "skipped", reason: "Outside the 08:00 UK reporting window." });
-  }
   const required = ["FIREBASE_SERVICE_ACCOUNT_JSON_BASE64", "GOOGLE_MAILER_URL", "GOOGLE_MAILER_SHARED_SECRET"];
   if (required.some(key => !process.env[key])) return response.status(503).json({ error: "Firebase or the existing Ops email service is not configured." });
   let stage = "firebase-service-account";
