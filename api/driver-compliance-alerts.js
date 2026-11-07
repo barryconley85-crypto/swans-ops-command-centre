@@ -1,4 +1,4 @@
-import { createSign, randomUUID } from "node:crypto";
+import { createSign, randomUUID, createHash } from "node:crypto";
 
 const PROJECT_ID = "swans-ops-command-centre";
 const FIRESTORE = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
@@ -70,6 +70,24 @@ async function accessToken(account) {
   const result = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion }) });
   if (!result.ok) throw new Error("Firebase service authentication was not accepted.");
   return (await result.json()).access_token;
+}
+async function readAlertState(token) {
+  const url = `${FIRESTORE}/ops_notification_state/driver_compliance_alerts`;
+  const result = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (result.status === 404) return null;
+  if (!result.ok) throw new Error("Could not read compliance alert history.");
+  const body = await result.json();
+  return decodeFields(body.fields || {});
+}
+async function writeAlertState(token, fingerprint, alertItems) {
+  const url = `${FIRESTORE}/ops_notification_state/driver_compliance_alerts?updateMask.fieldPaths=fingerprint&updateMask.fieldPaths=alertItems&updateMask.fieldPaths=updatedAt`;
+  const fields = {
+    fingerprint: { stringValue: fingerprint },
+    alertItems: { arrayValue: { values: alertItems.map(item => ({ mapValue: { fields: { key: { stringValue: item.key }, text: { stringValue: item.text } } } })) } },
+    updatedAt: { timestampValue: new Date().toISOString() }
+  };
+  const result = await fetch(url, { method: "PATCH", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ fields }) });
+  if (!result.ok) throw new Error("Could not save compliance alert history.");
 }
 async function listCollection(token, name) {
   const items = []; let pageToken = "";
@@ -151,8 +169,14 @@ export function buildReport(records, drivers, now = new Date()) {
   const missingItems = missing.map(row => `${row.name}, driving licence expiry date missing`);
   const endorsementItems = newEndorsements.map(item => `${item.name}, new ${item.offenceCode || "endorsement"}, ${item.points || 0} points, offence date ${dateLabel(item.offenceDate)}`);
   const metric = (value, label, accent) => `<td width="33.33%" valign="top" style="padding:6px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#FFFFFF;border:1px solid #DCE7EF;border-top:4px solid ${accent};border-radius:8px"><tr><td style="padding:12px 10px"><div style="font-size:25px;line-height:1.2;font-weight:700;color:#102F46">${value}</div><div style="font-size:11px;line-height:1.4;color:#60798B;margin-top:5px">${escapeHtml(label)}</div></td></tr></table></td>`;
-  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#EEF4F8;font-family:Arial,Helvetica,sans-serif;color:#243B4A"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#EEF4F8"><tr><td align="center" style="padding:22px 10px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:720px;background:#FFFFFF;border:1px solid #DCE7EF;border-radius:14px;overflow:hidden"><tr><td style="background:#102F46;padding:26px 24px 24px"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#9DE8E5">SWANS TRAVEL&nbsp; | &nbsp;DRIVER MANAGEMENT</div><div style="font-size:25px;line-height:1.25;font-weight:700;color:#FFFFFF;margin-top:12px">Daily compliance report</div><div style="font-size:14px;color:#C8DCE7;margin-top:8px">${escapeHtml(now.toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric"}))}</div></td></tr><tr><td style="padding:22px 18px 8px"><div style="font-size:17px;font-weight:700;color:#102F46;margin:0 0 10px">At a glance</div><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr>${metric(activeDrivers.length,"Active drivers checked","#35C9C3")}${metric(thresholds.length,"Drivers at 6+ points","#D92D20")}${metric(complianceDue.length,"Documents due or expired","#F79009")}</tr><tr>${metric(pointsExpiring.length,"Drivers with points expiring","#F79009")}${metric(missing.length,"Missing licence expiry","#D92D20")}${metric(newEndorsements.length,"New endorsements in 24 hours","#35C9C3")}</tr></table></td></tr><tr><td style="padding:12px 18px 4px"><div style="font-size:17px;font-weight:700;color:#102F46;margin:0 0 12px">Items requiring attention</div>${section("Points thresholds","Drivers with 6, 9 or 12+ current points",pointItems,"urgent")}${section("Endorsement points expiring","Points due to expire within the next 30 days",expiringPointItems,"warning")}${section("Compliance dates","Licence, DVLA consent, CPC, tachograph card and training dates due within 7 days or already expired",dateItems,"warning")}${section("Missing information","Records requiring completion",missingItems,"urgent")}${section("New endorsements","Endorsements added or updated in the last 24 hours",endorsementItems,"normal")}</td></tr><tr><td style="padding:10px 24px 24px;text-align:center"><a href="${escapeHtml(APP_URL)}/compliance" style="display:inline-block;background:#35C9C3;color:#102F46;text-decoration:none;font-size:14px;font-weight:700;padding:13px 22px;border-radius:8px">Open Compliance Centre</a><div style="font-size:11px;line-height:1.5;color:#71879A;margin-top:16px">Automated daily report. Check the underlying driver record before taking action.</div></td></tr></table></td></tr></table></body></html>`;
-  return { summary, detail, html, totals: { activeDrivers: activeDrivers.length, thresholds: thresholds.length, expiringPoints: pointsExpiring.length, complianceDue: complianceDue.length, missingLicence: missing.length, newEndorsements: newEndorsements.length } };
+  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#EEF4F8;font-family:Arial,Helvetica,sans-serif;color:#243B4A"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#EEF4F8"><tr><td align="center" style="padding:22px 10px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:720px;background:#FFFFFF;border:1px solid #DCE7EF;border-radius:14px;overflow:hidden"><tr><td style="background:#102F46;padding:26px 24px 24px"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#9DE8E5">SWANS TRAVEL&nbsp; | &nbsp;DRIVER MANAGEMENT</div><div style="font-size:25px;line-height:1.25;font-weight:700;color:#FFFFFF;margin-top:12px">Compliance action alert</div><div style="font-size:14px;color:#C8DCE7;margin-top:8px">${escapeHtml(now.toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric"}))}</div></td></tr><tr><td style="padding:22px 18px 8px"><div style="font-size:17px;font-weight:700;color:#102F46;margin:0 0 10px">At a glance</div><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr>${metric(activeDrivers.length,"Active drivers checked","#35C9C3")}${metric(thresholds.length,"Drivers at 6+ points","#D92D20")}${metric(complianceDue.length,"Documents due or expired","#F79009")}</tr><tr>${metric(pointsExpiring.length,"Drivers with points expiring","#F79009")}${metric(missing.length,"Missing licence expiry","#D92D20")}${metric(newEndorsements.length,"New endorsements in 24 hours","#35C9C3")}</tr></table></td></tr><tr><td style="padding:12px 18px 4px"><div style="font-size:17px;font-weight:700;color:#102F46;margin:0 0 12px">Items requiring attention</div>${section("Points thresholds","Drivers with 6, 9 or 12+ current points",pointItems,"urgent")}${section("Endorsement points expiring","Points due to expire within the next 30 days",expiringPointItems,"warning")}${section("Compliance dates","Licence, DVLA consent, CPC, tachograph card and training dates due within 7 days or already expired",dateItems,"warning")}${section("Missing information","Records requiring completion",missingItems,"urgent")}${section("New endorsements","Endorsements added or updated in the last 24 hours",endorsementItems,"normal")}</td></tr><tr><td style="padding:10px 24px 24px;text-align:center"><a href="${escapeHtml(APP_URL)}/compliance" style="display:inline-block;background:#35C9C3;color:#102F46;text-decoration:none;font-size:14px;font-weight:700;padding:13px 22px;border-radius:8px">Open Compliance Centre</a><div style="font-size:11px;line-height:1.5;color:#71879A;margin-top:16px">Sent only when a monitored compliance issue is new or changes. Check the underlying driver record before taking action.</div></td></tr></table></td></tr></table></body></html>`;
+  const alertItems = [
+    ...pointItems.map(item => ({ key: "points:" + item, text: item })),
+    ...expiringPointItems.map(item => ({ key: "expiring-points:" + item, text: item })),
+    ...dateItems.map(item => ({ key: "date:" + item, text: item })),
+    ...missingItems.map(item => ({ key: "missing:" + item, text: item })),
+  ].sort((a, b) => a.key.localeCompare(b.key));
+  return { summary, detail, html, alertItems, totals: { activeDrivers: activeDrivers.length, thresholds: thresholds.length, expiringPoints: pointsExpiring.length, complianceDue: complianceDue.length, missingLicence: missing.length, newEndorsements: newEndorsements.length } };
 }
 export default async function handler(request, response) {
   if (request.method !== "GET" && request.method !== "POST") return response.status(405).json({ error: "Method not allowed" });
@@ -179,19 +203,27 @@ export default async function handler(request, response) {
     const report = buildReport(records, drivers);
     const dryRun = request.query?.dryRun === "1";
     const recipients = testMode ? [TEST_RECIPIENT] : RECIPIENTS;
-    if (dryRun) return response.status(200).json({ status:"dry_run", recipients, totals:report.totals, preview:report.summary, detail:report.detail });
+    const fingerprint = createHash("sha256").update(JSON.stringify(report.alertItems)).digest("hex");
+    const previousState = testMode ? null : await readAlertState(token);
+    const changed = report.alertItems.length > 0 && previousState?.fingerprint !== fingerprint;
+    if (dryRun) return response.status(200).json({ status:"dry_run", recipients, totals:report.totals, actionableItems:report.alertItems, wouldSend: testMode || changed, reason: report.alertItems.length === 0 ? "No actionable issues" : changed || testMode ? "New or changed actionable issues" : "No change since last notification", preview:report.summary, detail:report.detail });
+    if (!testMode && !changed) {
+      if (previousState?.fingerprint !== fingerprint) await writeAlertState(token, fingerprint, report.alertItems);
+      return response.status(200).json({ status: report.alertItems.length ? "no_change" : "no_actionable_items", sent:false, totals:report.totals });
+    }
     const today = dateKey(new Date());
     stage = "google-apps-script-mailer";
     const mail = await fetch(process.env.GOOGLE_MAILER_URL, {
       method:"POST", headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({ secret:process.env.GOOGLE_MAILER_SHARED_SECRET, eventKey:testMode ? `driver-compliance-test-${randomUUID()}` : `driver-compliance-daily-${today}`, to:recipients, subject:`Swans Compliance | ${testMode ? "TEST " : ""}Daily driver alert | ${today}`, text:[ "SWANS TRAVEL | COMPLIANCE CENTRE", "DAILY DRIVER COMPLIANCE ALERT", ...report.summary, "", "ITEMS REQUIRING ATTENTION", report.detail, "", `Open Compliance Centre: ${APP_URL}/compliance` ].join("\n"), html:report.html })
+      body:JSON.stringify({ secret:process.env.GOOGLE_MAILER_SHARED_SECRET, eventKey:testMode ? `driver-compliance-test-${randomUUID()}` : `driver-compliance-change-${fingerprint}`, to:recipients, subject:`Swans Compliance | ${testMode ? "TEST " : ""}Action required | ${today}`, text:[ "SWANS TRAVEL | COMPLIANCE CENTRE", "DAILY DRIVER COMPLIANCE ALERT", ...report.summary, "", "ITEMS REQUIRING ATTENTION", report.detail, "", `Open Compliance Centre: ${APP_URL}/compliance` ].join("\n"), html:report.html })
     });
     const responseText = await mail.text();
     let result = {};
     try { result = JSON.parse(responseText); } catch {}
     console.info("[driver-compliance-alerts] mailer response", { httpStatus: mail.status, accepted: result.ok === true, responseKeys: Object.keys(result), error: typeof result.error === "string" ? result.error.slice(0, 240) : undefined });
     if (!mail.ok || result.ok !== true) throw new Error(result.error || `The existing mailer rejected the compliance alert (HTTP ${mail.status}).`);
-    return response.status(200).json({ status:"sent", recipients, totals:report.totals, emailId:result.id });
+    if (!testMode) await writeAlertState(token, fingerprint, report.alertItems);
+    if (!testMode) await writeAlertState(token, fingerprint, report.alertItems);\n    return response.status(200).json({ status:"sent", recipients, totals:report.totals, emailId:result.id });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Daily compliance alert failed.";
     console.error("[driver-compliance-alerts] failed", { stage, message });

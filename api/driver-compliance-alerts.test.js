@@ -23,6 +23,8 @@ describe("daily driver compliance report", () => {
     expect(report.detail).toContain("Overdue Driver");
     expect(report.detail).not.toContain("Eight Day Driver");
     expect(report.summary.join(" ")).toContain("within 7 days or expired");
+    expect(report.alertItems.some(item => item.text.includes("Seven Day Driver"))).toBe(true);
+    expect(report.alertItems.some(item => item.text.includes("Eight Day Driver"))).toBe(false);
   });
 
   it("retains active driver points thresholds and ignores inactive drivers", () => {
@@ -45,5 +47,7 @@ describe("daily driver compliance report", () => {
     expect(report.totals.thresholds).toBe(1);
     expect(report.detail).toContain("Active Driver");
     expect(report.detail).not.toContain("Inactive Driver");
+    expect(report.alertItems.some(item => item.text.includes("Active Driver"))).toBe(true);
+    expect(report.alertItems.some(item => item.text.includes("Inactive Driver"))).toBe(false);
   });
 });
