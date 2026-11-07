@@ -44,6 +44,10 @@ export function buildNotificationEventKey(items) {
 export function isAlertActivationEnabled(env = process.env) {
   return env.COMPLIANCE_ALERTS_ENABLED === "true";
 }
+export function managerIssuePreview(method, issues) {
+  if (method !== "POST") return {};
+  return { issues: issues.slice(0, 100), issuesTruncated: issues.length > 100 };
+}
 function serviceAccount() {
   const raw = String(process.env.FIREBASE_SERVICE_ACCOUNT_JSON_BASE64 || "").trim();
   const candidates = [raw];
@@ -143,8 +147,8 @@ export default async function handler(request, response) {
     const reconciled = reconcileAlertState(evaluated.issues, previous, now);
     const changed = [...reconciled.opened, ...reconciled.escalated];
     const resolvedKeys = new Set(reconciled.resolved.map(item => item.key));
-    if (process.env.VERCEL_ENV !== "production") return response.status(200).json({ status: "preview_only", activeDrivers: evaluated.activeDrivers, openIssues: evaluated.issues.length, opened: reconciled.opened.length, escalated: reconciled.escalated.length, persisted: false, notified: false });
-    if (!isAlertActivationEnabled()) return response.status(200).json({ status: "activation_required", activeDrivers: evaluated.activeDrivers, openIssues: evaluated.issues.length, opened: reconciled.opened.length, escalated: reconciled.escalated.length, persisted: false, notified: false });
+    if (process.env.VERCEL_ENV !== "production") return response.status(200).json({ status: "preview_only", activeDrivers: evaluated.activeDrivers, openIssues: evaluated.issues.length, opened: reconciled.opened.length, escalated: reconciled.escalated.length, persisted: false, notified: false, ...managerIssuePreview(request.method, evaluated.issues) });
+    if (!isAlertActivationEnabled()) return response.status(200).json({ status: "activation_required", activeDrivers: evaluated.activeDrivers, openIssues: evaluated.issues.length, opened: reconciled.opened.length, escalated: reconciled.escalated.length, persisted: false, notified: false, ...managerIssuePreview(request.method, evaluated.issues) });
     let mail = null;
     if (changed.length) mail = await sendAlertEmail(changed, now);
     for (const issue of Object.values(reconciled.next)) {
