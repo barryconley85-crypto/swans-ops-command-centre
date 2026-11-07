@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { daysUntilDate, evaluateCompliance, reconcileAlertState } from "./compliance-alert-engine.js";
+import { buildNotificationEventKey, isAlertActivationEnabled } from "./compliance-early-warning.js";
 
 const now = new Date("2026-11-07T08:00:00.000Z");
 
@@ -92,3 +93,19 @@ describe("compliance alert state reconciliation", () => {
     expect(result.shouldNotify).toBe(false);
   });
 });
+
+describe("compliance notification safety", () => {
+  it("uses stable event keys across retries and item ordering, while changing on escalation", () => {
+    const a = { key: "d1:cpc", severity: "warning", state: "due", firstDetectedAt: "2026-11-07T08:00:00.000Z", lastDetectedAt: "2026-11-07T09:00:00.000Z" };
+    const b = { key: "d2:tacho", severity: "critical", state: "expired", firstDetectedAt: "2026-11-07T08:00:00.000Z" };
+    expect(buildNotificationEventKey([a, b])).toBe(buildNotificationEventKey([{ ...b }, { ...a, lastDetectedAt: "2026-11-07T10:00:00.000Z" }]));
+    expect(buildNotificationEventKey([a])).not.toBe(buildNotificationEventKey([{ ...a, severity: "critical" }]));
+  });
+
+  it("keeps production writes and email disabled until explicit activation", () => {
+    expect(isAlertActivationEnabled({})).toBe(false);
+    expect(isAlertActivationEnabled({ COMPLIANCE_ALERTS_ENABLED: "TRUE" })).toBe(false);
+    expect(isAlertActivationEnabled({ COMPLIANCE_ALERTS_ENABLED: "true" })).toBe(true);
+  });
+});
+
