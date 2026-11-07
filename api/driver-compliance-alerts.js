@@ -152,7 +152,7 @@ export default async function handler(request, response) {
   } else if (!process.env.CRON_SECRET || supplied !== process.env.CRON_SECRET) {
     return response.status(401).json({ error: "Unauthorised scheduled compliance alert." });
   }
-  const required = ["FIREBASE_SERVICE_ACCOUNT_JSON_BASE64", "RESEND_API_KEY", "TASK_EMAIL_FROM"];
+  const required = ["FIREBASE_SERVICE_ACCOUNT_JSON_BASE64", "GOOGLE_MAILER_URL", "GOOGLE_MAILER_SHARED_SECRET"];
   if (required.some(key => !process.env[key])) return response.status(503).json({ error: "Firebase or the existing Ops email service is not configured." });
   let stage = "firebase-service-account";
   try {
