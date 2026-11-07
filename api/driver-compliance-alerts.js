@@ -203,7 +203,14 @@ export default async function handler(request, response) {
     const report = buildReport(records, drivers);
     const dryRun = request.query?.dryRun === "1";
     const recipients = testMode ? [TEST_RECIPIENT] : RECIPIENTS;
-    if (dryRun) return response.status(200).json({ status:"dry_run", recipients, totals:report.totals, preview:report.summary, detail:report.detail });
+    const fingerprint = createHash("sha256").update(JSON.stringify(report.alertItems)).digest("hex");
+    const previousState = testMode ? null : await readAlertState(token);
+    const changed = report.alertItems.length > 0 && previousState?.fingerprint !== fingerprint;
+    if (dryRun) return response.status(200).json({ status:"dry_run", recipients, totals:report.totals, actionableItems:report.alertItems, wouldSend: testMode || changed, reason: report.alertItems.length === 0 ? "No actionable issues" : changed || testMode ? "New or changed actionable issues" : "No change since last notification", preview:report.summary, detail:report.detail });
+    if (!testMode && !changed) {
+      if (previousState?.fingerprint !== fingerprint) await writeAlertState(token, fingerprint, report.alertItems);
+      return response.status(200).json({ status: report.alertItems.length ? "no_change" : "no_actionable_items", sent:false, totals:report.totals });
+    }
     const today = dateKey(new Date());
     stage = "google-apps-script-mailer";
     const mail = await fetch(process.env.GOOGLE_MAILER_URL, {
@@ -216,7 +223,7 @@ export default async function handler(request, response) {
     console.info("[driver-compliance-alerts] mailer response", { httpStatus: mail.status, accepted: result.ok === true, responseKeys: Object.keys(result), error: typeof result.error === "string" ? result.error.slice(0, 240) : undefined });
     if (!mail.ok || result.ok !== true) throw new Error(result.error || `The existing mailer rejected the compliance alert (HTTP ${mail.status}).`);
     if (!testMode) await writeAlertState(token, fingerprint, report.alertItems);
-    return response.status(200).json({ status:"sent", recipients, totals:report.totals, emailId:result.id });
+    if (!testMode) await writeAlertState(token, fingerprint, report.alertItems);\n    return response.status(200).json({ status:"sent", recipients, totals:report.totals, emailId:result.id });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Daily compliance alert failed.";
     console.error("[driver-compliance-alerts] failed", { stage, message });
