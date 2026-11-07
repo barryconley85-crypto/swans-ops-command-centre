@@ -101,7 +101,7 @@ export function buildReport(records, drivers, now = new Date()) {
   const activeDrivers = drivers.filter(driver => driver.active !== false);
   const byId = new Map(records.map(record => [String(record.driverId || ""), record]));
   const rows = activeDrivers.map(driver => {
-    const record = byId.get(String(driver._docId)) || records.find(item => String(item.driverName || "").toLowerCase() === String(driver.name || "").toLowerCase());
+    const record = byId.get(String(driver._docId)) || records.find(item => String(item.driverId || "") === String(driver._docId)) || records.find(item => String(item.driverName || "").trim().toLowerCase() === String(driver.name || "").trim().toLowerCase());
     const endorsements = record?.endorsements || [];
     const live = endorsements.filter(item => {
       const expiry = daysUntil(item.expiryDate, today);
