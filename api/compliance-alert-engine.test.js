@@ -18,7 +18,7 @@ describe("compliance early warning evaluation", () => {
       licenceValidTo: "2026-11-06",
       consentExpiry: "2026-11-14",
       cpcExpiry: "2026-11-21",
-      tachoCardExpiry: "2026-11-22",
+      tachoCardExpiry: "2026-11-21",
       trainingExpiry: "2026-12-07",
     };
     const issues = evaluateCompliance([record], [driver], now).issues;
