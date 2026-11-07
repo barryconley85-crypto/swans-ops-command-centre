@@ -3,11 +3,11 @@ import { createSign, randomUUID } from "node:crypto";
 const PROJECT_ID = "swans-ops-command-centre";
 const FIRESTORE = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
 const APP_URL = (process.env.APP_BASE_URL || "https://swans-ops-command-centre-barry-s-projects22.vercel.app").replace(/\/$/, "");
-const RECIPIENTS = ["bc@swanstravel.com", "swh@swanstravel.com", "rdp@swanstravel.com", "clt@swanstravel.com"];
+const RECIPIENTS = ["bc@swanstravel.com", "swh@swanstravel.com"];
 const TEST_RECIPIENT = "bc@swanstravel.com";
 async function verifiedLeadEmail(idToken) {
   if (!idToken) return null;
-  const apiKey = process.env.FIREBASE_WEB_API_KEY || "AIzaSyAF6KhLk9CJvIbBjM0KHEzPO2dMAc1_OLY";
+  const apiKey = process.env.FIREBASE_WEB_API_KEY;\n  if (!apiKey) return null;
   const result = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken }) });
   if (!result.ok) return null;
   const body = await result.json();
@@ -95,7 +95,7 @@ const daysUntil = (value, today) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ""))) return null;
   return Math.round((Date.parse(value + "T00:00:00Z") - Date.parse(today + "T00:00:00Z")) / 86400000);
 };
-function buildReport(records, drivers, now = new Date()) {
+export function buildReport(records, drivers, now = new Date()) {
   const today = dateKey(now);
   const activeDrivers = drivers.filter(driver => driver.active !== false);
   const byId = new Map(records.map(record => [String(record.driverId || ""), record]));
@@ -111,7 +111,7 @@ function buildReport(records, drivers, now = new Date()) {
     const dates = [["Driving licence",record?.licenceValidTo],["DVLA consent",record?.consentExpiry],["Driver CPC",record?.cpcExpiry],["Tachograph card",record?.tachoCardExpiry],["Training",record?.trainingExpiry]];
     const dateAlerts = dates.flatMap(([label,value]) => {
       const days = daysUntil(value, today);
-      return days !== null && days <= 90 ? [{ label, value, days }] : [];
+      return days !== null && days <= 7 ? [{ label, value, days }] : [];
     });
     return { name: driver.name || record?.driverName || "Unnamed driver", record, points, live, expiringPoints, dateAlerts };
   });
@@ -133,7 +133,7 @@ function buildReport(records, drivers, now = new Date()) {
     `Active drivers checked: ${activeDrivers.length}`,
     `Drivers at 6/9/12+ current points: ${thresholds.length}`,
     `Drivers with points expiring in 30 days: ${pointsExpiring.length}`,
-    `Drivers with compliance dates due/expired within 90 days: ${complianceDue.length}`,
+    `Drivers with compliance dates due within 7 days or expired: ${complianceDue.length}`,
     `Drivers missing a licence expiry date: ${missing.length}`,
     `New endorsements recorded/updated in last 24 hours: ${newEndorsements.length}`,
   ];
@@ -151,7 +151,7 @@ function buildReport(records, drivers, now = new Date()) {
   const missingItems = missing.map(row => `${row.name}, driving licence expiry date missing`);
   const endorsementItems = newEndorsements.map(item => `${item.name}, new ${item.offenceCode || "endorsement"}, ${item.points || 0} points, offence date ${dateLabel(item.offenceDate)}`);
   const metric = (value, label, accent) => `<td width="33.33%" valign="top" style="padding:6px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#FFFFFF;border:1px solid #DCE7EF;border-top:4px solid ${accent};border-radius:8px"><tr><td style="padding:12px 10px"><div style="font-size:25px;line-height:1.2;font-weight:700;color:#102F46">${value}</div><div style="font-size:11px;line-height:1.4;color:#60798B;margin-top:5px">${escapeHtml(label)}</div></td></tr></table></td>`;
-  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#EEF4F8;font-family:Arial,Helvetica,sans-serif;color:#243B4A"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#EEF4F8"><tr><td align="center" style="padding:22px 10px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:720px;background:#FFFFFF;border:1px solid #DCE7EF;border-radius:14px;overflow:hidden"><tr><td style="background:#102F46;padding:26px 24px 24px"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#9DE8E5">SWANS TRAVEL&nbsp; | &nbsp;DRIVER MANAGEMENT</div><div style="font-size:25px;line-height:1.25;font-weight:700;color:#FFFFFF;margin-top:12px">Daily compliance report</div><div style="font-size:14px;color:#C8DCE7;margin-top:8px">${escapeHtml(now.toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric"}))}</div></td></tr><tr><td style="padding:22px 18px 8px"><div style="font-size:17px;font-weight:700;color:#102F46;margin:0 0 10px">At a glance</div><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr>${metric(activeDrivers.length,"Active drivers checked","#35C9C3")}${metric(thresholds.length,"Drivers at 6+ points","#D92D20")}${metric(complianceDue.length,"Documents due or expired","#F79009")}</tr><tr>${metric(pointsExpiring.length,"Drivers with points expiring","#F79009")}${metric(missing.length,"Missing licence expiry","#D92D20")}${metric(newEndorsements.length,"New endorsements in 24 hours","#35C9C3")}</tr></table></td></tr><tr><td style="padding:12px 18px 4px"><div style="font-size:17px;font-weight:700;color:#102F46;margin:0 0 12px">Items requiring attention</div>${section("Points thresholds","Drivers with 6, 9 or 12+ current points",pointItems,"urgent")}${section("Endorsement points expiring","Points due to expire within the next 30 days",expiringPointItems,"warning")}${section("Compliance dates","Licence, DVLA consent, CPC, tachograph card and training dates due within 90 days",dateItems,"warning")}${section("Missing information","Records requiring completion",missingItems,"urgent")}${section("New endorsements","Endorsements added or updated in the last 24 hours",endorsementItems,"normal")}</td></tr><tr><td style="padding:10px 24px 24px;text-align:center"><a href="${escapeHtml(APP_URL)}/compliance" style="display:inline-block;background:#35C9C3;color:#102F46;text-decoration:none;font-size:14px;font-weight:700;padding:13px 22px;border-radius:8px">Open Compliance Centre</a><div style="font-size:11px;line-height:1.5;color:#71879A;margin-top:16px">Automated daily report. Check the underlying driver record before taking action.</div></td></tr></table></td></tr></table></body></html>`;
+  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#EEF4F8;font-family:Arial,Helvetica,sans-serif;color:#243B4A"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#EEF4F8"><tr><td align="center" style="padding:22px 10px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:720px;background:#FFFFFF;border:1px solid #DCE7EF;border-radius:14px;overflow:hidden"><tr><td style="background:#102F46;padding:26px 24px 24px"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#9DE8E5">SWANS TRAVEL&nbsp; | &nbsp;DRIVER MANAGEMENT</div><div style="font-size:25px;line-height:1.25;font-weight:700;color:#FFFFFF;margin-top:12px">Daily compliance report</div><div style="font-size:14px;color:#C8DCE7;margin-top:8px">${escapeHtml(now.toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric"}))}</div></td></tr><tr><td style="padding:22px 18px 8px"><div style="font-size:17px;font-weight:700;color:#102F46;margin:0 0 10px">At a glance</div><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr>${metric(activeDrivers.length,"Active drivers checked","#35C9C3")}${metric(thresholds.length,"Drivers at 6+ points","#D92D20")}${metric(complianceDue.length,"Documents due or expired","#F79009")}</tr><tr>${metric(pointsExpiring.length,"Drivers with points expiring","#F79009")}${metric(missing.length,"Missing licence expiry","#D92D20")}${metric(newEndorsements.length,"New endorsements in 24 hours","#35C9C3")}</tr></table></td></tr><tr><td style="padding:12px 18px 4px"><div style="font-size:17px;font-weight:700;color:#102F46;margin:0 0 12px">Items requiring attention</div>${section("Points thresholds","Drivers with 6, 9 or 12+ current points",pointItems,"urgent")}${section("Endorsement points expiring","Points due to expire within the next 30 days",expiringPointItems,"warning")}${section("Compliance dates","Licence, DVLA consent, CPC, tachograph card and training dates due within 7 days or already expired",dateItems,"warning")}${section("Missing information","Records requiring completion",missingItems,"urgent")}${section("New endorsements","Endorsements added or updated in the last 24 hours",endorsementItems,"normal")}</td></tr><tr><td style="padding:10px 24px 24px;text-align:center"><a href="${escapeHtml(APP_URL)}/compliance" style="display:inline-block;background:#35C9C3;color:#102F46;text-decoration:none;font-size:14px;font-weight:700;padding:13px 22px;border-radius:8px">Open Compliance Centre</a><div style="font-size:11px;line-height:1.5;color:#71879A;margin-top:16px">Automated daily report. Check the underlying driver record before taking action.</div></td></tr></table></td></tr></table></body></html>`;
   return { summary, detail, html, totals: { activeDrivers: activeDrivers.length, thresholds: thresholds.length, expiringPoints: pointsExpiring.length, complianceDue: complianceDue.length, missingLicence: missing.length, newEndorsements: newEndorsements.length } };
 }
 export default async function handler(request, response) {
@@ -163,6 +163,10 @@ export default async function handler(request, response) {
     if (email !== "bc@swanstravel.com") return response.status(403).json({ error: "Only the signed-in operations lead can send a test email." });
   } else if (!process.env.CRON_SECRET || supplied !== process.env.CRON_SECRET) {
     return response.status(401).json({ error: "Unauthorised scheduled compliance alert." });
+  }
+  if (!testMode) {
+    const ukHour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", hour: "2-digit", hourCycle: "h23" }).format(new Date()));
+    if (ukHour !== 8) return response.status(200).json({ status: "skipped", reason: "Outside the 08:00 UK reporting window." });
   }
   const required = ["FIREBASE_SERVICE_ACCOUNT_JSON_BASE64", "GOOGLE_MAILER_URL", "GOOGLE_MAILER_SHARED_SECRET"];
   if (required.some(key => !process.env[key])) return response.status(503).json({ error: "Firebase or the existing Ops email service is not configured." });
