@@ -1,6 +1,9 @@
 name: Driver compliance early warning validation
 
 on:
+  push:
+    branches:
+      - feat/compliance-early-warning-system
   pull_request:
     branches:
       - main
