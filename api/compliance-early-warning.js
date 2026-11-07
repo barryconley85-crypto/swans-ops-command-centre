@@ -133,13 +133,13 @@ export default async function handler(request, response) {
     const reconciled = reconcileAlertState(evaluated.issues, previous, now);
     const changed = [...reconciled.opened, ...reconciled.escalated];
     const resolvedKeys = new Set(reconciled.resolved.map(item => item.key));
+    let mail = null;
+    if (changed.length) mail = await sendAlertEmail(changed, now);
     for (const issue of Object.values(reconciled.next)) {
       const id = createHash("sha256").update(issue.key).digest("hex");
-      await saveDocument(token, "ops_compliance_alerts", id, { ...issue, key: issue.key, evaluatedAt: now.toISOString() });
+      await saveDocument(token, "ops_compliance_alerts", id, { ...issue, key: issue.key, evaluatedAt: now.toISOString(), lastNotificationAt: changed.some(item => item.key === issue.key) ? now.toISOString() : (previous[issue.key]?.lastNotificationAt || null) });
     }
-    if (!changed.length) return response.status(200).json({ status: "no_change", activeDrivers: evaluated.activeDrivers, openIssues: evaluated.issues.length, resolved: resolvedKeys.size, notified: false });
-    const mail = await sendAlertEmail(changed, now);
-    return response.status(200).json({ status: "evaluated", activeDrivers: evaluated.activeDrivers, openIssues: evaluated.issues.length, opened: reconciled.opened.length, escalated: reconciled.escalated.length, notified: true, emailAccepted: true, emailId: mail.id || null });
+    return response.status(200).json({ status: changed.length ? "evaluated" : "no_change", activeDrivers: evaluated.activeDrivers, openIssues: evaluated.issues.length, opened: reconciled.opened.length, escalated: reconciled.escalated.length, resolved: resolvedKeys.size, notified: Boolean(mail), emailAccepted: Boolean(mail), emailId: mail?.id || null });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Compliance evaluation failed.";
     console.error("[compliance-early-warning] failed", message);
