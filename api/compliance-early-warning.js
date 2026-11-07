@@ -34,6 +34,16 @@ function encodeValue(v) {
 function encodeFields(obj) {
   return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined).map(([k, v]) => [k, encodeValue(v)]));
 }
+export function buildNotificationEventKey(items) {
+  const fingerprint = [...items]
+    .map(item => [item.key, item.severity, item.state || "", String(item.firstDetectedAt || "").slice(0, 16)].join("\u001f"))
+    .sort()
+    .join("\u001e");
+  return "driver-compliance-change-" + createHash("sha256").update(fingerprint).digest("hex");
+}
+export function isAlertActivationEnabled(env = process.env) {
+  return env.COMPLIANCE_ALERTS_ENABLED === "true";
+}
 function serviceAccount() {
   const raw = String(process.env.FIREBASE_SERVICE_ACCOUNT_JSON_BASE64 || "").trim();
   const candidates = [raw];
@@ -95,7 +105,7 @@ async function sendAlertEmail(items, now) {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       secret: process.env.GOOGLE_MAILER_SHARED_SECRET,
-      eventKey: "driver-compliance-change-" + createHash("sha256").update(items.map(x => x.key + x.lastDetectedAt).join("|")).digest("hex"),
+      eventKey: buildNotificationEventKey(items),
       to: RECIPIENTS, subject: "Swans Compliance | " + items.length + " new or escalated driver issue(s)",
       text: ["SWANS TRAVEL | DRIVER COMPLIANCE", ...items.map(x => `${x.severity.toUpperCase()} | ${x.driverName} | ${x.title}\n${x.detail}\nAction: ${x.action}`), "", APP_URL + "/compliance"].join("\n\n"),
       html: emailHtml(items, now),
@@ -134,6 +144,7 @@ export default async function handler(request, response) {
     const changed = [...reconciled.opened, ...reconciled.escalated];
     const resolvedKeys = new Set(reconciled.resolved.map(item => item.key));
     if (process.env.VERCEL_ENV !== "production") return response.status(200).json({ status: "preview_only", activeDrivers: evaluated.activeDrivers, openIssues: evaluated.issues.length, opened: reconciled.opened.length, escalated: reconciled.escalated.length, persisted: false, notified: false });
+    if (!isAlertActivationEnabled()) return response.status(200).json({ status: "activation_required", activeDrivers: evaluated.activeDrivers, openIssues: evaluated.issues.length, opened: reconciled.opened.length, escalated: reconciled.escalated.length, persisted: false, notified: false });
     let mail = null;
     if (changed.length) mail = await sendAlertEmail(changed, now);
     for (const issue of Object.values(reconciled.next)) {
@@ -147,3 +158,4 @@ export default async function handler(request, response) {
     return response.status(502).json({ error: message });
   }
 }
+
