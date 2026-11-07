@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { daysUntilDate, evaluateCompliance, reconcileAlertState } from "./compliance-alert-engine.js";
-import { buildNotificationEventKey, isAlertActivationEnabled } from "./compliance-early-warning.js";
+import { buildNotificationEventKey, isAlertActivationEnabled, managerIssuePreview } from "./compliance-early-warning.js";
 
 const now = new Date("2026-11-07T08:00:00.000Z");
 
@@ -106,6 +106,14 @@ describe("compliance notification safety", () => {
     expect(isAlertActivationEnabled({})).toBe(false);
     expect(isAlertActivationEnabled({ COMPLIANCE_ALERTS_ENABLED: "TRUE" })).toBe(false);
     expect(isAlertActivationEnabled({ COMPLIANCE_ALERTS_ENABLED: "true" })).toBe(true);
+  });
+
+  it("returns capped issue details only for authenticated manual checks", () => {
+    const issues = Array.from({ length: 101 }, (_, index) => ({ key: `driver:${index}` }));
+    expect(managerIssuePreview("GET", issues)).toEqual({});
+    const preview = managerIssuePreview("POST", issues);
+    expect(preview.issues).toHaveLength(100);
+    expect(preview.issuesTruncated).toBe(true);
   });
 });
 
