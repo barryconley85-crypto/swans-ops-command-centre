@@ -133,6 +133,7 @@ export default async function handler(request, response) {
     const reconciled = reconcileAlertState(evaluated.issues, previous, now);
     const changed = [...reconciled.opened, ...reconciled.escalated];
     const resolvedKeys = new Set(reconciled.resolved.map(item => item.key));
+    if (process.env.VERCEL_ENV !== "production") return response.status(200).json({ status: "preview_only", activeDrivers: evaluated.activeDrivers, openIssues: evaluated.issues.length, opened: reconciled.opened.length, escalated: reconciled.escalated.length, persisted: false, notified: false });
     let mail = null;
     if (changed.length) mail = await sendAlertEmail(changed, now);
     for (const issue of Object.values(reconciled.next)) {
