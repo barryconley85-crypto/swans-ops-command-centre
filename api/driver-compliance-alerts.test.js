@@ -13,7 +13,7 @@ describe("daily driver compliance report", () => {
     const records = [
       { driverId: "d1", driverName: "Seven Day Driver", licenceValidTo: "2026-11-14" },
       { driverId: "d2", driverName: "Overdue Driver", tachoCardExpiry: "2026-11-06" },
-      { driverId: "d3", driverName: "Eight Day Driver", cpcExpiry: "2026-11-15" },
+      { driverId: "d3", driverName: "Eight Day Driver", licenceValidTo: "2027-11-07", cpcExpiry: "2026-11-15" },
     ];
 
     const report = buildReport(records, drivers, now);
