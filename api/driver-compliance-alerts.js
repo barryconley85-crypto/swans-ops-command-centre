@@ -152,11 +152,11 @@ export default async function handler(request, response) {
   } else if (!process.env.CRON_SECRET || supplied !== process.env.CRON_SECRET) {
     return response.status(401).json({ error: "Unauthorised scheduled compliance alert." });
   }
-  const required = ["FIREBASE_SERVICE_ACCOUNT_JSON_BASE64","GOOGLE_MAILER_URL","GOOGLE_MAILER_SHARED_SECRET"];
-  if (required.some(key => !process.env[key])) return response.status(503).json({ error: "Firebase or the existing Google Apps Script mailer is not configured." });
+  const required = ["FIREBASE_SERVICE_ACCOUNT_JSON_BASE64", "RESEND_API_KEY", "TASK_EMAIL_FROM"];
+  if (required.some(key => !process.env[key])) return response.status(503).json({ error: "Firebase or the existing Ops email service is not configured." });
   let stage = "firebase-service-account";
   try {
-    console.info("[driver-compliance-alerts] request accepted", { mode: testMode ? "test" : "scheduled", mailerConfigured: Boolean(process.env.GOOGLE_MAILER_URL), secretConfigured: Boolean(process.env.GOOGLE_MAILER_SHARED_SECRET) });
+    console.info("[driver-compliance-alerts] request accepted", { mode: testMode ? "test" : "scheduled", mailerConfigured: Boolean(process.env.RESEND_API_KEY && process.env.TASK_EMAIL_FROM), mailer: "resend" });
     const account = serviceAccount();
     if (!account?.private_key || !account?.client_email) throw new Error("Firebase service account configuration is invalid.");
     stage = "firebase-authentication";
