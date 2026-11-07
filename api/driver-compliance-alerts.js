@@ -7,7 +7,8 @@ const RECIPIENTS = ["bc@swanstravel.com", "swh@swanstravel.com", "rdp@swanstrave
 const TEST_RECIPIENT = "bc@swanstravel.com";
 async function verifiedLeadEmail(idToken) {
   if (!idToken) return null;
-  const apiKey = process.env.FIREBASE_WEB_API_KEY;\n  if (!apiKey) return null;
+  const apiKey = process.env.FIREBASE_WEB_API_KEY;
+  if (!apiKey) return null;
   const result = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken }) });
   if (!result.ok) return null;
   const body = await result.json();
@@ -100,7 +101,7 @@ export function buildReport(records, drivers, now = new Date()) {
   const activeDrivers = drivers.filter(driver => driver.active !== false);
   const byId = new Map(records.map(record => [String(record.driverId || ""), record]));
   const rows = activeDrivers.map(driver => {
-    const record = byId.get(String(driver._docId)) || records.find(item => String(item.driverName || "").toLowerCase() === String(driver.name || "").toLowerCase());
+    const record = byId.get(String(driver._docId)) || records.find(item => String(item.driverId || "") === String(driver._docId)) || records.find(item => String(item.driverName || "").trim().toLowerCase() === String(driver.name || "").trim().toLowerCase());
     const endorsements = record?.endorsements || [];
     const live = endorsements.filter(item => {
       const expiry = daysUntil(item.expiryDate, today);
