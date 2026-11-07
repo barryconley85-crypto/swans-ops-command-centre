@@ -153,6 +153,8 @@ export function reconcileAlertState(currentIssues = [], previousIssues = {}, now
       acknowledgedAt: previous?.acknowledgedAt || null,
       acknowledgedBy: previous?.acknowledgedBy || null,
       owner: previous?.owner || null,
+      ownerAssignedAt: previous?.ownerAssignedAt || null,
+      ownerAssignedBy: previous?.ownerAssignedBy || null,
       resolution: null,
     };
     next[key] = entry;
