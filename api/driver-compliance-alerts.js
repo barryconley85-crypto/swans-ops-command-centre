@@ -7,7 +7,8 @@ const RECIPIENTS = ["bc@swanstravel.com", "swh@swanstravel.com", "rdp@swanstrave
 const TEST_RECIPIENT = "bc@swanstravel.com";
 async function verifiedLeadEmail(idToken) {
   if (!idToken) return null;
-  const apiKey = process.env.FIREBASE_WEB_API_KEY;\n  if (!apiKey) return null;
+  const apiKey = process.env.FIREBASE_WEB_API_KEY;
+  if (!apiKey) return null;
   const result = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken }) });
   if (!result.ok) return null;
   const body = await result.json();
