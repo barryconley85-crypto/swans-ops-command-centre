@@ -77,7 +77,7 @@ service cloud.firestore {
         && request.resource.data.licenceValidTo is string;
       allow delete: if lead();
     }
-    match /ops_compliance_alerts/{alertId} { allow read: if operationsManager(); allow write: if false; }
+    match /ops_compliance_alerts/{alertId} { allow read: if operationsManager(); allow update: if operationsManager() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['acknowledgedAt', 'acknowledgedBy', 'owner', 'ownerAssignedAt', 'ownerAssignedBy']); allow create, delete: if false; }\n    match /ops_compliance_alert_activity/{activityId} { allow read: if operationsManager(); allow create: if operationsManager() && request.resource.data.actorUserId == request.auth.uid; allow update, delete: if false; }
     match /ops_driver_attendance/{attendanceId} {
       allow read: if member();
       allow create, update: if member() && !complaintsOnly()
