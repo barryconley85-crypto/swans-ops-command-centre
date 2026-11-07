@@ -1,4 +1,4 @@
-import { createSign } from "node:crypto";
+import { createSign, randomUUID } from "node:crypto";
 
 const PROJECT_ID = "swans-ops-command-centre";
 const FIRESTORE = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
@@ -39,7 +39,7 @@ function serviceAccount() {
   // Accept both raw service-account JSON and Base64-encoded JSON.
   // Also tolerate URL-safe Base64 and whitespace introduced by secret entry.
   try {
-    const normalised = raw.replace(/-/g, "+").replace(/_/g, "/").replace(/\\s/g, "");
+    const normalised = raw.replace(/-/g, "+").replace(/_/g, "/").replace(/\s/g, "");
     const decoded = Buffer.from(normalised, "base64").toString("utf8").trim();
     if (decoded && decoded !== raw) candidates.push(decoded);
   } catch {}
@@ -86,8 +86,9 @@ async function listCollection(token, name) {
 }
 const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" })[char]);
 const dateKey = (date) => {
-  const d = new Date(date);
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
 };
 const dateLabel = value => value ? new Date(`${value}T12:00:00`).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" }) : "Not recorded";
 const daysUntil = (value, today) => {
@@ -165,7 +166,7 @@ export default async function handler(request, response) {
     const today = dateKey(new Date());
     const mail = await fetch(process.env.GOOGLE_MAILER_URL, {
       method:"POST", headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({ secret:process.env.GOOGLE_MAILER_SHARED_SECRET, eventKey:`driver-compliance-daily-${today}`, to:recipients, subject:`Swans Compliance | ${testMode ? "TEST " : ""}Daily driver alert | ${today}`, text:[ "SWANS TRAVEL | COMPLIANCE CENTRE", "DAILY DRIVER COMPLIANCE ALERT", ...report.summary, "", "ITEMS REQUIRING ATTENTION", report.detail, "", `Open Compliance Centre: ${APP_URL}/compliance` ].join("\n"), html:report.html })
+      body:JSON.stringify({ secret:process.env.GOOGLE_MAILER_SHARED_SECRET, eventKey:testMode ? `driver-compliance-test-${randomUUID()}` : `driver-compliance-daily-${today}`, to:recipients, subject:`Swans Compliance | ${testMode ? "TEST " : ""}Daily driver alert | ${today}`, text:[ "SWANS TRAVEL | COMPLIANCE CENTRE", "DAILY DRIVER COMPLIANCE ALERT", ...report.summary, "", "ITEMS REQUIRING ATTENTION", report.detail, "", `Open Compliance Centre: ${APP_URL}/compliance` ].join("\n"), html:report.html })
     });
     const result = await mail.json().catch(()=>({}));
     if (!mail.ok || result.ok !== true) throw new Error(result.error || "The existing mailer rejected the compliance alert.");
