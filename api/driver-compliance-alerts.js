@@ -3,7 +3,7 @@ import { createSign, randomUUID } from "node:crypto";
 const PROJECT_ID = "swans-ops-command-centre";
 const FIRESTORE = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
 const APP_URL = (process.env.APP_BASE_URL || "https://swans-ops-command-centre-barry-s-projects22.vercel.app").replace(/\/$/, "");
-const RECIPIENTS = ["bc@swanstravel.com", "swh@swanstravel.com"];
+const RECIPIENTS = ["bc@swanstravel.com", "swh@swanstravel.com", "rdp@swanstravel.com", "clt@swanstravel.com"];
 const TEST_RECIPIENT = "bc@swanstravel.com";
 async function verifiedLeadEmail(idToken) {
   if (!idToken) return null;
