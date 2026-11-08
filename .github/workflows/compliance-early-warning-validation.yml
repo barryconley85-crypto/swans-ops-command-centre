@@ -1,0 +1,41 @@
+name: Driver compliance early warning validation
+
+on:
+  push:
+    branches:
+      - feat/compliance-early-warning-system
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "api/compliance-alert-engine.js"
+      - "api/compliance-alert-engine.test.js"
+      - "api/compliance-early-warning.js"
+      - "client/src/pages/ComplianceCentre.tsx"
+      - "firestore.rules"
+      - "vercel.json"
+      - ".github/workflows/compliance-early-warning-validation.yml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run unit tests
+        run: pnpm test
+      - name: Build production bundle
+        run: pnpm build
