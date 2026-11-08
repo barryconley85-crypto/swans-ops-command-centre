@@ -39,7 +39,7 @@ function encodeFields(obj) {
 }
 export function buildNotificationEventKey(items) {
   const fingerprint = [...items]
-    .map(item => [item.key, item.severity, item.state || "", String(item.firstDetectedAt || "").slice(0, 16)].join("\u001f"))
+    .map(item => [item.key, item.notificationVersion || 1, item.severity, item.state || ""].join("\u001f"))
     .sort()
     .join("\u001e");
   return "driver-compliance-change-" + createHash("sha256").update(fingerprint).digest("hex");
@@ -95,6 +95,26 @@ async function saveDocument(token, collectionName, id, data) {
     body: JSON.stringify({ fields: encodeFields(data) }),
   });
   if (!response.ok) throw new Error("Could not save compliance alert " + id + " (" + response.status + ").");
+}
+
+async function saveDocumentsAtomically(token, collectionName, documents) {
+  // Firestore commit allows at most 500 writes. Keep each commit under that limit.
+  for (let start = 0; start < documents.length; start += 450) {
+    const batch = documents.slice(start, start + 450);
+    const writes = batch.map(({ id, data }) => ({
+      update: {
+        name: `projects/${PROJECT_ID}/databases/(default)/documents/${collectionName}/${encodeURIComponent(id)}`,
+        fields: encodeFields(data),
+      },
+      updateMask: { fieldPaths: Object.keys(data) },
+    }));
+    const response = await fetch(`${FIRESTORE}:commit`, {
+      method: "POST",
+      headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+      body: JSON.stringify({ writes }),
+    });
+    if (!response.ok) throw new Error("Could not atomically save compliance alert state (" + response.status + ").");
+  }
 }
 export async function acquireEvaluationLease(token, now = Date.now()) {
   const headers = { Authorization: "Bearer " + token };
@@ -218,12 +238,19 @@ export default async function handler(request, response) {
     const resolvedKeys = new Set(reconciled.resolved.map(item => item.key));
     if (!production || readOnlyPreview) return response.status(200).json({ status: "preview_only", activeDrivers: evaluated.activeDrivers, openIssues: evaluated.issues.length, opened: reconciled.opened.length, escalated: reconciled.escalated.length, persisted: false, notified: false, ...managerIssuePreview(request.method, evaluated.issues) });
     if (!isAlertActivationEnabled()) return response.status(200).json({ status: "activation_required", activeDrivers: evaluated.activeDrivers, openIssues: evaluated.issues.length, opened: reconciled.opened.length, escalated: reconciled.escalated.length, persisted: false, notified: false, ...managerIssuePreview(request.method, evaluated.issues) });
+    const alertDocuments = Object.values(reconciled.next).map(issue => ({
+      id: createHash("sha256").update(issue.key).digest("hex"),
+      data: { ...issue, key: issue.key, evaluatedAt: now.toISOString(), lastNotificationAt: changed.some(item => item.key === issue.key) ? now.toISOString() : (previous[issue.key]?.lastNotificationAt || null) },
+    }));
+    const changedKeys = new Set(changed.map(item => item.key));
+    const changedDocuments = alertDocuments.filter(document => changedKeys.has(document.data.key));
+    const unchangedDocuments = alertDocuments.filter(document => !changedKeys.has(document.data.key));
+    if (changedDocuments.length > 450) throw new Error("The alert batch is too large to persist safely; no email was sent.");
+    // Save non-notification history first. Then send once, and atomically commit every alert in that email.
+    await saveDocumentsAtomically(token, "ops_compliance_alerts", unchangedDocuments);
     let mail = null;
     if (changed.length) mail = await sendAlertEmail(changed, now);
-    for (const issue of Object.values(reconciled.next)) {
-      const id = createHash("sha256").update(issue.key).digest("hex");
-      await saveDocument(token, "ops_compliance_alerts", id, { ...issue, key: issue.key, evaluatedAt: now.toISOString(), lastNotificationAt: changed.some(item => item.key === issue.key) ? now.toISOString() : (previous[issue.key]?.lastNotificationAt || null) });
-    }
+    await saveDocumentsAtomically(token, "ops_compliance_alerts", changedDocuments);
     return response.status(200).json({ status: changed.length ? "evaluated" : "no_change", activeDrivers: evaluated.activeDrivers, openIssues: evaluated.issues.length, opened: reconciled.opened.length, escalated: reconciled.escalated.length, resolved: resolvedKeys.size, notified: Boolean(mail), emailAccepted: Boolean(mail), emailId: mail?.id || null });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Compliance evaluation failed.";
