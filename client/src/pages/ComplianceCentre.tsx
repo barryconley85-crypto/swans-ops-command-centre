@@ -256,8 +256,7 @@ export default function ComplianceCentre() {
     setImportingTacho(true);
     try{
       const source=(await file.text()).replace(/^\uFEFF/,"");
-      const delimiter=source.split(/\r?
-/,1)[0]?.includes("\t")?"\t":",";
+      const delimiter=source.split(/\r?\n/,1)[0]?.includes("\t")?"\t":",";
       const table=parseCsv(source,delimiter);
       if(table.length<2)throw new Error("The tachograph file contains no data rows.");
       const headers=table[0].map(h=>h.toLowerCase().replace(/[^a-z0-9]/g,""));
@@ -323,8 +322,7 @@ Only tachograph card expiry will be changed. Other compliance details will be re
     finally{setImportingTacho(false);}
   };
   const parseFile=async(file:File)=>{
-    const source=(await file.text()).replace(/^\uFEFF/,"");const delimiter=source.split(/\r?
-/,1)[0]?.includes("\t")?"\t":",";const table=parseCsv(source,delimiter);
+    const source=(await file.text()).replace(/^\uFEFF/,"");const delimiter=source.split(/\r?\n/,1)[0]?.includes("\t")?"\t":",";const table=parseCsv(source,delimiter);
     if(table.length<2)return toast.error("The file does not contain any driver rows.");
     const headers=table[0].map(h=>h.toLowerCase().replace(/[^a-z0-9]/g,""));
     const index=(...names:string[])=>headers.findIndex(h=>names.includes(h));
