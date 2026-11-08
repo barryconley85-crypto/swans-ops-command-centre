@@ -95,6 +95,7 @@ describe("compliance alert state reconciliation", () => {
     const first = { key: "d1:cpc", severity: "warning", state: "due", title: "CPC due" };
     const opened = reconcileAlertState([first], {}, now);
     expect(opened.opened).toHaveLength(1);
+    expect(opened.opened[0].notificationVersion).toBe(1);
     expect(opened.shouldNotify).toBe(true);
 
     const acknowledged = {
@@ -110,7 +111,12 @@ describe("compliance alert state reconciliation", () => {
 
     const escalated = reconcileAlertState([{ ...first, severity: "critical" }], unchanged.next, new Date("2026-11-08T08:00:00.000Z"));
     expect(escalated.escalated).toHaveLength(1);
+    expect(escalated.escalated[0].notificationVersion).toBe(2);
     expect(escalated.shouldNotify).toBe(true);
+
+    const resolved = reconcileAlertState([], escalated.next, new Date("2026-11-09T08:00:00.000Z"));
+    const reopened = reconcileAlertState([first], resolved.next, new Date("2026-11-10T08:00:00.000Z"));
+    expect(reopened.opened[0].notificationVersion).toBe(3);
   });
 
   it("marks an issue resolved when it disappears and retains its history", () => {
@@ -124,11 +130,11 @@ describe("compliance alert state reconciliation", () => {
 });
 
 describe("compliance notification safety", () => {
-  it("uses stable event keys across retries and item ordering, while changing on escalation", () => {
-    const a = { key: "d1:cpc", severity: "warning", state: "due", firstDetectedAt: "2026-11-07T08:00:00.000Z", lastDetectedAt: "2026-11-07T09:00:00.000Z" };
-    const b = { key: "d2:tacho", severity: "critical", state: "expired", firstDetectedAt: "2026-11-07T08:00:00.000Z" };
-    expect(buildNotificationEventKey([a, b])).toBe(buildNotificationEventKey([{ ...b }, { ...a, lastDetectedAt: "2026-11-07T10:00:00.000Z" }]));
-    expect(buildNotificationEventKey([a])).not.toBe(buildNotificationEventKey([{ ...a, severity: "critical" }]));
+  it("keeps event keys stable across retries and item ordering, but changes them for a new transition", () => {
+    const a = { key: "d1:cpc", notificationVersion: 1, severity: "warning", state: "due", firstDetectedAt: "2026-11-07T08:00:00.000Z", lastDetectedAt: "2026-11-07T09:00:00.000Z" };
+    const b = { key: "d2:tacho", notificationVersion: 1, severity: "critical", state: "expired", firstDetectedAt: "2026-11-07T08:00:00.000Z" };
+    expect(buildNotificationEventKey([a, b])).toBe(buildNotificationEventKey([{ ...b }, { ...a, firstDetectedAt: "2026-11-08T08:00:00.000Z", lastDetectedAt: "2026-11-07T10:00:00.000Z" }]));
+    expect(buildNotificationEventKey([a])).not.toBe(buildNotificationEventKey([{ ...a, notificationVersion: 2, severity: "critical" }]));
   });
 
   it("keeps production writes and email disabled until explicit activation", () => {
