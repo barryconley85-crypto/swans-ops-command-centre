@@ -1,9 +1,10 @@
 const DATE_FIELDS = [
-  ["licenceValidTo", "Driving licence", "critical"],
-  ["consentExpiry", "DVLA consent", "critical"],
-  ["cpcExpiry", "Driver CPC", "critical"],
-  ["tachoCardExpiry", "Tachograph card", "critical"],
-  ["trainingExpiry", "Training", "high"],
+  ["licenceValidTo", "Driving licence", "critical", true],
+  ["consentExpiry", "DVLA consent", "critical", true],
+  ["cpcExpiry", "Driver CPC", "critical", true],
+  ["tachoCardExpiry", "Tachograph card", "critical", true],
+  // Training expiry is optional in the existing record form; only evaluate it when recorded.
+  ["trainingExpiry", "Training", "high", false],
 ];
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -60,19 +61,20 @@ export function evaluateCompliance(records = [], drivers = [], now = new Date())
       continue;
     }
 
-    for (const [field, label, baseSeverity] of DATE_FIELDS) {
+    for (const [field, label, baseSeverity, alertWhenMissing] of DATE_FIELDS) {
       if (field === "licenceValidTo" && section88CoversLicence(record, today)) continue;
       const value = record[field];
       const days = daysUntilDate(value, today);
       const missing = !value;
+      if (missing && !alertWhenMissing) continue;
       if (missing || days !== null && days <= 30) {
         const state = missing ? "missing" : days < 0 ? "expired" : "due";
         addIssue(issues, {
           key: `driver:${id}:date:${field}`, driverId: id, driverName: name,
-          category: "document-expiry", field, severity: missing ? "critical" : severityForDays(days, baseSeverity),
-          title: missing ? `${label} date missing` : days < 0 ? `${label} expired` : `${label} due in ${days} days`,
-          detail: missing ? `No ${label.toLowerCase()} expiry date is recorded.` : `${label} expiry date: ${value}.`,
-          action: `Verify the ${label.toLowerCase()} status and update the driver record.`,
+          category: missing ? "data-quality" : "document-expiry", field, severity: missing ? "high" : severityForDays(days, baseSeverity),
+          title: missing ? `${label} date not recorded` : days < 0 ? `${label} expired` : `${label} due in ${days} days`,
+          detail: missing ? `No ${label.toLowerCase()} expiry date is recorded. Confirm whether this document applies and update the record if required.` : `${label} expiry date: ${value}.`,
+          action: missing ? `Confirm whether a ${label.toLowerCase()} record is required and update it if needed. Do not infer driving eligibility from this alert.` : `Verify the ${label.toLowerCase()} status and update the driver record.`,
           dueDate: value || null, daysRemaining: days, state,
         });
       } else if (days === null) {
