@@ -32,6 +32,24 @@ describe("compliance early warning evaluation", () => {
     expect(byField.trainingExpiry.severity).toBe("warning");
   });
 
+  it("does not treat optional blank training dates as missing compliance, and keeps missing tachograph dates as data-quality warnings", () => {
+    const record = {
+      driverId: "d1", driverName: "Test Driver",
+      licenceValidTo: "2027-06-01",
+      consentExpiry: "2027-06-01",
+      cpcExpiry: "2027-06-01",
+      tachoCardExpiry: "",
+      trainingExpiry: "",
+    };
+    const issues = evaluateCompliance([record], [{ _docId: "d1", name: "Test Driver" }], now).issues;
+    expect(issues.some(issue => issue.field === "trainingExpiry")).toBe(false);
+    expect(issues.find(issue => issue.field === "tachoCardExpiry")).toMatchObject({
+      category: "data-quality",
+      severity: "high",
+      title: "Tachograph card date not recorded",
+    });
+  });
+
   it("does not treat an evidenced, current Section 88 record as an expired licence", () => {
     const record = {
       driverId: "d1", driverName: "Section 88 Driver", licenceValidTo: "2026-11-06",
