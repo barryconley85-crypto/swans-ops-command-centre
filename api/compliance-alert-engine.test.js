@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { daysUntilDate, evaluateCompliance, reconcileAlertState } from "./compliance-alert-engine.js";
 import { buildNotificationEventKey, isAlertActivationEnabled, managerIssuePreview } from "./compliance-early-warning.js";
+import complianceEarlyWarningHandler from "./compliance-early-warning.js";
 
 const now = new Date("2026-11-07T08:00:00.000Z");
 
@@ -114,6 +115,37 @@ describe("compliance notification safety", () => {
     const preview = managerIssuePreview("POST", issues);
     expect(preview.issues).toHaveLength(100);
     expect(preview.issuesTruncated).toBe(true);
+  });
+
+  it("uses the manager's Firebase token for a read-only preview without a service account", async () => {
+    vi.stubEnv("VERCEL_ENV", "preview");
+    vi.stubEnv("FIREBASE_SERVICE_ACCOUNT_JSON_BASE64", "");
+    const fetchMock = vi.fn(async (url, options = {}) => {
+      if (String(url).includes("identitytoolkit.googleapis.com")) {
+        return { ok: true, status: 200, json: async () => ({ users: [{ email: "bc@swanstravel.com" }] }) };
+      }
+      const collection = String(url).split("/").at(-1).split("?")[0];
+      const documents = collection === "ops_drivers" ? [{
+        name: "projects/swans-ops-command-centre/databases/(default)/documents/ops_drivers/d1",
+        fields: { name: { stringValue: "Driver" }, active: { booleanValue: true } },
+      }] : [];
+      return { ok: true, status: 200, json: async () => ({ documents }) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const result = { statusCode: 0, body: null, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
+
+    try {
+      await complianceEarlyWarningHandler({ method: "POST", headers: { authorization: "Bearer manager-id-token" } }, result);
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toMatchObject({ status: "preview_only", persisted: false, notified: false, activeDrivers: 1, openIssues: 1 });
+      const firestoreCalls = fetchMock.mock.calls.filter(([url]) => String(url).includes("firestore.googleapis.com"));
+      expect(firestoreCalls).toHaveLength(3);
+      expect(firestoreCalls.every(([, options]) => options.headers.Authorization === "Bearer manager-id-token" && !options.method)).toBe(true);
+      expect(fetchMock.mock.calls.some(([url]) => String(url).includes("GOOGLE_MAILER"))).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
   });
 });
 
