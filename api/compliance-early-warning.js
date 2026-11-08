@@ -3,6 +3,7 @@ import { evaluateCompliance, reconcileAlertState } from "./compliance-alert-engi
 
 const PROJECT_ID = "swans-ops-command-centre";
 const FIRESTORE = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
+const FIREBASE_WEB_API_KEY = process.env.FIREBASE_WEB_API_KEY || "AIzaSyAF6KhLk9CJvIbBjM0KHEzPO2dMAc1_OLY";
 const APP_URL = (process.env.APP_BASE_URL || "https://swans-ops-command-centre-barry-s-projects22.vercel.app").replace(/\/$/, "");
 const RECIPIENTS = ["bc@swanstravel.com", "swh@swanstravel.com", "rdp@swanstravel.com", "clt@swanstravel.com"];
 const ALLOWED_TRIGGER_EMAILS = new Set(RECIPIENTS);
@@ -92,8 +93,8 @@ async function saveDocument(token, collectionName, id, data) {
   if (!response.ok) throw new Error("Could not save compliance alert " + id + " (" + response.status + ").");
 }
 async function verifiedEmail(idToken) {
-  if (!idToken || !process.env.FIREBASE_WEB_API_KEY) return null;
-  const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${process.env.FIREBASE_WEB_API_KEY}`, {
+  if (!idToken) return null;
+  const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${FIREBASE_WEB_API_KEY}`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken }),
   });
   if (!response.ok) return null;
@@ -125,18 +126,26 @@ export default async function handler(request, response) {
   if (request.method !== "GET" && request.method !== "POST") return response.status(405).json({ error: "Method not allowed" });
   const bearer = String(request.headers.authorization || "").replace(/^Bearer\s+/i, "");
   const scheduled = request.method === "GET";
+  const production = process.env.VERCEL_ENV === "production";
   if (scheduled) {
+    if (!production) return response.status(401).json({ error: "Scheduled compliance checks are production-only." });
     if (!process.env.CRON_SECRET || bearer !== process.env.CRON_SECRET) return response.status(401).json({ error: "Unauthorised scheduled check." });
   } else {
     const email = await verifiedEmail(bearer);
     if (!email || !ALLOWED_TRIGGER_EMAILS.has(email)) return response.status(403).json({ error: "An authorised compliance manager must trigger this check." });
   }
-  if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON_BASE64) return response.status(503).json({ error: "Firebase service account is not configured." });
+  if (production && !process.env.FIREBASE_SERVICE_ACCOUNT_JSON_BASE64) return response.status(503).json({ error: "Firebase service account is not configured." });
   const now = new Date();
   try {
-    const account = serviceAccount();
-    if (!account) throw new Error("Firebase service account configuration is invalid.");
-    const token = await accessToken(account);
+    // Preview checks use the manager's Firebase ID token so Firestore Security Rules
+    // constrain reads to the same manager-only data exposed by the Compliance Centre.
+    // Only production uses the service account, for scheduled evaluation and writes.
+    let token = bearer;
+    if (production) {
+      const account = serviceAccount();
+      if (!account) throw new Error("Firebase service account configuration is invalid.");
+      token = await accessToken(account);
+    }
     const [records, drivers, previousDocs] = await Promise.all([
       listCollection(token, "ops_driver_compliance"),
       listCollection(token, "ops_drivers"),
@@ -147,7 +156,7 @@ export default async function handler(request, response) {
     const reconciled = reconcileAlertState(evaluated.issues, previous, now);
     const changed = [...reconciled.opened, ...reconciled.escalated];
     const resolvedKeys = new Set(reconciled.resolved.map(item => item.key));
-    if (process.env.VERCEL_ENV !== "production") return response.status(200).json({ status: "preview_only", activeDrivers: evaluated.activeDrivers, openIssues: evaluated.issues.length, opened: reconciled.opened.length, escalated: reconciled.escalated.length, persisted: false, notified: false, ...managerIssuePreview(request.method, evaluated.issues) });
+    if (!production) return response.status(200).json({ status: "preview_only", activeDrivers: evaluated.activeDrivers, openIssues: evaluated.issues.length, opened: reconciled.opened.length, escalated: reconciled.escalated.length, persisted: false, notified: false, ...managerIssuePreview(request.method, evaluated.issues) });
     if (!isAlertActivationEnabled()) return response.status(200).json({ status: "activation_required", activeDrivers: evaluated.activeDrivers, openIssues: evaluated.issues.length, opened: reconciled.opened.length, escalated: reconciled.escalated.length, persisted: false, notified: false, ...managerIssuePreview(request.method, evaluated.issues) });
     let mail = null;
     if (changed.length) mail = await sendAlertEmail(changed, now);
