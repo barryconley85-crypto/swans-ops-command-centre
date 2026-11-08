@@ -8,6 +8,10 @@
   ],
   "crons": [
     {
+      "path": "/api/driver-compliance-alerts",
+      "schedule": "0 8 * * *"
+    },
+    {
       "path": "/api/compliance-early-warning",
       "schedule": "0 8 * * *"
     }
