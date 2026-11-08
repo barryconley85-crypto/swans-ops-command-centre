@@ -50,6 +50,16 @@ describe("compliance early warning evaluation", () => {
     });
   });
 
+  it("suppresses missing CPC and tachograph alerts only when a manager records not-applicable status", () => {
+    const driver = { _docId: "d1", name: "Cleaner" };
+    const base = { driverId: "d1", driverName: "Cleaner", licenceValidTo: "2027-06-01", consentExpiry: "2027-06-01" };
+    const notRequired = evaluateCompliance([{ ...base, cpcApplicability: "not-applicable", cpcApplicabilityReason: "Role does not require CPC", tachoApplicability: "not-applicable", tachoApplicabilityReason: "Role does not require tachograph use" }], [driver], now).issues;
+    expect(notRequired.some(issue => ["cpcExpiry", "tachoCardExpiry"].includes(issue.field))).toBe(false);
+
+    const stillRequired = evaluateCompliance([{ ...base, cpcApplicability: "required", tachoApplicability: "required" }], [driver], now).issues;
+    expect(stillRequired.filter(issue => ["cpcExpiry", "tachoCardExpiry"].includes(issue.field))).toHaveLength(2);
+  });
+
   it("does not treat an evidenced, current Section 88 record as an expired licence", () => {
     const record = {
       driverId: "d1", driverName: "Section 88 Driver", licenceValidTo: "2026-11-06",
