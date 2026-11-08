@@ -1,8 +1,8 @@
 const DATE_FIELDS = [
   ["licenceValidTo", "Driving licence", "critical", true],
   ["consentExpiry", "DVLA consent", "critical", true],
-  ["cpcExpiry", "Driver CPC", "critical", true],
-  ["tachoCardExpiry", "Tachograph card", "critical", true],
+  ["cpcExpiry", "Driver CPC", "critical", true, "cpcApplicability"],
+  ["tachoCardExpiry", "Tachograph card", "critical", true, "tachoApplicability"],
   // Training expiry is optional in the existing record form; only evaluate it when recorded.
   ["trainingExpiry", "Training", "high", false],
 ];
@@ -61,7 +61,7 @@ export function evaluateCompliance(records = [], drivers = [], now = new Date())
       continue;
     }
 
-    for (const [field, label, baseSeverity, alertWhenMissing] of DATE_FIELDS) {
+    for (const [field, label, baseSeverity, alertWhenMissing, applicabilityField] of DATE_FIELDS) {\n      if (applicabilityField && record[applicabilityField] === "not-applicable") continue;
       if (field === "licenceValidTo" && section88CoversLicence(record, today)) continue;
       const value = record[field];
       const days = daysUntilDate(value, today);
