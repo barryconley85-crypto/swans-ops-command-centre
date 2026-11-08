@@ -1,4 +1,4 @@
-import { createHash, createSign } from "node:crypto";
+import { createHash, createSign, randomUUID } from "node:crypto";
 import { evaluateCompliance, reconcileAlertState } from "./compliance-alert-engine.js";
 
 const PROJECT_ID = "swans-ops-command-centre";
@@ -7,6 +7,8 @@ const FIREBASE_WEB_API_KEY = process.env.FIREBASE_WEB_API_KEY || "AIzaSyAF6KhLk9
 const APP_URL = (process.env.APP_BASE_URL || "https://swans-ops-command-centre-barry-s-projects22.vercel.app").replace(/\/$/, "");
 const RECIPIENTS = ["bc@swanstravel.com", "swh@swanstravel.com", "rdp@swanstravel.com", "clt@swanstravel.com"];
 const ALLOWED_TRIGGER_EMAILS = new Set(RECIPIENTS);
+const EVALUATION_LOCK_URL = `${FIRESTORE}/ops_compliance_runtime/early-warning-evaluator`;
+const EVALUATION_LOCK_LEASE_MS = 5 * 60 * 1000;
 
 function decodeValue(v) {
   if (!v || typeof v !== "object") return null;
@@ -84,13 +86,66 @@ async function listCollection(token, collectionName) {
   return items;
 }
 async function saveDocument(token, collectionName, id, data) {
-  const url = `${FIRESTORE}/${collectionName}/${encodeURIComponent(id)}`;
+  const updateMask = new URLSearchParams();
+  for (const field of Object.keys(data)) updateMask.append("updateMask.fieldPaths", field);
+  const url = `${FIRESTORE}/${collectionName}/${encodeURIComponent(id)}?${updateMask.toString()}`;
   const response = await fetch(url, {
     method: "PATCH",
     headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
     body: JSON.stringify({ fields: encodeFields(data) }),
   });
   if (!response.ok) throw new Error("Could not save compliance alert " + id + " (" + response.status + ").");
+}
+export async function acquireEvaluationLease(token, now = Date.now()) {
+  const headers = { Authorization: "Bearer " + token };
+  const read = await fetch(EVALUATION_LOCK_URL, { headers });
+  let document = null;
+  if (read.status !== 404) {
+    if (!read.ok) throw new Error("Could not read the compliance evaluation lock.");
+    document = await read.json();
+    const current = decodeFields(document.fields || {});
+    if (current.owner && Number(current.leaseUntil || 0) > now) return null;
+  }
+
+  const owner = randomUUID();
+  const precondition = document?.updateTime
+    ? new URLSearchParams({ "currentDocument.updateTime": document.updateTime })
+    : new URLSearchParams({ "currentDocument.exists": "false" });
+  const response = await fetch(`${EVALUATION_LOCK_URL}?${precondition.toString()}`, {
+    method: "PATCH",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ fields: encodeFields({ owner, leaseUntil: now + EVALUATION_LOCK_LEASE_MS }) }),
+  });
+  if (response.status === 409 || response.status === 412) return null;
+  if (!response.ok) {
+    let failure = {};
+    try { failure = await response.json(); } catch {}
+    if (failure.error?.status === "FAILED_PRECONDITION") return null;
+    throw new Error("Could not claim the compliance evaluation lock.");
+  }
+  return owner;
+}
+async function releaseEvaluationLease(token, owner) {
+  try {
+    const headers = { Authorization: "Bearer " + token };
+    const read = await fetch(EVALUATION_LOCK_URL, { headers });
+    if (read.status === 404) return;
+    if (!read.ok) throw new Error("Could not read the compliance evaluation lock.");
+    const document = await read.json();
+    if (decodeFields(document.fields || {}).owner !== owner || !document.updateTime) return;
+    const updateMask = new URLSearchParams();
+    updateMask.append("updateMask.fieldPaths", "owner");
+    updateMask.append("updateMask.fieldPaths", "leaseUntil");
+    updateMask.set("currentDocument.updateTime", document.updateTime);
+    const response = await fetch(`${EVALUATION_LOCK_URL}?${updateMask.toString()}`, {
+      method: "PATCH",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ fields: encodeFields({ owner: null, leaseUntil: 0 }) }),
+    });
+    if (!response.ok && response.status !== 409 && response.status !== 412) throw new Error("Could not release the compliance evaluation lock.");
+  } catch (error) {
+    console.warn("[compliance-early-warning] lock release failed", error instanceof Error ? error.message : "Unknown error");
+  }
 }
 async function verifiedEmail(idToken) {
   if (!idToken) return null;
@@ -134,17 +189,22 @@ export default async function handler(request, response) {
     const email = await verifiedEmail(bearer);
     if (!email || !ALLOWED_TRIGGER_EMAILS.has(email)) return response.status(403).json({ error: "An authorised compliance manager must trigger this check." });
   }
-  if (production && !process.env.FIREBASE_SERVICE_ACCOUNT_JSON_BASE64) return response.status(503).json({ error: "Firebase service account is not configured." });
+  const readOnlyPreview = !scheduled && request.query?.preview === "1";
+  if (production && !readOnlyPreview && !process.env.FIREBASE_SERVICE_ACCOUNT_JSON_BASE64) return response.status(503).json({ error: "Firebase service account is not configured." });
   const now = new Date();
+  let leaseOwner = null;
+  let token = bearer;
   try {
-    // Preview checks use the manager's Firebase ID token so Firestore Security Rules
-    // constrain reads to the same manager-only data exposed by the Compliance Centre.
-    // Only production uses the service account, for scheduled evaluation and writes.
-    let token = bearer;
-    if (production) {
+    // A manager's read-only preview always uses their Firebase ID token and never writes.
+    // Enabled production evaluations use a service account and an atomic Firestore lease.
+    if (production && !readOnlyPreview) {
       const account = serviceAccount();
       if (!account) throw new Error("Firebase service account configuration is invalid.");
       token = await accessToken(account);
+    }
+    if (production && !readOnlyPreview && isAlertActivationEnabled()) {
+      leaseOwner = await acquireEvaluationLease(token, now.getTime());
+      if (!leaseOwner) return response.status(202).json({ status: "skipped_busy", persisted: false, notified: false });
     }
     const [records, drivers, previousDocs] = await Promise.all([
       listCollection(token, "ops_driver_compliance"),
@@ -156,7 +216,7 @@ export default async function handler(request, response) {
     const reconciled = reconcileAlertState(evaluated.issues, previous, now);
     const changed = [...reconciled.opened, ...reconciled.escalated];
     const resolvedKeys = new Set(reconciled.resolved.map(item => item.key));
-    if (!production) return response.status(200).json({ status: "preview_only", activeDrivers: evaluated.activeDrivers, openIssues: evaluated.issues.length, opened: reconciled.opened.length, escalated: reconciled.escalated.length, persisted: false, notified: false, ...managerIssuePreview(request.method, evaluated.issues) });
+    if (!production || readOnlyPreview) return response.status(200).json({ status: "preview_only", activeDrivers: evaluated.activeDrivers, openIssues: evaluated.issues.length, opened: reconciled.opened.length, escalated: reconciled.escalated.length, persisted: false, notified: false, ...managerIssuePreview(request.method, evaluated.issues) });
     if (!isAlertActivationEnabled()) return response.status(200).json({ status: "activation_required", activeDrivers: evaluated.activeDrivers, openIssues: evaluated.issues.length, opened: reconciled.opened.length, escalated: reconciled.escalated.length, persisted: false, notified: false, ...managerIssuePreview(request.method, evaluated.issues) });
     let mail = null;
     if (changed.length) mail = await sendAlertEmail(changed, now);
@@ -169,6 +229,8 @@ export default async function handler(request, response) {
     const message = error instanceof Error ? error.message : "Compliance evaluation failed.";
     console.error("[compliance-early-warning] failed", message);
     return response.status(502).json({ error: message });
+  } finally {
+    if (leaseOwner) await releaseEvaluationLease(token, leaseOwner);
   }
 }
 
