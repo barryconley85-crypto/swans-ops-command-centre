@@ -149,3 +149,73 @@ describe("compliance notification safety", () => {
   });
 });
 
+
+
+describe("production-safe manual evaluation preview", () => {
+  it("uses the manager token and never acquires a lock, writes, or emails", async () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("COMPLIANCE_ALERTS_ENABLED", "true");
+    vi.stubEnv("FIREBASE_SERVICE_ACCOUNT_JSON_BASE64", "");
+    const fetchMock = vi.fn(async (url, options = {}) => {
+      if (String(url).includes("identitytoolkit.googleapis.com")) {
+        return { ok: true, status: 200, json: async () => ({ users: [{ email: "bc@swanstravel.com" }] }) };
+      }
+      const collection = String(url).split("/").at(-1).split("?")[0];
+      const documents = collection === "ops_drivers" ? [{
+        name: "projects/swans-ops-command-centre/databases/(default)/documents/ops_drivers/d1",
+        fields: { name: { stringValue: "Driver" }, active: { booleanValue: true } },
+      }] : [];
+      return { ok: true, status: 200, json: async () => ({ documents }) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const result = { statusCode: 0, body: null, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
+
+    try {
+      await complianceEarlyWarningHandler({ method: "POST", query: { preview: "1" }, headers: { authorization: "Bearer manager-id-token" } }, result);
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toMatchObject({ status: "preview_only", persisted: false, notified: false, activeDrivers: 1, openIssues: 1 });
+      const firestoreCalls = fetchMock.mock.calls.filter(([url]) => String(url).includes("firestore.googleapis.com"));
+      expect(firestoreCalls).toHaveLength(3);
+      expect(firestoreCalls.every(([, options]) => options.headers.Authorization === "Bearer manager-id-token" && !options.method)).toBe(true);
+      expect(firestoreCalls.some(([url]) => String(url).includes("ops_compliance_runtime"))).toBe(false);
+      expect(fetchMock.mock.calls.some(([url]) => String(url).includes("GOOGLE_MAILER"))).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  });
+});
+
+describe("compliance evaluator concurrency lease", () => {
+  it("claims an unoccupied lease with create-only precondition", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 404 })
+      .mockResolvedValueOnce({ ok: true, status: 200 });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const { acquireEvaluationLease } = await import("./compliance-early-warning.js");
+      const owner = await acquireEvaluationLease("service-token", now.getTime());
+      expect(owner).toMatch(/^[0-9a-f-]{36}$/i);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock.mock.calls[1][0]).toContain("currentDocument.exists=false");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("declines to acquire an unexpired lease", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ fields: { owner: { stringValue: "other-run" }, leaseUntil: { integerValue: String(now.getTime() + 1000) } }, updateTime: "2026-11-07T08:00:00Z" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const { acquireEvaluationLease } = await import("./compliance-early-warning.js");
+      expect(await acquireEvaluationLease("service-token", now.getTime())).toBeNull();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
