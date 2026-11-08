@@ -14,7 +14,9 @@ type Endorsement = { offenceCode: string; points: number; offenceDate: string; e
 type ComplianceRecord = {
   _docId: string; driverId?: string; driverName: string; licenceNumber?: string; licenceValidFrom?: string;
   licenceValidTo?: string; consentExpiry?: string; cpcExpiry?: string; cpcRiskGroup?: string; cpcPriority?: string; cpcBookingStatus?: string; cpcBookedCourseDate?: string; cpcCompletionDate?: string;
-  tachoCardExpiry?: string; cpcApplicability?: "required" | "not-applicable"; cpcApplicabilityReason?: string; cpcApplicabilityCheckedBy?: string; cpcApplicabilityCheckedAt?: number;\n  tachoApplicability?: "required" | "not-applicable"; tachoApplicabilityReason?: string; tachoApplicabilityCheckedBy?: string; tachoApplicabilityCheckedAt?: number;\n  dbsDate?: string; trainingExpiry?: string; endorsements?: Endorsement[];
+  tachoCardExpiry?: string; cpcApplicability?: "required" | "not-applicable"; cpcApplicabilityReason?: string; cpcApplicabilityCheckedBy?: string; cpcApplicabilityCheckedAt?: number;
+  tachoApplicability?: "required" | "not-applicable"; tachoApplicabilityReason?: string; tachoApplicabilityCheckedBy?: string; tachoApplicabilityCheckedAt?: number;
+  dbsDate?: string; trainingExpiry?: string; endorsements?: Endorsement[];
   section88ApplicationSentDate?: string; section88DvlaReceivedDate?: string; section88EvidenceType?: string; section88TrackingReference?: string; section88EvidenceReceived?: boolean; section88Confirmed?: boolean; section88CheckedBy?: string; section88CheckedAt?: number; section88Ended?: boolean; section88EndReason?: string;
   notes?: string; updatedAt?: number; source?: string;
 };
@@ -52,7 +54,9 @@ const parseDate = (value: string) => {
 };
 const parseCsv = (source: string, delimiter: string) => {
   const rows: string[][] = []; let row: string[] = []; let cell = ""; let quoted = false;
-  for (let i = 0; i < source.length; i++) { const char = source[i]; if (char === '"' && quoted && source[i + 1] === '"') { cell += '"'; i++; } else if (char === '"') quoted = !quoted; else if (char === delimiter && !quoted) { row.push(cell.trim()); cell = ""; } else if ((char === "\n" || char === "\r") && !quoted) { if (char === "\r" && source[i + 1] === "\n") i++; row.push(cell.trim()); if (row.some(value => value !== "")) rows.push(row); row = []; cell = ""; } else cell += char; }
+  for (let i = 0; i < source.length; i++) { const char = source[i]; if (char === '"' && quoted && source[i + 1] === '"') { cell += '"'; i++; } else if (char === '"') quoted = !quoted; else if (char === delimiter && !quoted) { row.push(cell.trim()); cell = ""; } else if ((char === "
+" || char === "\r") && !quoted) { if (char === "\r" && source[i + 1] === "
+") i++; row.push(cell.trim()); if (row.some(value => value !== "")) rows.push(row); row = []; cell = ""; } else cell += char; }
   row.push(cell.trim()); if (row.some(value => value !== "")) rows.push(row); return rows;
 };
 const daysUntil = (value?: string) => {
@@ -188,7 +192,8 @@ export default function ComplianceCentre() {
     setImportingEndorsements(true);
     try{
       const source=(await file.text()).replace(/^\uFEFF/,"");
-      const delimiter=source.split(/\r?\n/,1)[0]?.includes("\t")?"\t":",";
+      const delimiter=source.split(/\r?
+/,1)[0]?.includes("\t")?"\t":",";
       const table=parseCsv(source,delimiter);
       if(table.length<2)throw new Error("The endorsement file contains no data rows.");
       const headers=table[0].map(h=>h.toLowerCase().replace(/[^a-z0-9]/g,""));
@@ -254,7 +259,8 @@ export default function ComplianceCentre() {
     setImportingTacho(true);
     try{
       const source=(await file.text()).replace(/^\uFEFF/,"");
-      const delimiter=source.split(/\r?\n/,1)[0]?.includes("\t")?"\t":",";
+      const delimiter=source.split(/\r?
+/,1)[0]?.includes("\t")?"\t":",";
       const table=parseCsv(source,delimiter);
       if(table.length<2)throw new Error("The tachograph file contains no data rows.");
       const headers=table[0].map(h=>h.toLowerCase().replace(/[^a-z0-9]/g,""));
@@ -294,7 +300,14 @@ export default function ComplianceCentre() {
       const conflicts=[...grouped.values()].filter(item=>item.dates.size!==1);
       const safe=[...grouped.values()].filter(item=>item.dates.size===1);
       if(!safe.length)throw new Error("No safe driver matches found. No records were changed.");
-      const confirmed=window.confirm("TACHOGRAPH CARD IMPORT REVIEW\\n\\n"+safe.length+" drivers ready to update\\n"+unmatched.length+" unmatched\\n"+ambiguous.length+" ambiguous\\n"+conflicts.length+" conflicting date groups\\n\\nOnly tachograph card expiry will be changed. Other compliance details will be retained. Continue?");
+      const confirmed=window.confirm("TACHOGRAPH CARD IMPORT REVIEW\
+\
+"+safe.length+" drivers ready to update\
+"+unmatched.length+" unmatched\
+"+ambiguous.length+" ambiguous\
+"+conflicts.length+" conflicting date groups\
+\
+Only tachograph card expiry will be changed. Other compliance details will be retained. Continue?");
       if(!confirmed)return;
       let updated=0;
       for(const item of safe){
@@ -313,7 +326,8 @@ export default function ComplianceCentre() {
     finally{setImportingTacho(false);}
   };
   const parseFile=async(file:File)=>{
-    const source=(await file.text()).replace(/^\uFEFF/,"");const delimiter=source.split(/\r?\n/,1)[0]?.includes("\t")?"\t":",";const table=parseCsv(source,delimiter);
+    const source=(await file.text()).replace(/^\uFEFF/,"");const delimiter=source.split(/\r?
+/,1)[0]?.includes("\t")?"\t":",";const table=parseCsv(source,delimiter);
     if(table.length<2)return toast.error("The file does not contain any driver rows.");
     const headers=table[0].map(h=>h.toLowerCase().replace(/[^a-z0-9]/g,""));
     const index=(...names:string[])=>headers.findIndex(h=>names.includes(h));
