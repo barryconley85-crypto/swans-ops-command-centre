@@ -150,9 +150,14 @@ export function reconcileAlertState(currentIssues = [], previousIssues = {}, now
     const firstDetectedAt = previous?.firstDetectedAt || now.toISOString();
     const severityChanged = previous && previous.severity !== issue.severity;
     const stateChanged = previous && previous.state !== issue.state;
+    // Version the notification transition so retries keep the same key, while escalations and reopened issues get a fresh key.
+    const notificationVersion = previous
+      ? Math.max(1, Number(previous.notificationVersion) || 1) + (previous.status === "resolved" || severityChanged || stateChanged ? 1 : 0)
+      : 1;
     const entry = {
       ...issue,
       status: "open",
+      notificationVersion,
       firstDetectedAt,
       lastDetectedAt: now.toISOString(),
       acknowledgedAt: previous?.acknowledgedAt || null,
