@@ -61,7 +61,8 @@ export function evaluateCompliance(records = [], drivers = [], now = new Date())
       continue;
     }
 
-    for (const [field, label, baseSeverity, alertWhenMissing, applicabilityField] of DATE_FIELDS) {\n      if (applicabilityField && record[applicabilityField] === "not-applicable") continue;
+    for (const [field, label, baseSeverity, alertWhenMissing, applicabilityField] of DATE_FIELDS) {
+      if (applicabilityField && record[applicabilityField] === "not-applicable") continue;
       if (field === "licenceValidTo" && section88CoversLicence(record, today)) continue;
       const value = record[field];
       const days = daysUntilDate(value, today);
