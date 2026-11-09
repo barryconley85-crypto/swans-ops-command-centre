@@ -8,6 +8,31 @@ const DATE_FIELDS = [
 ];
 
 const DAY = 24 * 60 * 60 * 1000;
+
+function expiryMilestone(days) {
+  if (days < 0) return `daily-overdue-${Math.abs(days)}`;
+  if (days <= 7) return `daily-${days}`;
+  if (days === 10) return "10-day";
+  if (days === 20) return "20-day";
+  if (days === 40) return "40-day";
+  return null;
+}
+
+function expirySeverity(days) {
+  if (days <= 7) return "critical";
+  if (days <= 10) return "high";
+  return "warning";
+}
+
+export function endorsementFingerprint(endorsements = []) {
+  const canonical = endorsements.map(item => ({
+    offenceCode: String(item.offenceCode || ""),
+    offenceDate: String(item.offenceDate || ""),
+    expiryDate: String(item.expiryDate || ""),
+    points: Number(item.points) || 0,
+  })).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  return canonical.map(item => JSON.stringify(item)).join("|");
+}
 const dateKey = (date) => {
   const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
   const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
@@ -45,6 +70,7 @@ export function evaluateCompliance(records = [], drivers = [], now = new Date())
   const byDriverId = new Map(records.filter(record => record.driverId).map(record => [String(record.driverId), record]));
   const byName = new Map(records.map(record => [String(record.driverName || "").trim().toLowerCase(), record]));
   const issues = {};
+  const pointsSnapshots = [];
   const activeDrivers = drivers.filter(driver => driver.active !== false);
 
   for (const driver of activeDrivers) {
@@ -68,15 +94,18 @@ export function evaluateCompliance(records = [], drivers = [], now = new Date())
       const days = daysUntilDate(value, today);
       const missing = !value;
       if (missing && !alertWhenMissing) continue;
-      if (missing || days !== null && days <= 30) {
+      const stagedExpiry = ["licenceValidTo", "cpcExpiry"].includes(field) && !missing && days !== null ? expiryMilestone(days) : null;
+      const ordinaryExpiry = !["licenceValidTo", "cpcExpiry"].includes(field) && days !== null && days <= 30;
+      if (missing || stagedExpiry || ordinaryExpiry) {
         const state = missing ? "missing" : days < 0 ? "expired" : "due";
+        const stage = stagedExpiry || (ordinaryExpiry ? "standard" : "missing");
         addIssue(issues, {
-          key: `driver:${id}:date:${field}`, driverId: id, driverName: name,
-          category: missing ? "data-quality" : "document-expiry", field, severity: missing ? "high" : severityForDays(days, baseSeverity),
+          key: `driver:${id}:date:${field}:${stage}`, driverId: id, driverName: name,
+          category: missing ? "data-quality" : "document-expiry", field, severity: missing ? "high" : stagedExpiry ? expirySeverity(days) : severityForDays(days, baseSeverity),
           title: missing ? `${label} date not recorded` : days < 0 ? `${label} expired` : `${label} due in ${days} days`,
-          detail: missing ? `No ${label.toLowerCase()} expiry date is recorded. Confirm whether this document applies and update the record if required.` : `${label} expiry date: ${value}.`,
+          detail: missing ? `No ${label.toLowerCase()} expiry date is recorded. Confirm whether this document applies and update the record if required.` : `${label} expiry date: ${value}. Notification stage: ${stage}.`,
           action: missing ? `Confirm whether a ${label.toLowerCase()} record is required and update it if needed. Do not infer driving eligibility from this alert.` : `Verify the ${label.toLowerCase()} status and update the driver record.`,
-          dueDate: value || null, daysRemaining: days, state,
+          dueDate: value || null, daysRemaining: days, state, notificationStage: stage,
         });
       } else if (days === null) {
         addIssue(issues, {
@@ -98,12 +127,12 @@ export function evaluateCompliance(records = [], drivers = [], now = new Date())
     if (points >= 6) {
       const level = points >= 12 ? 12 : points >= 9 ? 9 : 6;
       addIssue(issues, {
-        key: `driver:${id}:points-threshold:${level}`, driverId: id, driverName: name,
+        key: `driver:${id}:points-current`, driverId: id, driverName: name,
         category: "licence-endorsements", severity: points >= 12 ? "critical" : points >= 9 ? "high" : "warning",
         title: `${points} current penalty points`,
         detail: `The recorded current total is ${points} points. Threshold reached: ${level}+.`,
         action: "Verify the DVLA record, assess suitability to drive and follow the company's escalation process.",
-        points, threshold: level, state: "active",
+        points, threshold: level, endorsementFingerprint: endorsementFingerprint(endorsements), state: "active",
       });
     }
 
@@ -135,7 +164,7 @@ export function evaluateCompliance(records = [], drivers = [], now = new Date())
     }
   }
 
-  return { evaluatedAt: now.toISOString(), date: today, activeDrivers: activeDrivers.length, issues: Object.values(issues) };
+  return { evaluatedAt: now.toISOString(), date: today, activeDrivers: activeDrivers.length, issues: Object.values(issues), pointsSnapshots };
 }
 
 export function reconcileAlertState(currentIssues = [], previousIssues = {}, now = new Date()) {
@@ -150,9 +179,10 @@ export function reconcileAlertState(currentIssues = [], previousIssues = {}, now
     const firstDetectedAt = previous?.firstDetectedAt || now.toISOString();
     const severityChanged = previous && previous.severity !== issue.severity;
     const stateChanged = previous && previous.state !== issue.state;
+    const materialChanged = previous && (previous.points !== issue.points || previous.endorsementFingerprint !== issue.endorsementFingerprint || previous.threshold !== issue.threshold);
     // Version the notification transition so retries keep the same key, while escalations and reopened issues get a fresh key.
     const notificationVersion = previous
-      ? Math.max(1, Number(previous.notificationVersion) || 1) + (previous.status === "resolved" || severityChanged || stateChanged ? 1 : 0)
+      ? Math.max(1, Number(previous.notificationVersion) || 1) + (previous.status === "resolved" || severityChanged || stateChanged || materialChanged ? 1 : 0)
       : 1;
     const entry = {
       ...issue,
@@ -169,7 +199,7 @@ export function reconcileAlertState(currentIssues = [], previousIssues = {}, now
     };
     next[key] = entry;
     if (!previous || previous.status === "resolved") opened.push(entry);
-    else if (severityChanged || stateChanged) escalated.push(entry);
+    else if (severityChanged || stateChanged || materialChanged) escalated.push(entry);
   }
 
   for (const [key, previous] of Object.entries(previousIssues)) {

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { daysUntilDate, evaluateCompliance, reconcileAlertState } from "./compliance-alert-engine.js";
+import { daysUntilDate, endorsementFingerprint, evaluateCompliance, reconcileAlertState } from "./compliance-alert-engine.js";
 import { buildNotificationEventKey, isAlertActivationEnabled, managerIssuePreview } from "./compliance-early-warning.js";
 import complianceEarlyWarningHandler from "./compliance-early-warning.js";
 
@@ -19,7 +19,7 @@ describe("compliance early warning evaluation", () => {
       driverId: "d1", driverName: "Test Driver",
       licenceValidTo: "2026-11-06",
       consentExpiry: "2026-11-14",
-      cpcExpiry: "2026-11-21",
+      cpcExpiry: "2026-11-17",
       tachoCardExpiry: "2026-11-21",
       trainingExpiry: "2026-12-07",
     };
@@ -30,6 +30,29 @@ describe("compliance early warning evaluation", () => {
     expect(byField.cpcExpiry.severity).toBe("high");
     expect(byField.tachoCardExpiry.severity).toBe("high");
     expect(byField.trainingExpiry.severity).toBe("warning");
+  });
+
+
+  it("uses 40, 20, 10 day and daily 7-day-or-less stages for CPC and driving licence", () => {
+    const driver = { _docId: "d1", name: "Expiry Driver" };
+    const dateFor = days => new Date(Date.parse("2026-11-07T00:00:00.000Z") + days * 86400000).toISOString().slice(0, 10);
+    for (const days of [40, 20, 10, 7, 6, 1, 0, -1]) {
+      const record = { driverId: "d1", driverName: "Expiry Driver", licenceValidTo: dateFor(days), cpcExpiry: dateFor(days) };
+      const issues = evaluateCompliance([record], [driver], now).issues.filter(issue => ["licenceValidTo", "cpcExpiry"].includes(issue.field));
+      expect(issues).toHaveLength(2);
+      expect(issues.every(issue => issue.daysRemaining === days)).toBe(true);
+    }
+    for (const days of [39, 21, 19, 11, 9, 8]) {
+      const record = { driverId: "d1", driverName: "Expiry Driver", licenceValidTo: dateFor(days), cpcExpiry: dateFor(days) };
+      const issues = evaluateCompliance([record], [driver], now).issues.filter(issue => ["licenceValidTo", "cpcExpiry"].includes(issue.field));
+      expect(issues).toHaveLength(0);
+    }
+  });
+
+  it("fingerprints endorsement records independent of source ordering", () => {
+    const a = [{ offenceCode: "SP30", offenceDate: "2026-01-01", expiryDate: "2027-01-01", points: 3 }, { offenceCode: "CU80", offenceDate: "2026-02-01", expiryDate: "2027-02-01", points: 6 }];
+    expect(endorsementFingerprint(a)).toBe(endorsementFingerprint([...a].reverse()));
+    expect(endorsementFingerprint(a)).not.toBe(endorsementFingerprint([{ ...a[0], points: 6 }, a[1]]));
   });
 
   it("does not treat optional blank training dates as missing compliance, and keeps missing tachograph dates as data-quality warnings", () => {
@@ -119,6 +142,15 @@ describe("compliance alert state reconciliation", () => {
     expect(reopened.opened[0].notificationVersion).toBe(3);
   });
 
+
+  it("treats a point-total or endorsement-record change as an escalation even within the same threshold", () => {
+    const first = { key: "d1:points-current", severity: "high", state: "active", points: 9, threshold: 9, endorsementFingerprint: "sp30:3" };
+    const opened = reconcileAlertState([first], {}, now);
+    const changed = reconcileAlertState([{ ...first, points: 10, endorsementFingerprint: "sp30:3|cu80:1" }], opened.next, new Date("2026-11-08T08:00:00.000Z"));
+    expect(changed.escalated).toHaveLength(1);
+    expect(changed.escalated[0].notificationVersion).toBe(2);
+  });
+
   it("marks an issue resolved when it disappears and retains its history", () => {
     const existing = { key: "d1:tacho", severity: "critical", status: "open", title: "Tacho expired", firstDetectedAt: "2026-11-01T08:00:00.000Z" };
     const result = reconcileAlertState([], { "d1:tacho": existing }, now);
@@ -173,7 +205,7 @@ describe("compliance notification safety", () => {
       expect(result.statusCode).toBe(200);
       expect(result.body).toMatchObject({ status: "preview_only", persisted: false, notified: false, activeDrivers: 1, openIssues: 1 });
       const firestoreCalls = fetchMock.mock.calls.filter(([url]) => String(url).includes("firestore.googleapis.com"));
-      expect(firestoreCalls).toHaveLength(3);
+      expect(firestoreCalls).toHaveLength(4);
       expect(firestoreCalls.every(([, options]) => options.headers.Authorization === "Bearer manager-id-token" && !options.method)).toBe(true);
       expect(fetchMock.mock.calls.some(([url]) => String(url).includes("GOOGLE_MAILER"))).toBe(false);
     } finally {
@@ -209,7 +241,7 @@ describe("production-safe manual evaluation preview", () => {
       expect(result.statusCode).toBe(200);
       expect(result.body).toMatchObject({ status: "preview_only", persisted: false, notified: false, activeDrivers: 1, openIssues: 1 });
       const firestoreCalls = fetchMock.mock.calls.filter(([url]) => String(url).includes("firestore.googleapis.com"));
-      expect(firestoreCalls).toHaveLength(3);
+      expect(firestoreCalls).toHaveLength(4);
       expect(firestoreCalls.every(([, options]) => options.headers.Authorization === "Bearer manager-id-token" && !options.method)).toBe(true);
       expect(firestoreCalls.some(([url]) => String(url).includes("ops_compliance_runtime"))).toBe(false);
       expect(fetchMock.mock.calls.some(([url]) => String(url).includes("GOOGLE_MAILER"))).toBe(false);
