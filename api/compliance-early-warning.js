@@ -231,7 +231,10 @@ export default async function handler(request, response) {
       listCollection(token, "ops_driver_compliance"),
       listCollection(token, "ops_drivers"),
       listCollection(token, "ops_compliance_alerts"),
-      listCollection(token, POINTS_STATE_COLLECTION),
+      // Read-only previews only display current compliance issues. They do not
+      // compare or persist point snapshots, so avoid requesting this
+      // service-account-only collection with a manager's Firebase ID token.
+      readOnlyPreview ? Promise.resolve([]) : listCollection(token, POINTS_STATE_COLLECTION),
     ]);
     const previous = Object.fromEntries(previousDocs.map(doc => [doc.key, doc]));
     const previousPoints = Object.fromEntries(previousPointsDocs.map(doc => [doc.driverId, doc]));
