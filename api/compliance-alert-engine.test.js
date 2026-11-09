@@ -241,7 +241,7 @@ describe("production-safe manual evaluation preview", () => {
       expect(result.statusCode).toBe(200);
       expect(result.body).toMatchObject({ status: "preview_only", persisted: false, notified: false, activeDrivers: 1, openIssues: 1 });
       const firestoreCalls = fetchMock.mock.calls.filter(([url]) => String(url).includes("firestore.googleapis.com"));
-      expect(firestoreCalls).toHaveLength(3);
+      expect(firestoreCalls).toHaveLength(4);
       expect(firestoreCalls.every(([, options]) => options.headers.Authorization === "Bearer manager-id-token" && !options.method)).toBe(true);
       expect(firestoreCalls.some(([url]) => String(url).includes("ops_compliance_runtime"))).toBe(false);
       expect(fetchMock.mock.calls.some(([url]) => String(url).includes("GOOGLE_MAILER"))).toBe(false);
