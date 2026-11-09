@@ -93,7 +93,7 @@ export function evaluateCompliance(records = [], drivers = [], now = new Date())
       const days = daysUntilDate(value, today);
       const missing = !value;
       if (missing && !alertWhenMissing) continue;
-      const stagedExpiry = ["licenceValidTo", "cpcExpiry"].includes(field) && !missing ? expiryMilestone(days) : null;
+      const stagedExpiry = ["licenceValidTo", "cpcExpiry"].includes(field) && !missing && days !== null ? expiryMilestone(days) : null;
       const ordinaryExpiry = !["licenceValidTo", "cpcExpiry"].includes(field) && days !== null && days <= 30;
       if (missing || stagedExpiry || ordinaryExpiry) {
         const state = missing ? "missing" : days < 0 ? "expired" : "due";
