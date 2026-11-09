@@ -23,25 +23,35 @@ type WeeklyTaskPlannerProps = {
   templates: any[];
   members: any[];
   initialTemplateId?: string;
-  weekStart: string;
   pending: boolean;
   onSubmit: (tasks: PlannerTask[]) => void;
 };
 
-export function WeeklyTaskPlanner({ open, onOpenChange, templates, members, initialTemplateId, weekStart, pending, onSubmit }: WeeklyTaskPlannerProps) {
+export function WeeklyTaskPlanner({ open, onOpenChange, templates, members, initialTemplateId, pending, onSubmit }: WeeklyTaskPlannerProps) {
   const [templateId, setTemplateId] = useState("");
   const [owners, setOwners] = useState<Record<string, string>>({});
-  const [plannerWeekStart, setPlannerWeekStart] = useState(weekStart);
+  const currentMonday = () => {
+    const today = new Date();
+    return localDateKey(addDays(today, -((today.getDay() + 6) % 7)));
+  };
+  const [plannerWeekStart, setPlannerWeekStart] = useState(currentMonday);
   const days = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(new Date(`${plannerWeekStart}T12:00:00`), index)), [plannerWeekStart]);
   const template = templates.find(item => String(item.id) === templateId) ?? templates[0];
   const items = template?.items ?? [];
 
+  // Initialise the planner once when it opens. Do not depend on templateId,
+  // template query results or the parent page's stale week state: those can
+  // change during allocation and must never reset the in-progress plan.
   useEffect(() => {
     if (!open) return;
-    if (initialTemplateId && templates.some(item => String(item.id) === initialTemplateId)) setTemplateId(initialTemplateId);
-    else if (templates.length && !templates.some(item => String(item.id) === templateId)) setTemplateId(String(templates[0].id));
-    setPlannerWeekStart(weekStart);
-  }, [open, initialTemplateId, templateId, templates, weekStart]);
+    setPlannerWeekStart(currentMonday());
+    setOwners({});
+    if (initialTemplateId && templates.some(item => String(item.id) === initialTemplateId)) {
+      setTemplateId(initialTemplateId);
+    } else if (templates.length) {
+      setTemplateId(String(templates[0].id));
+    }
+  }, [open]);
 
   useEffect(() => setOwners({}), [template?.id, plannerWeekStart, open]);
 
