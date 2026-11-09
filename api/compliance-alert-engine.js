@@ -70,6 +70,7 @@ export function evaluateCompliance(records = [], drivers = [], now = new Date())
   const byDriverId = new Map(records.filter(record => record.driverId).map(record => [String(record.driverId), record]));
   const byName = new Map(records.map(record => [String(record.driverName || "").trim().toLowerCase(), record]));
   const issues = {};
+  const pointsSnapshots = [];
   const activeDrivers = drivers.filter(driver => driver.active !== false);
 
   for (const driver of activeDrivers) {
