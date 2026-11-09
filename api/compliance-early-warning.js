@@ -9,6 +9,7 @@ const RECIPIENTS = ["bc@swanstravel.com", "swh@swanstravel.com", "rdp@swanstrave
 const ALLOWED_TRIGGER_EMAILS = new Set(RECIPIENTS);
 const EVALUATION_LOCK_URL = `${FIRESTORE}/ops_compliance_runtime/early-warning-evaluator`;
 const EVALUATION_LOCK_LEASE_MS = 5 * 60 * 1000;
+const POINTS_STATE_COLLECTION = "ops_compliance_points_state";
 
 function decodeValue(v) {
   if (!v || typeof v !== "object") return null;
@@ -226,15 +227,53 @@ export default async function handler(request, response) {
       leaseOwner = await acquireEvaluationLease(token, now.getTime());
       if (!leaseOwner) return response.status(202).json({ status: "skipped_busy", persisted: false, notified: false });
     }
-    const [records, drivers, previousDocs] = await Promise.all([
+    const [records, drivers, previousDocs, previousPointsDocs] = await Promise.all([
       listCollection(token, "ops_driver_compliance"),
       listCollection(token, "ops_drivers"),
       listCollection(token, "ops_compliance_alerts"),
+      listCollection(token, POINTS_STATE_COLLECTION),
     ]);
     const previous = Object.fromEntries(previousDocs.map(doc => [doc.key, doc]));
+    const previousPoints = Object.fromEntries(previousPointsDocs.map(doc => [doc.driverId, doc]));
     const evaluated = evaluateCompliance(records, drivers, now);
     const reconciled = reconcileAlertState(evaluated.issues, previous, now);
-    const changed = [...reconciled.opened, ...reconciled.escalated];
+    // The point-threshold record is maintained for the Compliance Centre, but the
+    // first scan establishes a baseline rather than emailing the existing known cases.
+    // Subsequent total or endorsement changes generate a distinct actionable alert.
+    const pointChanges = [];
+    const pointSnapshotsToSave = [];
+    for (const snapshot of evaluated.pointsSnapshots || []) {
+      const old = previousPoints[snapshot.driverId];
+      if (!old || Number(old.points) !== Number(snapshot.points) || old.endorsementFingerprint !== snapshot.endorsementFingerprint) {
+        pointSnapshotsToSave.push({
+          id: createHash("sha256").update(String(snapshot.driverId)).digest("hex"),
+          data: { ...snapshot, evaluatedAt: now.toISOString() },
+        });
+      }
+      if (old && (Number(old.points) !== Number(snapshot.points) || old.endorsementFingerprint !== snapshot.endorsementFingerprint)) {
+        const transition = createHash("sha256").update([
+          snapshot.driverId, old.points, old.endorsementFingerprint || "",
+          snapshot.points, snapshot.endorsementFingerprint || "",
+        ].join("\u001f")).digest("hex").slice(0, 20);
+        const severity = snapshot.points >= 12 ? "critical" : snapshot.points >= 9 ? "high" : "warning";
+        pointChanges.push({
+          key: `driver:${snapshot.driverId}:points-change:${transition}`,
+          notificationVersion: 1,
+          driverId: snapshot.driverId,
+          driverName: snapshot.driverName,
+          category: "licence-endorsements",
+          severity,
+          title: "Penalty points record changed",
+          detail: `Recorded current points changed from ${Number(old.points) || 0} to ${Number(snapshot.points) || 0}. The endorsement record has also been checked for changes.`,
+          action: "Verify the updated DVLA record, confirm endorsement details and reassess the driver's suitability to drive.",
+          points: snapshot.points,
+          state: "changed",
+        });
+      }
+    }
+    const newlyOpenedOrEscalated = [...reconciled.opened, ...reconciled.escalated]
+      .filter(issue => !issue.key.endsWith(":points-current") && !issue.key.includes(":new-endorsement:"));
+    const changed = [...newlyOpenedOrEscalated, ...pointChanges];
     const resolvedKeys = new Set(reconciled.resolved.map(item => item.key));
     if (!production || readOnlyPreview) return response.status(200).json({ status: "preview_only", activeDrivers: evaluated.activeDrivers, openIssues: evaluated.issues.length, opened: reconciled.opened.length, escalated: reconciled.escalated.length, persisted: false, notified: false, ...managerIssuePreview(request.method, evaluated.issues) });
     if (!isAlertActivationEnabled()) return response.status(200).json({ status: "activation_required", activeDrivers: evaluated.activeDrivers, openIssues: evaluated.issues.length, opened: reconciled.opened.length, escalated: reconciled.escalated.length, persisted: false, notified: false, ...managerIssuePreview(request.method, evaluated.issues) });
@@ -250,8 +289,11 @@ export default async function handler(request, response) {
     await saveDocumentsAtomically(token, "ops_compliance_alerts", unchangedDocuments);
     let mail = null;
     if (changed.length) mail = await sendAlertEmail(changed, now);
+    // Persist point baselines only after any required notification has been accepted.
+    // This makes retries deterministic and avoids silently consuming an unsent change.
+    await saveDocumentsAtomically(token, POINTS_STATE_COLLECTION, pointSnapshotsToSave);
     await saveDocumentsAtomically(token, "ops_compliance_alerts", changedDocuments);
-    return response.status(200).json({ status: changed.length ? "evaluated" : "no_change", activeDrivers: evaluated.activeDrivers, openIssues: evaluated.issues.length, opened: reconciled.opened.length, escalated: reconciled.escalated.length, resolved: resolvedKeys.size, notified: Boolean(mail), emailAccepted: Boolean(mail), emailId: mail?.id || null });
+    return response.status(200).json({ status: changed.length ? "evaluated" : "no_change", activeDrivers: evaluated.activeDrivers, openIssues: evaluated.issues.length, opened: reconciled.opened.length, escalated: reconciled.escalated.length, pointsChanged: pointChanges.length, pointsBaselined: pointSnapshotsToSave.length, resolved: resolvedKeys.size, notified: Boolean(mail), emailAccepted: Boolean(mail), emailId: mail?.id || null });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Compliance evaluation failed.";
     console.error("[compliance-early-warning] failed", message);
