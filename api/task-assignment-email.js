@@ -12,7 +12,7 @@ const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char => ({ "
 
 export default async function handler(request, response) {
   if (request.method !== "POST") return response.status(405).json({ error: "Method not allowed" });
-  const idToken = request.headers.authorization?.replace(/^Bearer\\s+/i, "");
+  const idToken = request.headers.authorization?.replace(/^Bearer\s+/i, "");
   if (!idToken || await verifiedLeadEmail(idToken) !== leadEmail) return response.status(403).json({ error: "Only the operations lead can send task-assignment email." });
   const { recipientEmail, taskTitle, detail, dueAt } = typeof request.body === "string" ? JSON.parse(request.body) : request.body || {};
   if (typeof recipientEmail !== "string" || !recipientEmail.endsWith("@swanstravel.com") || typeof taskTitle !== "string") return response.status(400).json({ error: "A Swans Travel recipient and task title are required." });
