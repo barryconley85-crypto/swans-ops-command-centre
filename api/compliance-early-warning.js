@@ -187,7 +187,7 @@ async function sendAlertEmail(items, now) {
     body: JSON.stringify({
       secret: process.env.GOOGLE_MAILER_SHARED_SECRET,
       eventKey: buildNotificationEventKey(items),
-      to: RECIPIENTS, subject: "Swans Compliance | " + items.length + " new or escalated driver issue(s)",
+      to: RECIPIENTS, subject: "Swans Travel | Driver Compliance: " + items.length + " new or escalated issue(s)",
       text: ["SWANS TRAVEL | DRIVER COMPLIANCE", ...items.map(x => `${x.severity.toUpperCase()} | ${x.driverName} | ${x.title}\n${x.detail}\nAction: ${x.action}`), "", APP_URL + "/compliance"].join("\n\n"),
       html: emailHtml(items, now),
     }),
