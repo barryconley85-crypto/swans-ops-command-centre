@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSyncPlan } from "./driver-compliance-sync.js";
+import { buildSyncPlan, createPreviewFingerprint } from "./driver-compliance-sync.js";
 
 describe("two-way driver compliance sync planning", () => {
   it("sends the later Gate Check date to Ops", () => {
@@ -62,5 +62,30 @@ describe("two-way driver compliance sync planning", () => {
 
   it("rejects malformed dates rather than syncing them", () => {
     expect(() => buildSyncPlan({ licenceExpiry: "31/03/2031" }, {})).toThrow("invalid date");
+  });
+
+  it("creates a stable fingerprint for an unchanged preview", () => {
+    const gate = { licenceExpiry: "2031-03-18" };
+    const directory = { name: "Lee Simpson" };
+    const ops = { licenceValidTo: "2030-03-18" };
+    const plan = buildSyncPlan(gate, ops);
+    expect(createPreviewFingerprint(gate, directory, ops, plan)).toBe(createPreviewFingerprint(gate, directory, ops, plan));
+  });
+
+  it("changes the fingerprint if a source date changes after preview", () => {
+    const directory = { name: "Lee Simpson" };
+    const originalGate = { licenceExpiry: "2031-03-18" };
+    const changedGate = { licenceExpiry: "2032-03-18" };
+    const ops = { licenceValidTo: "2030-03-18" };
+    const originalPlan = buildSyncPlan(originalGate, ops);
+    const changedPlan = buildSyncPlan(changedGate, ops);
+    expect(createPreviewFingerprint(originalGate, directory, ops, originalPlan)).not.toBe(createPreviewFingerprint(changedGate, directory, ops, changedPlan));
+  });
+
+  it("changes the fingerprint if a permanent link changes after preview", () => {
+    const gate = { licenceExpiry: "2031-03-18" };
+    const ops = { licenceValidTo: "2030-03-18" };
+    const plan = buildSyncPlan(gate, ops);
+    expect(createPreviewFingerprint(gate, { gateCheckDriverId: "" }, ops, plan)).not.toBe(createPreviewFingerprint(gate, { gateCheckDriverId: "different-driver" }, ops, plan));
   });
 });
