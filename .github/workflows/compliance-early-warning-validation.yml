@@ -11,6 +11,8 @@ on:
       - "api/compliance-alert-engine.js"
       - "api/compliance-alert-engine.test.js"
       - "api/compliance-early-warning.js"
+      - "api/driver-compliance-sync.js"
+      - "api/driver-compliance-sync.test.js"
       - "client/src/pages/ComplianceCentre.tsx"
       - "firestore.rules"
       - "vercel.json"
