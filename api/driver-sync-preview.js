@@ -1,5 +1,5 @@
 import { createSign } from "node:crypto";
-import { buildDriverSyncPreview } from "./driver-sync-preview.logic.js";
+import { buildDriverSyncPreview } from "../server/driver-sync-preview.logic.js";
 
 const FIRESTORE = (project) => `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents`;
 
