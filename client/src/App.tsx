@@ -25,6 +25,7 @@ import Exceptions from "@/pages/Exceptions";
 import DriverSignOn, { PublicDriverSignOn } from "@/pages/DriverSignOn";
 import DriverAttendance from "@/pages/DriverAttendance";
 import ComplianceCentre from "@/pages/ComplianceCentre";
+import DriverSyncPreview from "@/pages/DriverSyncPreview";
 
 function DashboardPage({ children }: { children: React.ReactNode }) {
   return <DashboardLayout>{children}</DashboardLayout>;
@@ -55,6 +56,7 @@ function Router() {
       <Route path={"/driver-sign-on"} component={() => <DashboardPage><DriverSignOn /></DashboardPage>} />
       <Route path={"/driver-attendance"} component={() => <DashboardPage><DriverAttendance /></DashboardPage>} />
       <Route path={"/compliance"} component={() => <DashboardPage><ComplianceCentre /></DashboardPage>} />
+      <Route path={"/driver-sync"} component={() => <DashboardPage><DriverSyncPreview /></DashboardPage>} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />
