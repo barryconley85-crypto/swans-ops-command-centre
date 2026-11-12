@@ -1,4 +1,4 @@
-import { createSign, createVerify } from "node:crypto";
+import { createHash, createSign, createVerify } from "node:crypto";
 
 const OPS_PROJECT_ID = "swans-ops-command-centre";
 const GATECHECK_PROJECT_ID = "swans-gate-check";
@@ -165,6 +165,16 @@ async function patchDocument(project, collection, id, values, token) {
   if (!response.ok) throw new Error("Could not update " + collection + " record (" + response.status + ").");
 }
 
+export function createPreviewFingerprint(gateFields = {}, opsDirectoryFields = {}, opsFields = {}, plan = buildSyncPlan(gateFields, opsFields)) {
+  const snapshot = {
+    gate: { licenceExpiry: gateFields.licenceExpiry || "", cpcExpiry: gateFields.cpcExpiry || "", tachoExpiry: gateFields.tachoExpiry || "", opsDriverId: gateFields.opsDriverId || "", opsComplianceDocId: gateFields.opsComplianceDocId || "" },
+    opsDirectory: { gateCheckDriverId: opsDirectoryFields.gateCheckDriverId || "" },
+    ops: { licenceValidTo: opsFields.licenceValidTo || "", cpcExpiry: opsFields.cpcExpiry || "", tachoCardExpiry: opsFields.tachoCardExpiry || "", driverId: opsFields.driverId || "", gateCheckDriverId: opsFields.gateCheckDriverId || "" },
+    plan,
+  };
+  return createHash("sha256").update(JSON.stringify(snapshot)).digest("hex");
+}
+
 async function buildLivePlan(gateToken, opsToken, gateCheckToken) {
   const [gateDriver, opsDriver, opsCompliance] = await Promise.all([
     readDocument(GATECHECK_PROJECT_ID, "drivers", GATECHECK_DRIVER_ID, gateToken),
@@ -191,7 +201,9 @@ async function buildLivePlan(gateToken, opsToken, gateCheckToken) {
   }
 
   const plan = buildSyncPlan(gate, ops);
+  const previewFingerprint = createPreviewFingerprint(gate, opsDirectory, ops, plan);
   return {
+    previewFingerprint,
     driverName: PILOT_NAME,
     gateCheckDriverId: GATECHECK_DRIVER_ID,
     opsDriverId: OPS_DRIVER_ID,
@@ -240,6 +252,12 @@ export default async function handler(req, res) {
 
     const plan = await buildLivePlan(gateToken, opsToken, idToken.slice(7));
     if (body.action === "preview") return res.status(200).json({ status: "preview", ...plan });
+    if (typeof body.previewFingerprint !== "string" || !/^[a-f0-9]{64}$/.test(body.previewFingerprint)) {
+      return res.status(400).json({ error: "A valid preview is required before applying changes. Run Preview again." });
+    }
+    if (body.previewFingerprint !== plan.previewFingerprint) {
+      return res.status(409).json({ error: "The driver records have changed since this preview. Nothing was applied. Run Preview again and review the updated dates." });
+    }
 
     const gateValues = {
       opsDriverId: OPS_DRIVER_ID,
