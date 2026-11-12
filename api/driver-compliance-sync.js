@@ -7,6 +7,7 @@ const PILOT_NAME = "Lee Simpson";
 const OPS_DRIVER_ID = "X2trNneYQ72QpAwUfNNz";
 const OPS_COMPLIANCE_ID = "xq5VUSqkC6VzbbLG73oQ";
 const ALLOWED_ORIGIN = "https://swans-gate-check.vercel.app";
+const isAllowedOrigin = origin => origin === ALLOWED_ORIGIN || /^https:\/\/swans-gate-check-[a-z0-9-]+-barry-s-projects22\\.vercel\\.app$/.test(origin);
 const FIRESTORE = project => `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents`;
 
 const DATE_FIELDS = [
@@ -205,8 +206,8 @@ async function buildLivePlan(gateToken, opsToken, gateCheckToken) {
 
 function setCors(req, res) {
   const origin = req.headers.origin;
-  if (origin && origin !== ALLOWED_ORIGIN) throw new Error("This integration request did not come from the authorised Gate Check app.");
-  if (origin) res.setHeader("Access-Control-Allow-Origin", ALLOWED_ORIGIN);
+  if (origin && !isAllowedOrigin(origin)) throw new Error("This integration request did not come from the authorised Gate Check app.");
+  if (origin) res.setHeader("Access-Control-Allow-Origin", origin);
   res.setHeader("Vary", "Origin");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
