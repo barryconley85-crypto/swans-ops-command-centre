@@ -7,7 +7,7 @@ const PILOT_NAME = "Lee Simpson";
 const OPS_DRIVER_ID = "X2trNneYQ72QpAwUfNNz";
 const OPS_COMPLIANCE_ID = "xq5VUSqkC6VzbbLG73oQ";
 const ALLOWED_ORIGIN = "https://swans-gate-check.vercel.app";
-const isAllowedOrigin = origin => origin === ALLOWED_ORIGIN || /^https:\/\/swans-gate-check-[a-z0-9-]+-barry-s-projects22\\.vercel\\.app$/.test(origin);
+const isAllowedOrigin = origin => origin === ALLOWED_ORIGIN || /^https:\/\/swans-gate-check-[a-z0-9-]+-barry-s-projects22\.vercel\.app$/.test(origin);
 const FIRESTORE = project => `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents`;
 
 const DATE_FIELDS = [
