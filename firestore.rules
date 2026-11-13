@@ -70,6 +70,16 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/ops_drivers/$(request.resource.data.driverId)).data.active == true;
       allow update, delete: if lead();
     }
+    match /ops_tacho_card_exceptions/{exceptionId} {
+      allow read: if operationsManager();
+      allow create, update: if operationsManager()
+        && request.resource.data.driverId is string
+        && request.resource.data.driverName is string
+        && request.resource.data.unavailableDate is string
+        && request.resource.data.exceptionType in ['lost', 'stolen', 'damaged', 'malfunctioning']
+        && request.resource.data.status in ['open', 'closed'];
+      allow delete: if lead();
+    }
     match /ops_driver_compliance/{recordId} {
       allow read: if operationsManager();
       allow create, update: if operationsManager()
