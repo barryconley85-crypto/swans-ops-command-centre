@@ -13,7 +13,7 @@ function distance(a,b,c,d) { const rad=x=>x*Math.PI/180, p=rad(c-a), q=rad(d-b),
 export default async function handler(req,res) {
  if(req.method!=="POST") return res.status(405).json({error:"Method not allowed"});
  const body=typeof req.body==="string"?JSON.parse(req.body):req.body||{}; const {driverId,depotSlug,pin,latitude,longitude,accuracy,positionTimestamp}=body;
- if(typeof driverId!=="string"||driverId.length>128||!depots.includes(depotSlug)) return res.status(400).json({error:"A valid driver and depot are required."});
+ if(typeof driverId!=="string"||!/^[A-Za-z0-9_-]{1,128}$/.test(driverId)||!depots.includes(depotSlug)) return res.status(400).json({error:"A valid driver and depot are required."});
  if(typeof pin!=="string"||!/^\d{8}$/.test(pin)) return res.status(400).json({error:"Enter your personal 8-digit sign-on PIN."});
  if(![latitude,longitude,accuracy,positionTimestamp].every(x=>typeof x==="number"&&Number.isFinite(x))||latitude < -90||latitude>90||longitude < -180||longitude>180||accuracy<=0||accuracy>50) return res.status(403).json({error:"A clear, accurate GPS location is required. Move outside and try again."});
  if(Math.abs(Date.now()-positionTimestamp)>30000) return res.status(403).json({error:"Your GPS reading has expired. Please try again."});
