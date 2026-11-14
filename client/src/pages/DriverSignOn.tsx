@@ -65,7 +65,12 @@ export default function DriverSignOn() {
   const issueDriverPin = async (driver: any) => {
     const currentUser = firebaseAuth?.currentUser;
     if (!currentUser) return toast.error("Please sign in again before issuing a driver PIN.");
-    if (!window.confirm(`Issue or reset the sign-on PIN for ${driver.name}? Any previous PIN will stop working. Share the new PIN privately with the driver.`)) return;
+    const dateOfBirth = window.prompt(`Enter ${driver.name}'s date of birth as DD/MM/YYYY. This will become their 8-digit sign-on PIN.`);
+    if (dateOfBirth === null) return;
+    const pin = dateOfBirth.replace(/\\D/g, "");
+    if (!/^\\d{8}$/.test(pin)) return toast.error("Enter the date as DD/MM/YYYY.");
+    const formattedDob = pin.slice(0, 2) + "/" + pin.slice(2, 4) + "/" + pin.slice(4);
+    if (!window.confirm(`Set ${driver.name}'s PIN to their date of birth (${formattedDob})? Their previous PIN will stop working. DOBs are easier to guess than random PINs.`)) return;
     setPinBusy(driver._docId);
     setIssuedPin(null);
     try {
@@ -73,7 +78,7 @@ export default function DriverSignOn() {
       const response = await fetch("/api/driver-sign-on", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer " + idToken },
-        body: JSON.stringify({ action: "issue-pin", driverId: driver._docId }),
+        body: JSON.stringify({ action: "issue-pin", driverId: driver._docId, pin }),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Driver PIN could not be issued.");
