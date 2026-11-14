@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader, LoadError } from "@/components/WorkspacePrimitives";
 import { localDateKey } from "@/lib/operations";
+import DepotGeofenceMap from "@/components/DepotGeofenceMap";
 
 const depots = [{ slug: "travelmaster", name: "Travelmaster" }, { slug: "alderly-park", name: "Alderly Park" }, { slug: "swans", name: "Swans" }, { slug: "cheltenham", name: "Cheltenham" }];
 const depotName = (slug: string) => depots.find(depot => depot.slug === slug)?.name || slug;
@@ -24,7 +25,7 @@ export default function DriverSignOn() {
   const [showForm, setShowForm] = useState(false);
   const [showQr, setShowQr] = useState<string | null>(null);
   const [geofences, setGeofences] = useState<Record<string, any>>({});
-  const [geofenceRadius, setGeofenceRadius] = useState(100);
+  const [editingGeofence, setEditingGeofence] = useState<string | null>(null);
   const [geoBusy, setGeoBusy] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const canManage = ["lead", "manager"].includes(profile?.memberRole || "");
@@ -40,29 +41,18 @@ export default function DriverSignOn() {
       .catch(() => toast.error("Depot GPS settings could not be loaded."));
   }, [canManage]);
 
-  const setDepotGeofence = (slug: string) => {
+  const saveDepotGeofence = async (slug: string, center: { lat: number; lng: number }, radiusMetres: number) => {
     if (!firebaseDb) return;
-    if (!navigator.geolocation) return toast.error("This device does not support GPS location.");
-    if (!Number.isFinite(geofenceRadius) || geofenceRadius < 30 || geofenceRadius > 500) return toast.error("Choose a radius between 30 and 500 metres.");
     setGeoBusy(slug);
-    navigator.geolocation.getCurrentPosition(async position => {
-      if (position.coords.accuracy > 50) {
-        setGeoBusy(null);
-        toast.error("GPS accuracy must be 50 metres or better. Move outside and try again.");
-        return;
-      }
-      const config = { depotSlug: slug, depotName: depotName(slug), centerLat: position.coords.latitude, centerLng: position.coords.longitude, radiusMetres: geofenceRadius, enabled: true, updatedAt: Date.now(), updatedBy: profile?.displayName || "Operations" };
-      try {
-        await setDoc(doc(firebaseDb, "ops_depot_geofences", slug), config);
-        setGeofences(current => ({ ...current, [slug]: config }));
-        toast.success(depotName(slug) + " GPS geofence saved.");
-      } catch (reason) {
-        toast.error(reason instanceof Error ? reason.message : "Depot GPS location could not be saved.");
-      } finally { setGeoBusy(null); }
-    }, reason => {
-      setGeoBusy(null);
-      toast.error(reason.code === 1 ? "Allow location access in your phone settings, then try again." : reason.code === 2 ? "Your phone could not determine its GPS location. Try outside." : "GPS timed out. Please try again.");
-    }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
+    const config = { depotSlug: slug, depotName: depotName(slug), centerLat: center.lat, centerLng: center.lng, radiusMetres, enabled: true, updatedAt: Date.now(), updatedBy: profile?.displayName || "Operations" };
+    try {
+      await setDoc(doc(firebaseDb, "ops_depot_geofences", slug), config);
+      setGeofences(current => ({ ...current, [slug]: config }));
+      setEditingGeofence(null);
+      toast.success(depotName(slug) + " GPS geofence saved.");
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : "Depot GPS location could not be saved.");
+    } finally { setGeoBusy(null); }
   };
 
   if (!profile) return <LoadError message="You need an operations account to manage driver sign-on." onRetry={() => void refresh()} />;
@@ -107,13 +97,14 @@ export default function DriverSignOn() {
     <section className="mt-6 rounded-2xl border border-[#DCE7EF] bg-white p-5 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#2B8E91]">Location security</p><h2 className="mt-1 text-base font-semibold text-[#17384F]">Depot GPS geofence setup</h2><p className="mt-1 max-w-2xl text-xs leading-5 text-[#71879A]">Stand at each depot and save its GPS position. Drivers will only be able to sign on from within the saved radius.</p></div>
-        <div className="w-full sm:w-44"><Label htmlFor="geofence-radius">Radius (metres)</Label><Input id="geofence-radius" type="number" min={30} max={500} value={geofenceRadius} onChange={event => setGeofenceRadius(Number(event.target.value))} className="mt-1" /></div>
+
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {depots.map(depot => { const config = geofences[depot.slug]; return <div key={depot.slug} className="rounded-xl border border-[#E3EBF0] bg-[#F8FAFC] p-3">
           <div className="flex items-center justify-between gap-2"><p className="text-sm font-semibold text-[#29485E]">{depot.name}</p><Badge className={config?.enabled ? "bg-[#E4F4F3] text-[#277F82]" : "bg-[#FFF2E5] text-[#9A5B19]"}>{config?.enabled ? "Configured" : "Not set"}</Badge></div>
           {config?.enabled ? <p className="mt-2 text-[11px] text-[#71879A]">{config.radiusMetres}m radius</p> : <p className="mt-2 text-[11px] text-[#71879A]">No authorised location saved</p>}
-          <Button size="sm" variant="outline" className="mt-3 w-full" disabled={geoBusy === depot.slug} onClick={() => setDepotGeofence(depot.slug)}>{geoBusy === depot.slug ? "Getting GPS…" : config?.enabled ? "Update location" : "Set depot location"}</Button>
+          <Button size="sm" variant="outline" className="mt-3 w-full" onClick={() => setEditingGeofence(editingGeofence === depot.slug ? null : depot.slug)}>{editingGeofence === depot.slug ? "Close map" : config?.enabled ? "Edit geofence on map" : "Set location on map"}</Button>
+          {editingGeofence === depot.slug ? <div className="mt-3"><DepotGeofenceMap initialCenter={config?.enabled ? { lat: config.centerLat, lng: config.centerLng } : null} initialRadius={config?.enabled ? config.radiusMetres : 100} saving={geoBusy === depot.slug} onCancel={() => setEditingGeofence(null)} onSave={(center, radius) => void saveDepotGeofence(depot.slug, center, radius)} /></div> : null}
         </div>; })}
       </div>
       <p className="mt-3 text-[10px] leading-4 text-[#8294A2]">Configure each depot while physically on site. Setup GPS must be accurate to 50 metres or better. Radius can be set between 30 and 500 metres.</p>
