@@ -68,10 +68,10 @@ export default function DriverSignOn() {
     setIssuedPin(null);
     try {
       const idToken = await currentUser.getIdToken();
-      const response = await fetch("/api/driver-pin", {
+      const response = await fetch("/api/driver-sign-on", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer " + idToken },
-        body: JSON.stringify({ driverId: driver._docId }),
+        body: JSON.stringify({ action: "issue-pin", driverId: driver._docId }),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Driver PIN could not be issued.");
