@@ -115,10 +115,85 @@ export default function DriverSignOn() {
   };
   const importCsv = async (file: File) => {
     if (!firebaseDb) return;
-    const lines = (await file.text()).split(/\r?\n/).map(line => line.trim()).filter(Boolean);
-    const rows = lines.slice(/^name\s*(,|$)/i.test(lines[0] || "") ? 1 : 0).map(line => { const columns = line.split(",").map(value => value.replace(/^"|"$/g, "").trim()); const depotValue = columns[1]?.toLowerCase(); const depot = depotValue === "alderly park" ? "alderly-park" : depotValue === "travelmaster" ? "travelmaster" : depotValue === "swans" ? "swans" : depotValue === "cheltenham" ? "cheltenham" : depotValue === "unassigned" || !depotValue ? "" : columns[1] || ""; return { name: columns[0], depot }; }).filter(row => row.name);
+    const rowsFromFile: string[][] = [];
+    let cells: string[] = [], value = "", inQuotes = false;
+    const csvText = await file.text();
+    for (let index = 0; index < csvText.length; index++) {
+      const char = csvText[index];
+      if (char === "\"") {
+        if (inQuotes && csvText[index + 1] === "\"") { value += "\""; index++; }
+        else inQuotes = !inQuotes;
+      } else if (char === "," && !inQuotes) {
+        cells.push(value); value = "";
+      } else if ((char === "\n" || char === "\r") && !inQuotes) {
+        if (char === "\r" && csvText[index + 1] === "\n") index++;
+        cells.push(value); value = "";
+        if (cells.some(cell => cell.trim())) rowsFromFile.push(cells);
+        cells = [];
+      } else value += char;
+    }
+    cells.push(value);
+    if (cells.some(cell => cell.trim())) rowsFromFile.push(cells);
+    if (!rowsFromFile.length) return toast.error("The CSV is empty.");
+    const headers = rowsFromFile[0].map(cell => cell.replace(/^\uFEFF/, "").trim().toLowerCase().replace(/[\s_]/g, ""));
+    const hasHeader = headers.includes("name") && headers.includes("depot");
+    const nameIndex = hasHeader ? headers.findIndex(value => value === "name" || value === "drivername") : 0;
+    const depotIndex = hasHeader ? headers.findIndex(value => value === "depot" || value === "depotname") : 1;
+    const dobIndex = hasHeader ? headers.findIndex(value => ["dateofbirth", "dob", "birthdate"].includes(value)) : 3;
+    const sourceRows = hasHeader ? rowsFromFile.slice(1) : rowsFromFile;
+    const toPin = (value: string): string | null => {
+      const iso = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      const pin = iso ? iso[3] + iso[2] + iso[1] : value.replace(/\D/g, "");
+      if (!/^\d{8}$/.test(pin)) return null;
+      const day = Number(pin.slice(0, 2)), month = Number(pin.slice(2, 4)), year = Number(pin.slice(4));
+      const date = new Date(Date.UTC(year, month - 1, day));
+      return year >= 1900 && year <= new Date().getUTCFullYear() && date.getUTCDate() === day && date.getUTCMonth() === month - 1 && date.getUTCFullYear() === year ? pin : null;
+    };
+    const rows = sourceRows.map(columns => {
+      const name = (columns[nameIndex] || "").trim();
+      const depotValue = (columns[depotIndex] || "").trim().toLowerCase();
+      const depot = depotValue === "alderly park" ? "alderly-park" : depotValue === "travelmaster" ? "travelmaster" : depotValue === "swans" ? "swans" : depotValue === "cheltenham" ? "cheltenham" : depotValue === "unassigned" || !depotValue ? "" : columns[depotIndex]?.trim() || "";
+      const dob = dobIndex >= 0 ? (columns[dobIndex] || "").trim() : "";
+      return { name, depot, dob, pin: dob ? toPin(dob) : "" };
+    }).filter(row => row.name);
     if (!rows.length || rows.some(row => row.depot && !depots.some(depot => depot.slug === row.depot))) return toast.error("CSV must include name and depot columns using Travelmaster, Alderly Park, Swans, Cheltenham, or Unassigned.");
-    try { for (const row of rows) { const existing = activeDrivers.find((driver: any) => driver.name.trim().toLowerCase() === row.name.trim().toLowerCase()); if (existing) await updateDoc(doc(firebaseDb, "ops_drivers", existing._docId), { name: row.name, depot: row.depot, active: true, updatedAt: Date.now() }); else await addDoc(collection(firebaseDb, "ops_drivers"), { name: row.name, depot: row.depot, active: true, createdAt: Date.now(), updatedAt: Date.now() }); } await refresh(); toast.success(`${rows.length} driver${rows.length === 1 ? "" : "s"} imported or updated.`); } catch (error) { toast.error(error instanceof Error ? error.message : "CSV import failed."); }
+    const invalidDob = rows.filter(row => row.dob && !row.pin);
+    if (invalidDob.length) return toast.error("Correct the date of birth format for: " + invalidDob.map(row => row.name).join(", ") + ". Use DD/MM/YYYY.");
+    const rowsWithPin = rows.filter(row => row.pin);
+    if (rowsWithPin.length && !window.confirm("This file contains dates of birth. They will be used as driver PINs, replacing any existing PINs for those drivers. The dates are not saved in the app. Continue?")) return;
+    const currentUser = firebaseAuth?.currentUser;
+    if (rowsWithPin.length && !currentUser) return toast.error("Please sign in again before issuing driver PINs.");
+    try {
+      const idToken = rowsWithPin.length ? await currentUser!.getIdToken() : "";
+      let pinsIssued = 0;
+      const pinFailures: string[] = [];
+      for (const row of rows) {
+        const existing = activeDrivers.find((driver: any) => driver.name.trim().toLowerCase() === row.name.trim().toLowerCase());
+        let driverId: string;
+        if (existing) {
+          await updateDoc(doc(firebaseDb, "ops_drivers", existing._docId), { name: row.name, depot: row.depot, active: true, updatedAt: Date.now() });
+          driverId = existing._docId;
+        } else {
+          const created = await addDoc(collection(firebaseDb, "ops_drivers"), { name: row.name, depot: row.depot, active: true, createdAt: Date.now(), updatedAt: Date.now() });
+          driverId = created.id;
+        }
+        if (row.pin) {
+          const response = await fetch("/api/driver-sign-on", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: "Bearer " + idToken },
+            body: JSON.stringify({ action: "issue-pin", driverId, pin: row.pin }),
+          });
+          const result = await response.json().catch(() => ({}));
+          if (response.ok) pinsIssued++;
+          else pinFailures.push(row.name + ": " + (result.error || "PIN could not be set"));
+        }
+      }
+      await refresh();
+      if (pinFailures.length) toast.error("Imported " + rows.length + " drivers; PINs could not be set for " + pinFailures.join("; "));
+      else toast.success("Imported or updated " + rows.length + " drivers" + (pinsIssued ? " and set " + pinsIssued + " DOB-based PINs." : "."));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "CSV import failed.");
+    }
   };
   const exportCsv = () => {
     const rows = ["name,depot,active", ...activeDrivers.map((driver: any) => `${csvEscape(driver.name)},${csvEscape(driver.depot ? depotName(driver.depot) : "Unassigned")},${driver.active !== false}`)];
@@ -126,7 +201,7 @@ export default function DriverSignOn() {
   };
   const signOnCount = (slug: string) => todaysSignOns.filter((item: any) => item.depotSlug === slug).length;
 
-  return <div className="mx-auto max-w-[1450px] pb-10"><header className="relative overflow-hidden rounded-2xl bg-[#102F46] px-5 py-6 text-white shadow-[0_18px_38px_-22px_rgba(16,47,70,0.72)] sm:px-7 sm:py-7"><div className="pointer-events-none absolute -right-12 -top-16 h-48 w-48 rounded-full border-[28px] border-[#35C9C3]/10" /><div className="relative flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"><div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#9DE8E5]">Driver sign-on</p><h1 className="mt-2 text-2xl font-semibold tracking-[-0.035em] text-white sm:text-3xl">Driver sign-on</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[#C8DCE7]">Manage depot driver lists and view today's sign-ons.</p></div><div className="flex flex-wrap gap-2"><Button variant="outline" className="h-10 border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white" onClick={() => fileRef.current?.click()}><Upload className="mr-2 h-4 w-4" />Import CSV</Button><input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) void importCsv(file); event.currentTarget.value = ""; }} /><Button variant="outline" className="h-10 border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white" onClick={exportCsv}><Download className="mr-2 h-4 w-4" />Export CSV</Button></div></div></header>
+  return <div className="mx-auto max-w-[1450px] pb-10"><header className="relative overflow-hidden rounded-2xl bg-[#102F46] px-5 py-6 text-white shadow-[0_18px_38px_-22px_rgba(16,47,70,0.72)] sm:px-7 sm:py-7"><div className="pointer-events-none absolute -right-12 -top-16 h-48 w-48 rounded-full border-[28px] border-[#35C9C3]/10" /><div className="relative flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"><div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#9DE8E5]">Driver sign-on</p><h1 className="mt-2 text-2xl font-semibold tracking-[-0.035em] text-white sm:text-3xl">Driver sign-on</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[#C8DCE7]">Manage depot driver lists and view today's sign-ons. Add an optional DateOfBirth column in DD/MM/YYYY format to set PINs during import.</p></div><div className="flex flex-wrap gap-2"><Button variant="outline" className="h-10 border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white" onClick={() => fileRef.current?.click()}><Upload className="mr-2 h-4 w-4" />Import CSV</Button><input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) void importCsv(file); event.currentTarget.value = ""; }} /><Button variant="outline" className="h-10 border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white" onClick={exportCsv}><Download className="mr-2 h-4 w-4" />Export CSV</Button></div></div></header>
     <section className="mt-6 rounded-2xl border border-[#DCE7EF] bg-white p-5 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#2B8E91]">Location security</p><h2 className="mt-1 text-base font-semibold text-[#17384F]">Depot GPS geofence setup</h2><p className="mt-1 max-w-2xl text-xs leading-5 text-[#71879A]">Stand at each depot and save its GPS position. Drivers will only be able to sign on from within the saved radius.</p></div>
