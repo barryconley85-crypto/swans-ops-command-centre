@@ -67,8 +67,8 @@ export default function DriverSignOn() {
     if (!currentUser) return toast.error("Please sign in again before issuing a driver PIN.");
     const dateOfBirth = window.prompt(`Enter ${driver.name}'s date of birth as DD/MM/YYYY. This will become their 8-digit sign-on PIN.`);
     if (dateOfBirth === null) return;
-    const pin = dateOfBirth.replace(/\\D/g, "");
-    if (!/^\\d{8}$/.test(pin)) return toast.error("Enter the date as DD/MM/YYYY.");
+    const pin = dateOfBirth.replace(/\D/g, "");
+    if (!/^\d{8}$/.test(pin)) return toast.error("Enter the date as DD/MM/YYYY.");
     const formattedDob = pin.slice(0, 2) + "/" + pin.slice(2, 4) + "/" + pin.slice(4);
     if (!window.confirm(`Set ${driver.name}'s PIN to their date of birth (${formattedDob})? Their previous PIN will stop working. DOBs are easier to guess than random PINs.`)) return;
     setPinBusy(driver._docId);
