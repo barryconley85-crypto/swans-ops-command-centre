@@ -11,6 +11,7 @@ declare global {
 }
 
 let leafletLoader: Promise<any> | null = null;
+let lastPlaceSearchAt = 0;
 
 function loadLeaflet() {
   if (window.L) return Promise.resolve(window.L);
@@ -94,6 +95,7 @@ export default function DepotGeofenceMap({
         markerRef.current.on("dragend", (event: any) => {
           const p = event.target.getLatLng();
           setCenter({ lat: p.lat, lng: p.lng });
+          circleRef.current?.setLatLng([p.lat, p.lng]);
         });
         if (!circleRef.current) circleRef.current = L.circle([point.lat, point.lng], { radius, color: "#167E8A", fillColor: "#35C9C3", fillOpacity: 0.2, weight: 2 }).addTo(map);
         else circleRef.current.setLatLng([point.lat, point.lng]);
@@ -123,6 +125,9 @@ export default function DepotGeofenceMap({
     setSearching(true);
     setResults([]);
     try {
+      const waitMs = Math.max(0, 1100 - (Date.now() - lastPlaceSearchAt));
+      if (waitMs) await new Promise(resolve => window.setTimeout(resolve, waitMs));
+      lastPlaceSearchAt = Date.now();
       const response = await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&q=" + encodeURIComponent(query), {
         headers: { Accept: "application/json" },
       });
