@@ -168,7 +168,8 @@ export default function DriverSignOn() {
       let pinsIssued = 0;
       const pinFailures: string[] = [];
       for (const row of rows) {
-        const existing = activeDrivers.find((driver: any) => driver.name.trim().toLowerCase() === row.name.trim().toLowerCase());
+        const sameName = activeDrivers.filter((driver: any) => driver.name.trim().toLowerCase() === row.name.trim().toLowerCase());
+        const existing = sameName.find((driver: any) => (driver.depot || "") === row.depot) || (sameName.length === 1 ? sameName[0] : undefined);
         let driverId: string;
         if (existing) {
           await updateDoc(doc(firebaseDb, "ops_drivers", existing._docId), { name: row.name, depot: row.depot, active: true, updatedAt: Date.now() });
