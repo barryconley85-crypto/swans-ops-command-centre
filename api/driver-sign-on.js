@@ -1,5 +1,5 @@
 import { SignJWT, importPKCS8, createRemoteJWKSet, jwtVerify } from "jose";
-import { createHash, randomBytes, randomInt, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 const scrypt = promisify(scryptCallback);
 const projectId = "swans-ops-command-centre";
@@ -28,8 +28,12 @@ async function saveCredential(token, path, fields, exists) {
  const response = await fetch(endpoint, { method: exists ? "PATCH" : "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" }, body: JSON.stringify({ fields }) });
  if (!response.ok) throw new Error("The driver PIN could not be saved.");
 }
-async function issueDriverPin(req, res, driverId) {
+async function issueDriverPin(req, res, driverId, pin) {
  if (typeof driverId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(driverId)) return res.status(400).json({ error: "Select a valid driver." });
+ if (typeof pin !== "string" || !/^\d{8}$/.test(pin)) return res.status(400).json({ error: "Enter the driver's date of birth as DDMMYYYY." });
+ const day = Number(pin.slice(0, 2)), month = Number(pin.slice(2, 4)), year = Number(pin.slice(4));
+ const birthDate = new Date(Date.UTC(year, month - 1, day));
+ if (year < 1900 || year > new Date().getUTCFullYear() || birthDate.getUTCDate() !== day || birthDate.getUTCMonth() !== month - 1 || birthDate.getUTCFullYear() !== year) return res.status(400).json({ error: "Enter a real date of birth in DDMMYYYY format." });
  let serviceAccount;
  try { serviceAccount = JSON.parse(Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_JSON_BASE64 || "", "base64").toString("utf8")); } catch {}
  if (!serviceAccount) return res.status(503).json({ error: "Secure PIN issuing is not configured. Please tell the system administrator." });
@@ -40,7 +44,6 @@ async function issueDriverPin(req, res, driverId) {
    if (!manager) return res.status(403).json({ error: "Only active operations leads and managers can issue driver PINs." });
    const driver = await readDoc(serviceToken, "ops_drivers/" + encodeURIComponent(driverId));
    if (!driver || driver.active !== true) return res.status(404).json({ error: "This driver is not on the active driver list." });
-   const pin = String(randomInt(10000000, 100000000));
    const salt = randomBytes(16).toString("hex");
    const hash = await scrypt(pin, salt, 64, { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
    const path = "ops_driver_credentials/" + encodeURIComponent(driverId);
@@ -62,7 +65,7 @@ async function issueDriverPin(req, res, driverId) {
 export default async function handler(req,res) {
  if(req.method!=="POST") return res.status(405).json({error:"Method not allowed"});
  const body=typeof req.body==="string"?JSON.parse(req.body):req.body||{};
- if (body.action === "issue-pin") return issueDriverPin(req, res, body.driverId);
+ if (body.action === "issue-pin") return issueDriverPin(req, res, body.driverId, body.pin);
  if (body.action !== undefined) return res.status(400).json({error:"Invalid sign-on action."});
  const {driverId,depotSlug,pin,deviceId,latitude,longitude,accuracy,positionTimestamp}=body;
  if(typeof driverId!=="string"||!/^[A-Za-z0-9_-]{1,128}$/.test(driverId)||!depots.includes(depotSlug)) return res.status(400).json({error:"A valid driver and depot are required."});
