@@ -162,6 +162,7 @@ export default function DepotGeofenceMap({
       markerRef.current.on("dragend", (event: any) => {
         const p = event.target.getLatLng();
         setCenter({ lat: p.lat, lng: p.lng });
+        circleRef.current?.setLatLng([p.lat, p.lng]);
       });
       if (!circleRef.current) circleRef.current = L.circle([point.lat, point.lng], { radius, color: "#167E8A", fillColor: "#35C9C3", fillOpacity: 0.2, weight: 2 }).addTo(mapRef.current);
       else circleRef.current.setLatLng([point.lat, point.lng]);
