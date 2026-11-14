@@ -67,6 +67,7 @@ export default async function handler(req,res) {
  const {driverId,depotSlug,pin,deviceId,latitude,longitude,accuracy,positionTimestamp}=body;
  if(typeof driverId!=="string"||!/^[A-Za-z0-9_-]{1,128}$/.test(driverId)||!depots.includes(depotSlug)) return res.status(400).json({error:"A valid driver and depot are required."});
  if(typeof pin!=="string"||!/^\d{8}$/.test(pin)) return res.status(400).json({error:"Enter your personal 8-digit sign-on PIN."});
+ if(typeof deviceId!=="string"||!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(deviceId)) return res.status(400).json({error:"This browser could not be recognised. Refresh the page and try again."});
  if(![latitude,longitude,accuracy,positionTimestamp].every(x=>typeof x==="number"&&Number.isFinite(x))||latitude < -90||latitude>90||longitude < -180||longitude>180||accuracy<=0||accuracy>50) return res.status(403).json({error:"A clear, accurate GPS location is required. Move outside and try again."});
  if(Math.abs(Date.now()-positionTimestamp)>30000) return res.status(403).json({error:"Your GPS reading has expired. Please try again."});
  let sa; try { sa=JSON.parse(Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_JSON_BASE64||"","base64").toString("utf8")); } catch {} if(!sa) return res.status(503).json({error:"Secure sign-on is not configured. Please tell the depot team."});
