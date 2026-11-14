@@ -1,0 +1,23 @@
+import { SignJWT, importPKCS8 } from "jose";
+const projectId = "swans-ops-command-centre";
+const base = "https://firestore.googleapis.com/v1/projects/" + projectId + "/databases/(default)/documents";
+const depots = ["travelmaster", "alderly-park", "swans", "cheltenham"];
+const decode = fields => Object.fromEntries(Object.entries(fields || {}).map(([k,v]) => [k, v.stringValue ?? (v.integerValue !== undefined ? Number(v.integerValue) : v.doubleValue !== undefined ? Number(v.doubleValue) : v.booleanValue ?? null)]));
+async function tokenFor(sa) { const key = await importPKCS8(sa.private_key, "RS256"); const jwt = await new SignJWT({scope:"https://www.googleapis.com/auth/datastore"}).setProtectedHeader({alg:"RS256",typ:"JWT"}).setIssuer(sa.client_email).setSubject(sa.client_email).setAudience("https://oauth2.googleapis.com/token").setIssuedAt().setExpirationTime("1h").sign(key); const r = await fetch("https://oauth2.googleapis.com/token",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({grant_type:"urn:ietf:params:oauth:grant-type:jwt-bearer",assertion:jwt})}); if(!r.ok) throw new Error("Firebase service authentication failed."); return (await r.json()).access_token; }
+async function readDoc(token, path) { const r=await fetch(base+"/"+path,{headers:{Authorization:"Bearer "+token}}); if(r.status===404) return null; if(!r.ok) throw new Error("Could not verify depot or driver."); const d=await r.json(); return decode(d.fields); }
+function distance(a,b,c,d) { const rad=x=>x*Math.PI/180, p=rad(c-a), q=rad(d-b), h=Math.sin(p/2)**2+Math.cos(rad(a))*Math.cos(rad(c))*Math.sin(q/2)**2; return 6371000*2*Math.atan2(Math.sqrt(h),Math.sqrt(1-h)); }
+export default async function handler(req,res) {
+ if(req.method!=="POST") return res.status(405).json({error:"Method not allowed"});
+ const body=typeof req.body==="string"?JSON.parse(req.body):req.body||{}; const {driverId,depotSlug,latitude,longitude,accuracy,positionTimestamp}=body;
+ if(typeof driverId!=="string"||driverId.length>128||!depots.includes(depotSlug)) return res.status(400).json({error:"A valid driver and depot are required."});
+ if(![latitude,longitude,accuracy,positionTimestamp].every(x=>typeof x==="number"&&Number.isFinite(x))||latitude < -90||latitude>90||longitude < -180||longitude>180||accuracy<=0||accuracy>50) return res.status(403).json({error:"A clear, accurate GPS location is required. Move outside and try again."});
+ if(Math.abs(Date.now()-positionTimestamp)>30000) return res.status(403).json({error:"Your GPS reading has expired. Please try again."});
+ let sa; try { sa=JSON.parse(Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_JSON_BASE64||"","base64").toString("utf8")); } catch {} if(!sa) return res.status(503).json({error:"Secure sign-on is not configured. Please tell the depot team."});
+ try { const token=await tokenFor(sa); const [driver,geo]=await Promise.all([readDoc(token,"ops_drivers/"+encodeURIComponent(driverId)),readDoc(token,"ops_depot_geofences/"+depotSlug)]);
+ if(!driver||driver.active!==true||driver.depot!==depotSlug) return res.status(403).json({error:"This driver is not active or assigned to this depot."});
+ if(!geo||geo.enabled!==true||typeof geo.centerLat!=="number"||typeof geo.centerLng!=="number"||typeof geo.radiusMetres!=="number") return res.status(503).json({error:"This depot GPS location has not been configured yet. Please speak to the depot team."});
+ const metres=Math.round(distance(latitude,longitude,geo.centerLat,geo.centerLng)); if(metres>geo.radiusMetres) return res.status(403).json({error:"You are about "+metres+"m from the depot. Sign-on is only available within "+geo.radiusMetres+"m."});
+ const fields={driverId:{stringValue:driverId},driverName:{stringValue:driver.name},depotSlug:{stringValue:depotSlug},depotName:{stringValue:geo.depotName||depotSlug},workDate:{stringValue:new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/London",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date())},createdAt:{integerValue:String(Date.now())},locationLat:{doubleValue:latitude},locationLng:{doubleValue:longitude},locationAccuracy:{doubleValue:accuracy},distanceMetres:{integerValue:String(metres)},geofenceRadiusMetres:{integerValue:String(geo.radiusMetres)},locationVerified:{booleanValue:true}};
+ const saved=await fetch(base+"/ops_driver_sign_ons",{method:"POST",headers:{Authorization:"Bearer "+token,"Content-Type":"application/json"},body:JSON.stringify({fields})}); if(!saved.ok) throw new Error("The sign-on record could not be saved."); return res.status(200).json({ok:true,distanceMetres:metres});
+ } catch(e) { return res.status(502).json({error:e instanceof Error?e.message:"Secure sign-on failed."}); }
+}
