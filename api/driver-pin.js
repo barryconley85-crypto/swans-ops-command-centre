@@ -65,7 +65,7 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed." });
   const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
   const { driverId } = body;
-  if (typeof driverId !== "string" || !driverId || driverId.length > 128) return res.status(400).json({ error: "Select a valid driver." });
+  if (typeof driverId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(driverId)) return res.status(400).json({ error: "Select a valid driver." });
 
   let serviceAccount;
   try {
