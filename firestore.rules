@@ -70,6 +70,8 @@ service cloud.firestore {
         && request.resource.data.enabled == true;
       allow delete: if lead();
     }
+    // Driver PIN hashes are server-only; Admin service credentials bypass Firestore client rules.
+    match /ops_driver_credentials/{driverId} { allow read, write: if false; }
     match /ops_driver_sign_ons/{signOnId} {
       allow read: if member();
       // All public driver sign-ons must pass server-side GPS geofence verification.
