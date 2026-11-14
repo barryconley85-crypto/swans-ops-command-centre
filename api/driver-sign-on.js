@@ -1,5 +1,5 @@
 import { SignJWT, importPKCS8, createRemoteJWKSet, jwtVerify } from "jose";
-import { randomBytes, randomInt, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, randomInt, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 const scrypt = promisify(scryptCallback);
 const projectId = "swans-ops-command-centre";
@@ -64,7 +64,7 @@ export default async function handler(req,res) {
  const body=typeof req.body==="string"?JSON.parse(req.body):req.body||{};
  if (body.action === "issue-pin") return issueDriverPin(req, res, body.driverId);
  if (body.action !== undefined) return res.status(400).json({error:"Invalid sign-on action."});
- const {driverId,depotSlug,pin,latitude,longitude,accuracy,positionTimestamp}=body;
+ const {driverId,depotSlug,pin,deviceId,latitude,longitude,accuracy,positionTimestamp}=body;
  if(typeof driverId!=="string"||!/^[A-Za-z0-9_-]{1,128}$/.test(driverId)||!depots.includes(depotSlug)) return res.status(400).json({error:"A valid driver and depot are required."});
  if(typeof pin!=="string"||!/^\d{8}$/.test(pin)) return res.status(400).json({error:"Enter your personal 8-digit sign-on PIN."});
  if(![latitude,longitude,accuracy,positionTimestamp].every(x=>typeof x==="number"&&Number.isFinite(x))||latitude < -90||latitude>90||longitude < -180||longitude>180||accuracy<=0||accuracy>50) return res.status(403).json({error:"A clear, accurate GPS location is required. Move outside and try again."});
@@ -88,7 +88,7 @@ export default async function handler(req,res) {
 
  if(!geo||geo.enabled!==true||typeof geo.centerLat!=="number"||typeof geo.centerLng!=="number"||typeof geo.radiusMetres!=="number") return res.status(503).json({error:"This depot GPS location has not been configured yet. Please speak to the depot team."});
  const metres=Math.round(distance(latitude,longitude,geo.centerLat,geo.centerLng)); if(metres>geo.radiusMetres) return res.status(403).json({error:"You are about "+metres+"m from the depot. Sign-on is only available within "+geo.radiusMetres+"m."});
- const fields={driverId:{stringValue:driverId},driverName:{stringValue:driver.name},depotSlug:{stringValue:depotSlug},depotName:{stringValue:geo.depotName||depotSlug},workDate:{stringValue:new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/London",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date())},createdAt:{integerValue:String(Date.now())},locationLat:{doubleValue:latitude},locationLng:{doubleValue:longitude},locationAccuracy:{doubleValue:accuracy},distanceMetres:{integerValue:String(metres)},geofenceRadiusMetres:{integerValue:String(geo.radiusMetres)},locationVerified:{booleanValue:true}};
+ const fields={driverId:{stringValue:driverId},driverName:{stringValue:driver.name},depotSlug:{stringValue:depotSlug},depotName:{stringValue:geo.depotName||depotSlug},workDate:{stringValue:new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/London",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date())},createdAt:{integerValue:String(Date.now())},locationLat:{doubleValue:latitude},locationLng:{doubleValue:longitude},locationAccuracy:{doubleValue:accuracy},distanceMetres:{integerValue:String(metres)},geofenceRadiusMetres:{integerValue:String(geo.radiusMetres)},locationVerified:{booleanValue:true},deviceIdHash:{stringValue:createHash("sha256").update(deviceId).digest("hex")}};
  const saved=await fetch(base+"/ops_driver_sign_ons",{method:"POST",headers:{Authorization:"Bearer "+token,"Content-Type":"application/json"},body:JSON.stringify({fields})}); if(!saved.ok) throw new Error("The sign-on record could not be saved."); return res.status(200).json({ok:true,distanceMetres:metres});
  } catch(e) { return res.status(502).json({error:e instanceof Error?e.message:"Secure sign-on failed."}); }
 }
