@@ -1,4 +1,4 @@
-export type WorkspaceRole = "lead" | "manager" | "coordinator" | "dispatcher" | "on_call" | "viewer" | "support" | "complaints";
+export type WorkspaceRole = "lead" | "manager" | "coordinator" | "dispatcher" | "on_call" | "viewer" | "support" | "complaints" | "depot_supervisor";
 
 const rolesWith = {
   manageOperations: ["lead", "manager"],
@@ -14,6 +14,6 @@ export function hasWorkspacePermission(role: WorkspaceRole | undefined | null, p
 }
 
 export function roleLabel(role: WorkspaceRole | undefined | null) {
-  const labels: Record<string, string> = { lead: "Lead / superuser", manager: "Operations manager", coordinator: "Coordinator", dispatcher: "Dispatcher", on_call: "On-call responder", viewer: "Viewer", support: "Coordinator", complaints: "Complaints only" };
+  const labels: Record<string, string> = { lead: "Lead / superuser", manager: "Operations manager", coordinator: "Coordinator", dispatcher: "Dispatcher", on_call: "On-call responder", viewer: "Viewer", support: "Coordinator", complaints: "Complaints only", depot_supervisor: "Depot sign-on supervisor" };
   return labels[role || ""] || "Team member";
 }
