@@ -19,7 +19,7 @@ async function requireManager(req, serviceToken) {
  const uid = verified.payload.sub;
  if (typeof uid !== "string" || !uid) return null;
  const member = await readDoc(serviceToken, "ops_members/" + encodeURIComponent(uid));
- return member?.status === "active" && ["lead", "manager"].includes(member.memberRole) ? member : null;
+ return member?.status === "active" && (["lead", "manager"].includes(member.memberRole) || (member.memberRole === "depot_supervisor" && member.depotSlug === "cheltenham")) ? member : null;
 }
 async function saveCredential(token, path, fields, exists) {
  const endpoint = exists
@@ -41,9 +41,10 @@ async function issueDriverPin(req, res, driverId, pin) {
    const serviceToken = await tokenFor(serviceAccount);
    let manager;
    try { manager = await requireManager(req, serviceToken); } catch { return res.status(401).json({ error: "Please sign in again with an operations manager account." }); }
-   if (!manager) return res.status(403).json({ error: "Only active operations leads and managers can issue driver PINs." });
+   if (!manager) return res.status(403).json({ error: "Only authorised depot managers can issue this driver PIN." });
    const driver = await readDoc(serviceToken, "ops_drivers/" + encodeURIComponent(driverId));
    if (!driver || driver.active !== true) return res.status(404).json({ error: "This driver is not on the active driver list." });
+   if (manager.memberRole === "depot_supervisor" && driver.depot !== "cheltenham") return res.status(403).json({ error: "You can only reset PINs for Cheltenham drivers." });
    const salt = randomBytes(16).toString("hex");
    const hash = await scrypt(pin, salt, 64, { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
    const path = "ops_driver_credentials/" + encodeURIComponent(driverId);
