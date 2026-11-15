@@ -98,6 +98,7 @@ async function ensureMemberProfile(database: NonNullable<typeof firebaseDb>, use
     initials: invited?.initials || displayName.split(" ").map(part => part[0]).join("").slice(0, 3).toUpperCase(),
     colour: invited?.colour || "#1D5C63",
     status: "active",
+    ...(invited?.depotSlug ? { depotSlug: invited.depotSlug } : {}),
   };
 
   await setDoc(memberRef, { ...memberProfile, createdAt: now(), updatedAt: now() });
