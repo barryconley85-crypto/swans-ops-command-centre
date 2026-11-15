@@ -4,7 +4,8 @@ service cloud.firestore {
     function signedIn() { return request.auth != null; }
     function lead() { return signedIn() && request.auth.token.email == 'bc@swanstravel.com'; }
     function approved() { return signedIn() && (lead() || exists(/databases/$(database)/documents/ops_invites/$(request.auth.token.email))); }
-    function member() { return approved() && exists(/databases/$(database)/documents/ops_members/$(request.auth.uid)) && get(/databases/$(database)/documents/ops_members/$(request.auth.uid)).data.status == 'active'; }
+    function member() { return approved() && exists(/databases/$(database)/documents/ops_members/$(request.auth.uid)) && get(/databases/$(database)/documents/ops_members/$(request.auth.uid)).data.status == 'active' && get(/databases/$(database)/documents/ops_members/$(request.auth.uid)).data.memberRole != 'depot_supervisor'; }
+    function depotSupervisor() { return approved() && exists(/databases/$(database)/documents/ops_members/$(request.auth.uid)) && get(/databases/$(database)/documents/ops_members/$(request.auth.uid)).data.status == 'active' && get(/databases/$(database)/documents/ops_members/$(request.auth.uid)).data.memberRole == 'depot_supervisor' && get(/databases/$(database)/documents/ops_members/$(request.auth.uid)).data.depotSlug == 'cheltenham'; }
     function memberRole() { return get(/databases/$(database)/documents/ops_members/$(request.auth.uid)).data.memberRole; }
     function operationsManager() { return member() && ['lead', 'manager'].hasAny([memberRole()]); }
     function sharedEditor() { return member() && ['lead', 'manager', 'coordinator', 'dispatcher'].hasAny([memberRole()]); }
@@ -16,7 +17,7 @@ service cloud.firestore {
       allow list, create, update, delete: if lead();
     }
     match /ops_members/{memberId} {
-      allow read: if member() || lead();
+      allow read: if member() || lead() || (signedIn() && memberId == request.auth.uid);
       allow create: if signedIn() && memberId == request.auth.uid && approved() && request.resource.data.userId == request.auth.uid;
       allow update: if lead() || (member() && memberRole() != 'complaints' && memberId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['initials', 'colour', 'updatedAt']));
       allow delete: if lead();
@@ -73,7 +74,7 @@ service cloud.firestore {
     // Driver PIN hashes are server-only; Admin service credentials bypass Firestore client rules.
     match /ops_driver_credentials/{driverId} { allow read, write: if false; }
     match /ops_driver_sign_ons/{signOnId} {
-      allow read: if member();
+      allow read: if member() || (depotSupervisor() && resource.data.depotSlug == 'cheltenham');
       // All public driver sign-ons must pass server-side GPS geofence verification.
       allow create, update, delete: if false;
     }
