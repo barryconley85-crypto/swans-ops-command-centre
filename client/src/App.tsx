@@ -1,7 +1,8 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Route, Switch, useLocation } from "wouter";
+import { useEffect } from "react";
 import { useWorkspace } from "./contexts/WorkspaceContext";
 import ErrorBoundary from "./components/ErrorBoundary";
 import DashboardLayout from "./components/DashboardLayout";
@@ -34,6 +35,8 @@ function DashboardPage({ children }: { children: React.ReactNode }) {
 
 function Router() {
   const { profile } = useWorkspace();
+  const [location, setLocation] = useLocation();
+  useEffect(() => { if (profile?.memberRole === "depot_supervisor" && location !== "/cheltenham-supervisor") setLocation("/cheltenham-supervisor"); }, [profile, location, setLocation]);
   if (profile?.memberRole === "depot_supervisor") return <CheltenhamSupervisor />;
   // make sure to consider if you need authentication for certain routes
   return (
