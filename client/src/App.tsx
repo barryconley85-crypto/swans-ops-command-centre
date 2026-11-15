@@ -33,6 +33,8 @@ function DashboardPage({ children }: { children: React.ReactNode }) {
 }
 
 function Router() {
+  const { profile } = useWorkspace();
+  if (profile?.memberRole === "depot_supervisor") return <CheltenhamSupervisor />;
   // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
