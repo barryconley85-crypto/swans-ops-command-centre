@@ -9,6 +9,8 @@ const depots = ["travelmaster", "alderly-park", "swans", "cheltenham"];
 const decodeValue = value => value.stringValue ?? (value.integerValue !== undefined ? Number(value.integerValue) : value.doubleValue !== undefined ? Number(value.doubleValue) : value.booleanValue !== undefined ? value.booleanValue : value.arrayValue ? (value.arrayValue.values || []).map(decodeValue) : value.mapValue ? decode(value.mapValue.fields) : null);
 const decode = fields => Object.fromEntries(Object.entries(fields || {}).map(([key,value]) => [key, decodeValue(value)]));
 const familiarisationSectionIds = ["driving-position", "mirrors-visibility", "doors-access", "passenger-safety", "emergency-equipment", "accessibility-equipment", "vehicle-equipment", "defect-procedure"];
+const familiarisationAnswerIds = ["seat-adjustment","mirrors","lighting","dashboard","retarder","height","demisters","wipers","warning-response","passenger-doors","steps","lift-ramp","wheelchair-restraints","heating-passenger","pa-microphone","luggage","seating","exit-locations","exit-operation","hammers","fire-extinguisher","first-aid","evacuation","walkaround","tyres","defect-decision","tachograph","isolators","breakdown-kit","report-defects","breakdown","smell-smoke"];
+const vipFamiliarisationAnswerIds = ["vip-tv-power","vip-tv-input","vip-tv-device","vip-tv-audio","vip-oven","vip-microwave","vip-kitchen-appliances","vip-kitchen-power","vip-hot-equipment","vip-kitchen-smoke"];
 async function tokenFor(sa) { const key = await importPKCS8(sa.private_key, "RS256"); const jwt = await new SignJWT({scope:"https://www.googleapis.com/auth/datastore"}).setProtectedHeader({alg:"RS256",typ:"JWT"}).setIssuer(sa.client_email).setSubject(sa.client_email).setAudience("https://oauth2.googleapis.com/token").setIssuedAt().setExpirationTime("1h").sign(key); const r = await fetch("https://oauth2.googleapis.com/token",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({grant_type:"urn:ietf:params:oauth:grant-type:jwt-bearer",assertion:jwt})}); if(!r.ok) throw new Error("Firebase service authentication failed."); return (await r.json()).access_token; }
 async function readDoc(token, path) { const r=await fetch(base+"/"+path,{headers:{Authorization:"Bearer "+token}}); if(r.status===404) return null; if(!r.ok) throw new Error("Could not verify depot or driver."); const d=await r.json(); return decode(d.fields); }
 async function updateCredential(token, path, fields) { const mask=Object.keys(fields).map(key=>"updateMask.fieldPaths="+encodeURIComponent(key)).join("&"); const r=await fetch(base+"/"+path+"?"+mask,{method:"PATCH",headers:{Authorization:"Bearer "+token,"Content-Type":"application/json"},body:JSON.stringify({fields})}); if(!r.ok) throw new Error("Could not update sign-on PIN protection."); }
@@ -95,12 +97,14 @@ async function listFamiliarisationDrivers(res) {
 }
 
 async function submitFamiliarisation(req, res, body) {
- const { driverId, pin, vehicleTypeId, vehicleRegistration, sectionIds, notes } = body;
+ const { driverId, pin, vehicleTypeId, vehicleRegistration, sectionIds, notes, answers, trainerName } = body;
  if (typeof driverId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(driverId)) return res.status(400).json({ error: "Select your name from the driver list." });
  if (typeof vehicleTypeId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(vehicleTypeId)) return res.status(400).json({ error: "Select a vehicle type." });
  if (typeof vehicleRegistration !== "string" || vehicleRegistration.trim().length < 2 || vehicleRegistration.trim().length > 20) return res.status(400).json({ error: "Select the vehicle registration." });
  if (!Array.isArray(sectionIds) || sectionIds.length !== familiarisationSectionIds.length || new Set(sectionIds).size !== familiarisationSectionIds.length || !familiarisationSectionIds.every(id => sectionIds.includes(id))) return res.status(400).json({ error: "Confirm all vehicle familiarisation sections before submitting." });
  if (typeof notes !== "string" || notes.length > 500) return res.status(400).json({ error: "Notes must be 500 characters or fewer." });
+ if (typeof trainerName !== "string" || !trainerName.trim() || trainerName.trim().length > 100) return res.status(400).json({ error: "Enter the name of the person delivering the familiarisation." });
+ if (!answers || typeof answers !== "object" || Array.isArray(answers)) return res.status(400).json({ error: "Confirm each familiarisation statement." });
  if (typeof pin !== "string" || !/^\d{8}$/.test(pin)) return res.status(400).json({ error: "Enter your 8-digit driver sign-on PIN." });
  let serviceAccount;
  try { serviceAccount = JSON.parse(Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_JSON_BASE64 || "", "base64").toString("utf8")); } catch {}
@@ -113,6 +117,8 @@ async function submitFamiliarisation(req, res, body) {
    ]);
    if (!driver || driver.active === false) return res.status(403).json({ error: "This driver is not on the active driver list." });
    if (!vehicleType || typeof vehicleType.vehicleType !== "string" || !Array.isArray(vehicleType.registrations) || !vehicleType.registrations.includes(vehicleRegistration.trim().toUpperCase())) return res.status(400).json({ error: "That registration is not listed under the selected vehicle type. Ask your depot team to update the vehicle list." });
+   const requiredAnswers = vehicleType.vehicleType.toLowerCase().includes("vip") ? [...familiarisationAnswerIds, ...vipFamiliarisationAnswerIds] : familiarisationAnswerIds;
+   if (requiredAnswers.some(id => answers[id] !== "yes") || Object.keys(answers).some(id => !requiredAnswers.includes(id))) return res.status(400).json({ error: "All required statements must be confirmed after familiarisation and demonstration." });
    const credentialPath = "ops_driver_credentials/" + encodeURIComponent(driverId);
    const credential = await readDoc(token, credentialPath);
    if (!credential || typeof credential.pinSalt !== "string" || typeof credential.pinHash !== "string") return res.status(403).json({ error: "A sign-on PIN has not been issued for this driver. Please ask depot management." });
@@ -136,6 +142,8 @@ async function submitFamiliarisation(req, res, body) {
      vehicleRegistration: { stringValue: vehicleRegistration.trim().toUpperCase() },
      familiarisationDate: { stringValue: familiarisationDate },
      sectionIds: { arrayValue: { values: familiarisationSectionIds.map(id => ({ stringValue: id })) } },
+     answers: { mapValue: { fields: Object.fromEntries(Object.entries(answers).map(([id, value]) => [id, { stringValue: value }])) } },
+     trainerName: { stringValue: trainerName.trim() },
      notes: { stringValue: notes.trim() },
      source: { stringValue: "driver-familiarisation-link" },
      pinVerified: { booleanValue: true },
