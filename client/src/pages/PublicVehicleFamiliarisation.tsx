@@ -34,9 +34,14 @@ export default function PublicVehicleFamiliarisation() {
 
   useEffect(() => {
     if (!firebaseDb) { setLoadingDrivers(false); return; }
-    Promise.all([getDocs(collection(firebaseDb, "ops_drivers")), getDocs(collection(firebaseDb, "ops_vehicle_familiarisation_vehicles"))])
-      .then(([driverSnapshot, typeSnapshot]) => {
-        setDrivers(driverSnapshot.docs.map(item => ({ id: item.id, ...item.data() })).filter((driver: any) => driver.active !== false).sort((a: any, b: any) => String(a.name).localeCompare(String(b.name))));
+    Promise.all([
+      fetch("/api/driver-sign-on", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "list-familiarisation-drivers" }) }),
+      getDocs(collection(firebaseDb, "ops_vehicle_familiarisation_vehicles"))
+    ])
+      .then(async ([driverResponse, typeSnapshot]) => {
+        const driverResult = await driverResponse.json();
+        if (!driverResponse.ok) throw new Error(driverResult.error || "The driver list could not be loaded.");
+        setDrivers(driverResult.drivers || []);
         setVehicleTypes(typeSnapshot.docs.map(item => ({ id: item.id, ...item.data() })).sort((a: any,b: any) => String(a.vehicleType).localeCompare(String(b.vehicleType))));
       })
       .catch(() => toast.error("The driver or vehicle list could not be loaded. Please try again."))
