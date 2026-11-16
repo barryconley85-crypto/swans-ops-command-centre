@@ -6,7 +6,9 @@ const projectId = "swans-ops-command-centre";
 const base = "https://firestore.googleapis.com/v1/projects/" + projectId + "/databases/(default)/documents";
 const secureTokenKeys = createRemoteJWKSet(new URL("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"));
 const depots = ["travelmaster", "alderly-park", "swans", "cheltenham"];
-const decodeValue = value => value.stringValue ?? (value.integerValue !== undefined ? Number(value.integerValue) : value.doubleValue !== undefined ? Number(value.doubleValue) : value.booleanValue !== undefined ? value.booleanValue : value.arrayValue ? (value.arrayValue.values || []).map(decodeValue) : value.mapValue ? decode(value.mapValue.fields) : null);\nconst decode = fields => Object.fromEntries(Object.entries(fields || {}).map(([key,value]) => [key, decodeValue(value)]));\nconst familiarisationSectionIds = ["driving-position", "mirrors-visibility", "doors-access", "passenger-safety", "emergency-equipment", "accessibility-equipment", "vehicle-equipment", "defect-procedure"];
+const decodeValue = value => value.stringValue ?? (value.integerValue !== undefined ? Number(value.integerValue) : value.doubleValue !== undefined ? Number(value.doubleValue) : value.booleanValue !== undefined ? value.booleanValue : value.arrayValue ? (value.arrayValue.values || []).map(decodeValue) : value.mapValue ? decode(value.mapValue.fields) : null);
+const decode = fields => Object.fromEntries(Object.entries(fields || {}).map(([key,value]) => [key, decodeValue(value)]));
+const familiarisationSectionIds = ["driving-position", "mirrors-visibility", "doors-access", "passenger-safety", "emergency-equipment", "accessibility-equipment", "vehicle-equipment", "defect-procedure"];
 async function tokenFor(sa) { const key = await importPKCS8(sa.private_key, "RS256"); const jwt = await new SignJWT({scope:"https://www.googleapis.com/auth/datastore"}).setProtectedHeader({alg:"RS256",typ:"JWT"}).setIssuer(sa.client_email).setSubject(sa.client_email).setAudience("https://oauth2.googleapis.com/token").setIssuedAt().setExpirationTime("1h").sign(key); const r = await fetch("https://oauth2.googleapis.com/token",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({grant_type:"urn:ietf:params:oauth:grant-type:jwt-bearer",assertion:jwt})}); if(!r.ok) throw new Error("Firebase service authentication failed."); return (await r.json()).access_token; }
 async function readDoc(token, path) { const r=await fetch(base+"/"+path,{headers:{Authorization:"Bearer "+token}}); if(r.status===404) return null; if(!r.ok) throw new Error("Could not verify depot or driver."); const d=await r.json(); return decode(d.fields); }
 async function updateCredential(token, path, fields) { const mask=Object.keys(fields).map(key=>"updateMask.fieldPaths="+encodeURIComponent(key)).join("&"); const r=await fetch(base+"/"+path+"?"+mask,{method:"PATCH",headers:{Authorization:"Bearer "+token,"Content-Type":"application/json"},body:JSON.stringify({fields})}); if(!r.ok) throw new Error("Could not update sign-on PIN protection."); }
@@ -122,7 +124,8 @@ async function submitFamiliarisation(req, res, body) {
 export default async function handler(req,res) {
  if(req.method!=="POST") return res.status(405).json({error:"Method not allowed"});
  const body=typeof req.body==="string"?JSON.parse(req.body):req.body||{};
- if (body.action === "issue-pin") return issueDriverPin(req, res, body.driverId, body.pin);\n if (body.action === "submit-familiarisation") return submitFamiliarisation(req, res, body);
+ if (body.action === "issue-pin") return issueDriverPin(req, res, body.driverId, body.pin);
+ if (body.action === "submit-familiarisation") return submitFamiliarisation(req, res, body);
  if (body.action !== undefined) return res.status(400).json({error:"Invalid sign-on action."});
  const {driverId,depotSlug,pin,deviceId,latitude,longitude,accuracy,positionTimestamp}=body;
  if(typeof driverId!=="string"||!/^[A-Za-z0-9_-]{1,128}$/.test(driverId)||!depots.includes(depotSlug)) return res.status(400).json({error:"A valid driver and depot are required."});
