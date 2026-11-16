@@ -97,7 +97,21 @@ service cloud.firestore {
     }
     match /ops_compliance_alerts/{alertId} { allow read: if operationsManager(); allow update: if operationsManager() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['acknowledgedAt', 'acknowledgedBy', 'owner', 'ownerAssignedAt', 'ownerAssignedBy']); allow create, delete: if false; }
     match /ops_compliance_alert_activity/{activityId} { allow read: if operationsManager(); allow create: if operationsManager() && request.resource.data.actorUserId == request.auth.uid; allow update, delete: if false; }
-    match /ops_vehicle_familiarisations/{recordId} {\n      allow read: if operationsManager();\n      allow create: if operationsManager()\n        && request.resource.data.driverId is string\n        && request.resource.data.driverName is string\n        && request.resource.data.vehicle is string\n        && request.resource.data.familiarisationDate is string\n        && request.resource.data.trainer is string\n        && request.resource.data.createdByUserId == request.auth.uid;\n      allow update: if operationsManager()\n        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['driverId', 'driverName', 'vehicle', 'familiarisationDate', 'trainer', 'notes', 'updatedAt']);\n      allow delete: if lead();\n    }\n    match /ops_driver_attendance/{attendanceId} {
+    match /ops_vehicle_familiarisation_vehicles/{vehicleId} {
+      allow read: if true;
+      allow create, update: if operationsManager()
+        && request.resource.data.vehicleType is string
+        && request.resource.data.registrations is list
+        && request.resource.data.registrations.size() > 0
+        && request.resource.data.registrations.size() <= 100;
+      allow delete: if operationsManager();
+    }
+    match /ops_vehicle_familiarisations/{recordId} {
+      allow read: if operationsManager();
+      // Public driver sign-offs are verified and written by the server after PIN verification.
+      allow create, update, delete: if false;
+    }
+    match /ops_driver_attendance/{attendanceId} {
       allow read: if member();
       allow create, update: if member() && !complaintsOnly()
         && request.resource.data.driverId is string
