@@ -65,6 +65,35 @@ async function issueDriverPin(req, res, driverId, pin) {
    return res.status(502).json({ error: "The driver PIN could not be issued. Please try again." });
  }
 }
+async function listFamiliarisationDrivers(res) {
+ let serviceAccount;
+ try { serviceAccount = JSON.parse(Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_JSON_BASE64 || "", "base64").toString("utf8")); } catch {}
+ if (!serviceAccount) return res.status(503).json({ error: "The driver list is not available right now." });
+ try {
+   const token = await tokenFor(serviceAccount);
+   const drivers = [];
+   let nextPageToken = "";
+   do {
+     const query = nextPageToken ? "?pageSize=1000&pageToken=" + encodeURIComponent(nextPageToken) : "?pageSize=1000";
+     const response = await fetch(base + "/ops_drivers" + query, { headers: { Authorization: "Bearer " + token } });
+     if (!response.ok) throw new Error("Could not load the active driver list.");
+     const result = await response.json();
+     for (const document of result.documents || []) {
+       const driver = decode(document.fields);
+       if (driver.active !== false && typeof driver.name === "string" && driver.name.trim()) {
+         const id = document.name.split("/").at(-1);
+         if (id) drivers.push({ id, name: driver.name });
+       }
+     }
+     nextPageToken = result.nextPageToken || "";
+   } while (nextPageToken);
+   drivers.sort((a, b) => a.name.localeCompare(b.name));
+   return res.status(200).json({ drivers });
+ } catch {
+   return res.status(502).json({ error: "The driver list could not be loaded. Please try again." });
+ }
+}
+
 async function submitFamiliarisation(req, res, body) {
  const { driverId, pin, vehicleTypeId, vehicleRegistration, sectionIds, notes } = body;
  if (typeof driverId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(driverId)) return res.status(400).json({ error: "Select your name from the driver list." });
@@ -124,6 +153,7 @@ async function submitFamiliarisation(req, res, body) {
 export default async function handler(req,res) {
  if(req.method!=="POST") return res.status(405).json({error:"Method not allowed"});
  const body=typeof req.body==="string"?JSON.parse(req.body):req.body||{};
+ if (body.action === "list-familiarisation-drivers") return listFamiliarisationDrivers(res);
  if (body.action === "issue-pin") return issueDriverPin(req, res, body.driverId, body.pin);
  if (body.action === "submit-familiarisation") return submitFamiliarisation(req, res, body);
  if (body.action !== undefined) return res.status(400).json({error:"Invalid sign-on action."});
