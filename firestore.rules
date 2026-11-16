@@ -102,7 +102,6 @@ service cloud.firestore {
       allow create, update: if operationsManager()
         && request.resource.data.vehicleType is string
         && request.resource.data.registrations is list
-        && request.resource.data.registrations.size() > 0
         && request.resource.data.registrations.size() <= 100;
       allow delete: if operationsManager();
     }
