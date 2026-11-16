@@ -27,7 +27,8 @@ import Exceptions from "@/pages/Exceptions";
 import DriverSignOn, { PublicDriverSignOn } from "@/pages/DriverSignOn";
 import DriverAttendance from "@/pages/DriverAttendance";
 import ComplianceCentre from "@/pages/ComplianceCentre";
-import CheltenhamSupervisor from "@/pages/CheltenhamSupervisor";\nimport Training from "@/pages/Training";
+import CheltenhamSupervisor from "@/pages/CheltenhamSupervisor";
+import Training from "@/pages/Training";
 
 function DashboardPage({ children }: { children: React.ReactNode }) {
   return <DashboardLayout>{children}</DashboardLayout>;
@@ -62,7 +63,8 @@ function Router() {
       <Route path={"/people"} component={() => <DashboardPage><People /></DashboardPage>} />
       <Route path={"/driver-sign-on"} component={() => <DashboardPage><DriverSignOn /></DashboardPage>} />
       <Route path={"/driver-attendance"} component={() => <DashboardPage><DriverAttendance /></DashboardPage>} />
-      <Route path={"/compliance"} component={() => <DashboardPage><ComplianceCentre /></DashboardPage>} />\n      <Route path={"/training"} component={() => <DashboardPage><Training /></DashboardPage>} />
+      <Route path={"/compliance"} component={() => <DashboardPage><ComplianceCentre /></DashboardPage>} />
+      <Route path={"/training"} component={() => <DashboardPage><Training /></DashboardPage>} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />
