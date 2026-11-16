@@ -58,7 +58,8 @@ const collectionsForPath = (path: string): string[] => {
     "/people": ["tasks", "rota", "notes"],
     "/driver-sign-on": ["signOns", "drivers"],
     "/driver-attendance": ["drivers", "attendance"],
-    "/compliance": ["drivers"],\n    "/training": ["drivers", "vehicleFamiliarisations"]
+    "/compliance": ["drivers"],
+    "/training": ["drivers", "vehicleFamiliarisations"]
   };
   return [...new Set([...common, ...(byPath[path] || [])])];
 };
@@ -84,7 +85,8 @@ const menuItems = [
   { icon: ClipboardCheck, label: "Tasks", path: "/tasks" },
   { icon: QrCode, label: "Driver sign-on", path: "/driver-sign-on", managerOnly: true },
   { icon: FileBarChart, label: "Driver attendance", path: "/driver-attendance" },
-  { icon: ShieldCheck, label: "Compliance Centre", path: "/compliance", managerOnly: true },\n  { icon: GraduationCap, label: "Training", path: "/training", managerOnly: true },
+  { icon: ShieldCheck, label: "Compliance Centre", path: "/compliance", managerOnly: true },
+  { icon: GraduationCap, label: "Training", path: "/training", managerOnly: true },
   { icon: CalendarDays, label: "Rota & on-call", path: "/rota" },
   { icon: Headphones, label: "On-call portal", path: "/on-call" },
   { icon: HandHeart, label: "Help & cover", path: "/help" },
