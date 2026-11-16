@@ -25,10 +25,10 @@ export default function CheltenhamSupervisor() {
     if (!firebaseDb || !authUser || !profile || profile.memberRole !== "depot_supervisor" || profile.depotSlug !== "cheltenham") return;
     Promise.all([
       getDocs(query(collection(firebaseDb, "ops_drivers"), where("depot", "==", "cheltenham"), where("active", "==", true))),
-      getDocs(query(collection(firebaseDb, "ops_driver_sign_ons"), where("depotSlug", "==", "cheltenham"), where("workDate", "==", today))),
+      getDocs(query(collection(firebaseDb, "ops_driver_sign_ons"), where("depotSlug", "==", "cheltenham"))),
     ]).then(([driverRows, signOnRows]) => {
       setDrivers(driverRows.docs.map(row => ({ ...row.data(), _docId: row.id })).sort((a,b) => String(a.name).localeCompare(String(b.name))));
-      setSignOns(signOnRows.docs.map(row => ({ ...row.data(), _docId: row.id })).sort((a,b) => Number(b.createdAt||0)-Number(a.createdAt||0)));
+      setSignOns(signOnRows.docs.map(row => ({ ...row.data(), _docId: row.id })).filter(row => row.workDate === today).sort((a,b) => Number(b.createdAt||0)-Number(a.createdAt||0)));
     }).catch(() => toast.error("Cheltenham sign-on records could not be loaded."));
   }, [authUser, profile, today]);
 
