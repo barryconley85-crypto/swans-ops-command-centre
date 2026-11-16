@@ -6,7 +6,7 @@ const projectId = "swans-ops-command-centre";
 const base = "https://firestore.googleapis.com/v1/projects/" + projectId + "/databases/(default)/documents";
 const secureTokenKeys = createRemoteJWKSet(new URL("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"));
 const depots = ["travelmaster", "alderly-park", "swans", "cheltenham"];
-const decode = fields => Object.fromEntries(Object.entries(fields || {}).map(([k,v]) => [k, v.stringValue ?? (v.integerValue !== undefined ? Number(v.integerValue) : v.doubleValue !== undefined ? Number(v.doubleValue) : v.booleanValue ?? null)]));
+const decodeValue = value => value.stringValue ?? (value.integerValue !== undefined ? Number(value.integerValue) : value.doubleValue !== undefined ? Number(value.doubleValue) : value.booleanValue !== undefined ? value.booleanValue : value.arrayValue ? (value.arrayValue.values || []).map(decodeValue) : value.mapValue ? decode(value.mapValue.fields) : null);\nconst decode = fields => Object.fromEntries(Object.entries(fields || {}).map(([key,value]) => [key, decodeValue(value)]));\nconst familiarisationSectionIds = ["driving-position", "mirrors-visibility", "doors-access", "passenger-safety", "emergency-equipment", "accessibility-equipment", "vehicle-equipment", "defect-procedure"];
 async function tokenFor(sa) { const key = await importPKCS8(sa.private_key, "RS256"); const jwt = await new SignJWT({scope:"https://www.googleapis.com/auth/datastore"}).setProtectedHeader({alg:"RS256",typ:"JWT"}).setIssuer(sa.client_email).setSubject(sa.client_email).setAudience("https://oauth2.googleapis.com/token").setIssuedAt().setExpirationTime("1h").sign(key); const r = await fetch("https://oauth2.googleapis.com/token",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({grant_type:"urn:ietf:params:oauth:grant-type:jwt-bearer",assertion:jwt})}); if(!r.ok) throw new Error("Firebase service authentication failed."); return (await r.json()).access_token; }
 async function readDoc(token, path) { const r=await fetch(base+"/"+path,{headers:{Authorization:"Bearer "+token}}); if(r.status===404) return null; if(!r.ok) throw new Error("Could not verify depot or driver."); const d=await r.json(); return decode(d.fields); }
 async function updateCredential(token, path, fields) { const mask=Object.keys(fields).map(key=>"updateMask.fieldPaths="+encodeURIComponent(key)).join("&"); const r=await fetch(base+"/"+path+"?"+mask,{method:"PATCH",headers:{Authorization:"Bearer "+token,"Content-Type":"application/json"},body:JSON.stringify({fields})}); if(!r.ok) throw new Error("Could not update sign-on PIN protection."); }
@@ -63,10 +63,66 @@ async function issueDriverPin(req, res, driverId, pin) {
    return res.status(502).json({ error: "The driver PIN could not be issued. Please try again." });
  }
 }
+async function submitFamiliarisation(req, res, body) {
+ const { driverId, pin, vehicleTypeId, vehicleRegistration, sectionIds, notes } = body;
+ if (typeof driverId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(driverId)) return res.status(400).json({ error: "Select your name from the driver list." });
+ if (typeof vehicleTypeId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(vehicleTypeId)) return res.status(400).json({ error: "Select a vehicle type." });
+ if (typeof vehicleRegistration !== "string" || vehicleRegistration.trim().length < 2 || vehicleRegistration.trim().length > 20) return res.status(400).json({ error: "Select the vehicle registration." });
+ if (!Array.isArray(sectionIds) || sectionIds.length !== familiarisationSectionIds.length || new Set(sectionIds).size !== familiarisationSectionIds.length || !familiarisationSectionIds.every(id => sectionIds.includes(id))) return res.status(400).json({ error: "Confirm all vehicle familiarisation sections before submitting." });
+ if (typeof notes !== "string" || notes.length > 500) return res.status(400).json({ error: "Notes must be 500 characters or fewer." });
+ if (typeof pin !== "string" || !/^\d{8}$/.test(pin)) return res.status(400).json({ error: "Enter your 8-digit driver sign-on PIN." });
+ let serviceAccount;
+ try { serviceAccount = JSON.parse(Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_JSON_BASE64 || "", "base64").toString("utf8")); } catch {}
+ if (!serviceAccount) return res.status(503).json({ error: "Secure PIN verification is not configured. Please tell your depot team." });
+ try {
+   const token = await tokenFor(serviceAccount);
+   const [driver, vehicleType] = await Promise.all([
+     readDoc(token, "ops_drivers/" + encodeURIComponent(driverId)),
+     readDoc(token, "ops_vehicle_familiarisation_vehicles/" + encodeURIComponent(vehicleTypeId))
+   ]);
+   if (!driver || driver.active === false) return res.status(403).json({ error: "This driver is not on the active driver list." });
+   if (!vehicleType || typeof vehicleType.vehicleType !== "string" || !Array.isArray(vehicleType.registrations) || !vehicleType.registrations.includes(vehicleRegistration.trim().toUpperCase())) return res.status(400).json({ error: "That registration is not listed under the selected vehicle type. Ask your depot team to update the vehicle list." });
+   const credentialPath = "ops_driver_credentials/" + encodeURIComponent(driverId);
+   const credential = await readDoc(token, credentialPath);
+   if (!credential || typeof credential.pinSalt !== "string" || typeof credential.pinHash !== "string") return res.status(403).json({ error: "A sign-on PIN has not been issued for this driver. Please ask depot management." });
+   const now = Date.now(), lockedUntil = Number(credential.lockedUntil || 0);
+   if (lockedUntil > now) return res.status(429).json({ error: "PIN attempts are temporarily locked. Please ask depot management for help." });
+   const supplied = Buffer.from(await scrypt(pin, credential.pinSalt, 64, { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 }));
+   const expected = Buffer.from(credential.pinHash, "hex");
+   if (expected.length !== supplied.length || !timingSafeEqual(supplied, expected)) {
+     const attempts = Number(credential.failedAttempts || 0) + 1, lock = attempts >= 5 ? now + 15 * 60 * 1000 : 0;
+     await updateCredential(token, credentialPath, { failedAttempts: { integerValue: String(lock ? 0 : attempts) }, lockedUntil: { integerValue: String(lock) } });
+     return res.status(lock ? 429 : 403).json({ error: lock ? "Too many incorrect PIN attempts. Ask depot management to reset the PIN." : "That PIN does not match the selected driver." });
+   }
+   if (Number(credential.failedAttempts || 0) !== 0 || lockedUntil !== 0) await updateCredential(token, credentialPath, { failedAttempts: { integerValue: "0" }, lockedUntil: { integerValue: "0" } });
+   const familiarisationDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+   const fields = {
+     driverId: { stringValue: driverId },
+     driverName: { stringValue: driver.name },
+     depotSlug: { stringValue: typeof driver.depot === "string" ? driver.depot : "" },
+     vehicleTypeId: { stringValue: vehicleTypeId },
+     vehicleType: { stringValue: vehicleType.vehicleType },
+     vehicleRegistration: { stringValue: vehicleRegistration.trim().toUpperCase() },
+     familiarisationDate: { stringValue: familiarisationDate },
+     sectionIds: { arrayValue: { values: familiarisationSectionIds.map(id => ({ stringValue: id })) } },
+     notes: { stringValue: notes.trim() },
+     source: { stringValue: "driver-familiarisation-link" },
+     pinVerified: { booleanValue: true },
+     createdAt: { integerValue: String(Date.now()) },
+     updatedAt: { integerValue: String(Date.now()) }
+   };
+   const saved = await fetch(base + "/ops_vehicle_familiarisations", { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" }, body: JSON.stringify({ fields }) });
+   if (!saved.ok) throw new Error("The familiarisation record could not be saved.");
+   return res.status(200).json({ ok: true });
+ } catch (error) {
+   return res.status(502).json({ error: error instanceof Error ? error.message : "Vehicle familiarisation could not be saved." });
+ }
+}
+
 export default async function handler(req,res) {
  if(req.method!=="POST") return res.status(405).json({error:"Method not allowed"});
  const body=typeof req.body==="string"?JSON.parse(req.body):req.body||{};
- if (body.action === "issue-pin") return issueDriverPin(req, res, body.driverId, body.pin);
+ if (body.action === "issue-pin") return issueDriverPin(req, res, body.driverId, body.pin);\n if (body.action === "submit-familiarisation") return submitFamiliarisation(req, res, body);
  if (body.action !== undefined) return res.status(400).json({error:"Invalid sign-on action."});
  const {driverId,depotSlug,pin,deviceId,latitude,longitude,accuracy,positionTimestamp}=body;
  if(typeof driverId!=="string"||!/^[A-Za-z0-9_-]{1,128}$/.test(driverId)||!depots.includes(depotSlug)) return res.status(400).json({error:"A valid driver and depot are required."});
