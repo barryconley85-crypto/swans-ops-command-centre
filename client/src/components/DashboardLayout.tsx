@@ -59,7 +59,7 @@ const collectionsForPath = (path: string): string[] => {
     "/driver-sign-on": ["signOns", "drivers"],
     "/driver-attendance": ["drivers", "attendance"],
     "/compliance": ["drivers"],
-    "/training": ["drivers", "vehicleFamiliarisations", "vehicleFamiliarisationVehicles"]
+    "/training": ["drivers", "vehicleFamiliarisations", "vehicleFamiliarisationVehicles", "driverCompliance", "driverTrainingRecords"]
   };
   return [...new Set([...common, ...(byPath[path] || [])])];
 };
