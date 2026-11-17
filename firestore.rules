@@ -110,6 +110,15 @@ service cloud.firestore {
       // Public driver sign-offs are verified and written by the server after PIN verification.
       allow create, update, delete: if false;
     }
+    match /ops_driver_training_records/{recordId} {
+      allow read: if operationsManager();
+      allow create, update: if operationsManager()
+        && request.resource.data.driverId is string
+        && request.resource.data.driverName is string
+        && request.resource.data.category is string
+        && request.resource.data.completionDate is string;
+      allow delete: if lead();
+    }
     match /ops_driver_attendance/{attendanceId} {
       allow read: if member();
       allow create, update: if member() && !complaintsOnly()
