@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { LoadError, PageHeader, Panel, PanelHeading } from "@/components/WorkspacePrimitives";
 import { Printer, Search } from "lucide-react";
 import { toast } from "sonner";
+import DriverTrainingMatrix from "@/pages/DriverTrainingMatrix";
 
 export default function Training() {
   const { profile, state, add, patch, remove, refresh } = useWorkspace();
@@ -88,6 +89,7 @@ export default function Training() {
 
   return <div className="mx-auto max-w-6xl space-y-6">
     <PageHeader eyebrow="People and drivers" title="Training" description="Manage vehicle options and review driver familiarisation sign-offs." actions={<a href="/vehicle-familiarisation" target="_blank" rel="noreferrer" className="inline-flex h-10 items-center rounded-md bg-[#0B8997] px-4 text-sm font-medium text-white hover:bg-[#08717C]">Open driver sign-off link</a>} />
+    <DriverTrainingMatrix />
     <Panel>
       <div className="flex flex-col gap-3 border-b p-5 sm:flex-row sm:items-center sm:justify-between"><PanelHeading title="Vehicle types and registrations" description="Drivers choose a vehicle type first, then one of the registrations listed under it. Categories without registrations remain unavailable to drivers until you add fleet numbers." /><Button type="button" variant="outline" onClick={() => void addStandardCategories()} disabled={saving}>Add standard categories</Button></div>
       <form onSubmit={event => void saveNewVehicleType(event)} className="grid gap-4 border-b p-5 sm:grid-cols-[1fr_2fr_auto] sm:items-end"><div className="space-y-2"><Label htmlFor="vf-new-type">Vehicle type</Label><Input id="vf-new-type" value={vehicleType} onChange={event=>setVehicleType(event.target.value)} placeholder="e.g. Overdeck VIP" required /></div><div className="space-y-2"><Label htmlFor="vf-new-regs">Registrations under this type</Label><Input id="vf-new-regs" value={registrationList} onChange={event=>setRegistrationList(event.target.value)} placeholder="Separate registrations with commas" required /><p className="text-xs text-muted-foreground">Starting example: X17, FUM, V18, X20</p></div><Button type="submit" disabled={saving}>{saving?"Saving…":"Add vehicle type"}</Button></form>
