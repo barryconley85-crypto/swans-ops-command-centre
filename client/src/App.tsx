@@ -35,6 +35,10 @@ function DashboardPage({ children }: { children: React.ReactNode }) {
   return <DashboardLayout>{children}</DashboardLayout>;
 }
 
+function ComplianceRoute() {
+  return <DashboardPage><ComplianceCentre /></DashboardPage>;
+}
+
 function Router() {
   const { profile } = useWorkspace();
   const [location, setLocation] = useLocation();
@@ -64,7 +68,7 @@ function Router() {
       <Route path={"/people"} component={() => <DashboardPage><People /></DashboardPage>} />
       <Route path={"/driver-sign-on"} component={() => <DashboardPage><DriverSignOn /></DashboardPage>} />
       <Route path={"/driver-attendance"} component={() => <DashboardPage><DriverAttendance /></DashboardPage>} />
-      <Route path={"/compliance"} component={() => <DashboardPage><ComplianceCentre /></DashboardPage>} />
+      <Route path={"/compliance"} component={ComplianceRoute} />
       <Route path={"/vehicle-familiarisation"} component={PublicVehicleFamiliarisation} />
       <Route path={"/training"} component={() => <DashboardPage><Training /></DashboardPage>} />
       <Route path={"/404"} component={NotFound} />
