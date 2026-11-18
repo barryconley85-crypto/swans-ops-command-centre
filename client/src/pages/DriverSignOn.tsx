@@ -226,7 +226,8 @@ export function PublicDriverSignOn({ depot }: { depot: string }) {
   const [drivers, setDrivers] = useState<any[]>([]);
   const [selected, setSelected] = useState("");
   const [pin, setPin] = useState("");
-  const [done, setDone] = useState(false);\n  const [submitting, setSubmitting] = useState(false);\n  const [alreadySignedOn, setAlreadySignedOn] = useState(false);
+  const [done, setDone] = useState(false);
+  const [submitting, setSubmitting] = useState(false);\n  const [alreadySignedOn, setAlreadySignedOn] = useState(false);
   const [error, setError] = useState("");
   const depotTitle = depotName(depot);
   useEffect(() => { if (!firebaseDb) return; getDocs(query(collection(firebaseDb, "ops_drivers"), where("active", "==", true))).then(snapshot => setDrivers(snapshot.docs.map(item => ({ _docId: item.id, ...item.data() })).filter((driver: any) => driver.depot === depot).sort((a: any, b: any) => a.name.localeCompare(b.name)))).catch(() => setError("The driver list could not be loaded.")); }, [depot]);
