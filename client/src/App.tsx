@@ -42,7 +42,10 @@ function ComplianceRoute() {
 function Router() {
   const { profile } = useWorkspace();
   const [location, setLocation] = useLocation();
-  useEffect(() => { if (profile?.memberRole === "depot_supervisor" && location !== "/cheltenham-supervisor") setLocation("/cheltenham-supervisor"); }, [profile, location, setLocation]);
+  useEffect(() => { if (profile?.memberRole === "depot_supervisor" && location !== "/cheltenham-supervisor" && location !== "/vehicle-familiarisation") setLocation("/cheltenham-supervisor"); }, [profile, location, setLocation]);
+  // The driver familiarisation page is a public training link. Keep it reachable even
+  // when the browser is already signed in as a restricted depot supervisor.
+  if (location === "/vehicle-familiarisation") return <PublicVehicleFamiliarisation />;
   if (profile?.memberRole === "depot_supervisor") return <CheltenhamSupervisor />;
   // make sure to consider if you need authentication for certain routes
   return (
