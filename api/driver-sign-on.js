@@ -11,6 +11,15 @@ const decode = fields => Object.fromEntries(Object.entries(fields || {}).map(([k
 const familiarisationSectionIds = ["driving-position", "mirrors-visibility", "doors-access", "passenger-safety", "emergency-equipment", "accessibility-equipment", "vehicle-equipment", "defect-procedure"];
 const familiarisationAnswerIds = ["seat-adjustment","mirrors","lighting","dashboard","retarder","height","demisters","wipers","warning-response","passenger-doors","steps","lift-ramp","wheelchair-restraints","heating-passenger","pa-microphone","luggage","seating","exit-locations","exit-operation","hammers","fire-extinguisher","first-aid","evacuation","walkaround","tyres","defect-decision","tachograph","isolators","breakdown-kit","report-defects","breakdown","smell-smoke"];
 const vipFamiliarisationAnswerIds = ["vip-tv-power","vip-tv-input","vip-tv-device","vip-tv-audio","vip-oven","vip-microwave","vip-kitchen-appliances","vip-kitchen-power","vip-kitchen-smoke"];
+const toiletAnswerIds = ["toilet-location","toilet-operation","toilet-water-waste","toilet-hygiene"];
+const doubleDeckAnswerIds = ["dd-staircase","dd-upper-deck","dd-upper-exits","dd-height-route","dd-evacuation"];
+const plaxtonAnswerIds = ["plaxton-capacity","plaxton-luggage","plaxton-emergency","plaxton-passenger-flow"];
+const minibusAnswerIds = ["minibus-capacity","minibus-doors","minibus-manoeuvring","minibus-accessibility"];
+const electricAnswerIds = ["ev-ready","ev-range","ev-charge-port","ev-start-charge","ev-disconnect","ev-cable-safety","ev-fault","ev-isolation","ev-report"];
+const classifyVehicle = name => { const value=String(name||"").toLowerCase(); if(value.includes("electric")) return "electric"; if(value.includes("vip")) return "vip"; if(value.includes("16 seat")||value.includes("minibus")) return "minibus"; if(value.includes("double deck")) return "double-deck"; if(value.includes("plaxton")) return "plaxton"; if(value.includes("irizar")||value.includes("yutong")) return "toilet-coach"; return "standard"; };
+const vehicleSpecific = kind => kind==="vip"||kind==="toilet-coach"?toiletAnswerIds:kind==="double-deck"?doubleDeckAnswerIds:kind==="plaxton"?plaxtonAnswerIds:kind==="minibus"?minibusAnswerIds:kind==="electric"?electricAnswerIds:[];
+const vehicleSection = kind => kind==="vip"?"toilet-and-vip-equipment":kind==="toilet-coach"?"toilet-equipment":kind==="double-deck"?"double-deck-specific":kind==="plaxton"?"plaxton-specific":kind==="minibus"?"minibus-specific":kind==="electric"?"electric-vehicle-and-charging":"vehicle-specific";
+
 async function tokenFor(sa) { const key = await importPKCS8(sa.private_key, "RS256"); const jwt = await new SignJWT({scope:"https://www.googleapis.com/auth/datastore"}).setProtectedHeader({alg:"RS256",typ:"JWT"}).setIssuer(sa.client_email).setSubject(sa.client_email).setAudience("https://oauth2.googleapis.com/token").setIssuedAt().setExpirationTime("1h").sign(key); const r = await fetch("https://oauth2.googleapis.com/token",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({grant_type:"urn:ietf:params:oauth:grant-type:jwt-bearer",assertion:jwt})}); if(!r.ok) throw new Error("Firebase service authentication failed."); return (await r.json()).access_token; }
 async function readDoc(token, path) { const r=await fetch(base+"/"+path,{headers:{Authorization:"Bearer "+token}}); if(r.status===404) return null; if(!r.ok) throw new Error("Could not verify depot or driver."); const d=await r.json(); return decode(d.fields); }
 async function updateCredential(token, path, fields) { const mask=Object.keys(fields).map(key=>"updateMask.fieldPaths="+encodeURIComponent(key)).join("&"); const r=await fetch(base+"/"+path+"?"+mask,{method:"PATCH",headers:{Authorization:"Bearer "+token,"Content-Type":"application/json"},body:JSON.stringify({fields})}); if(!r.ok) throw new Error("Could not update sign-on PIN protection."); }
@@ -97,11 +106,10 @@ async function listFamiliarisationDrivers(res) {
 }
 
 async function submitFamiliarisation(req, res, body) {
- const { driverId, pin, vehicleTypeId, vehicleRegistration, sectionIds, notes, answers, trainerName } = body;
+ const { driverId, pin, vehicleTypeId, vehicleRegistration, sectionIds, notes, answers, trainerName, chargingSite } = body;
  if (typeof driverId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(driverId)) return res.status(400).json({ error: "Select your name from the driver list." });
  if (typeof vehicleTypeId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(vehicleTypeId)) return res.status(400).json({ error: "Select a vehicle type." });
  if (typeof vehicleRegistration !== "string" || vehicleRegistration.trim().length < 2 || vehicleRegistration.trim().length > 20) return res.status(400).json({ error: "Select the vehicle registration." });
- if (!Array.isArray(sectionIds) || sectionIds.length !== familiarisationSectionIds.length || new Set(sectionIds).size !== familiarisationSectionIds.length || !familiarisationSectionIds.every(id => sectionIds.includes(id))) return res.status(400).json({ error: "Confirm all vehicle familiarisation sections before submitting." });
  if (typeof notes !== "string" || notes.length > 500) return res.status(400).json({ error: "Notes must be 500 characters or fewer." });
  if (typeof trainerName !== "string" || !trainerName.trim() || trainerName.trim().length > 100) return res.status(400).json({ error: "Enter the name of the person delivering the familiarisation." });
  if (!answers || typeof answers !== "object" || Array.isArray(answers)) return res.status(400).json({ error: "Confirm each familiarisation statement." });
@@ -117,8 +125,18 @@ async function submitFamiliarisation(req, res, body) {
    ]);
    if (!driver || driver.active === false) return res.status(403).json({ error: "This driver is not on the active driver list." });
    if (!vehicleType || typeof vehicleType.vehicleType !== "string" || !Array.isArray(vehicleType.registrations) || !vehicleType.registrations.includes(vehicleRegistration.trim().toUpperCase())) return res.status(400).json({ error: "That registration is not listed under the selected vehicle type. Ask your depot team to update the vehicle list." });
-   const requiredAnswers = vehicleType.vehicleType.toLowerCase().includes("vip") ? [...familiarisationAnswerIds, ...vipFamiliarisationAnswerIds] : familiarisationAnswerIds;
-   if (requiredAnswers.some(id => answers[id] !== "yes") || Object.keys(answers).some(id => !requiredAnswers.includes(id))) return res.status(400).json({ error: "All required statements must be confirmed after familiarisation and demonstration." });
+   const kind = classifyVehicle(vehicleType.vehicleType);
+   const registration = vehicleRegistration.trim().toUpperCase();
+   const isElectric = kind === "electric";
+   const requiredSites = registration.includes("EVB") ? ["swans", "alderley-park"] : ["swans"];
+   if (isElectric && !requiredSites.includes(chargingSite)) return res.status(400).json({ error: "Select an approved charging site for this electric vehicle." });
+   if (isElectric && !registration.includes("EVB") && chargingSite !== "swans") return res.status(400).json({ error: "This vehicle's charging familiarisation must be completed at Swans depot." });
+   if (!isElectric && chargingSite) return res.status(400).json({ error: "A charging site is only required for electric vehicles." });
+   const specificAnswers = vehicleSpecific(kind);
+   const requiredAnswers = [...familiarisationAnswerIds, ...specificAnswers, ...(kind === "vip" ? vipFamiliarisationAnswerIds : [])];
+   if (requiredAnswers.some(id => answers[id] !== "yes") || Object.keys(answers).some(id => !requiredAnswers.includes(id))) return res.status(400).json({ error: "All required vehicle-specific statements must be confirmed after familiarisation and demonstration." });
+   const expectedSections = [...familiarisationSectionIds, vehicleSection(kind), ...(isElectric ? ["charging-site-" + chargingSite] : [])];
+   if (!Array.isArray(sectionIds) || sectionIds.length !== expectedSections.length || new Set(sectionIds).size !== expectedSections.length || !expectedSections.every(id => sectionIds.includes(id))) return res.status(400).json({ error: "Confirm all required vehicle and charging familiarisation sections before submitting." });
    const credentialPath = "ops_driver_credentials/" + encodeURIComponent(driverId);
    const credential = await readDoc(token, credentialPath);
    if (!credential || typeof credential.pinSalt !== "string" || typeof credential.pinHash !== "string") return res.status(403).json({ error: "A sign-on PIN has not been issued for this driver. Please ask depot management." });
@@ -139,9 +157,11 @@ async function submitFamiliarisation(req, res, body) {
      depotSlug: { stringValue: typeof driver.depot === "string" ? driver.depot : "" },
      vehicleTypeId: { stringValue: vehicleTypeId },
      vehicleType: { stringValue: vehicleType.vehicleType },
-     vehicleRegistration: { stringValue: vehicleRegistration.trim().toUpperCase() },
+     vehicleRegistration: { stringValue: registration },
+     chargingSite: { stringValue: isElectric ? chargingSite : "" },
+     requiredChargingSites: { arrayValue: { values: isElectric ? requiredSites.map(site => ({ stringValue: site })) : [] } },
      familiarisationDate: { stringValue: familiarisationDate },
-     sectionIds: { arrayValue: { values: familiarisationSectionIds.map(id => ({ stringValue: id })) } },
+     sectionIds: { arrayValue: { values: expectedSections.map(id => ({ stringValue: id })) } },
      answers: { mapValue: { fields: Object.fromEntries(Object.entries(answers).map(([id, value]) => [id, { stringValue: value }])) } },
      trainerName: { stringValue: trainerName.trim() },
      notes: { stringValue: notes.trim() },
