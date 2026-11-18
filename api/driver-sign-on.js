@@ -190,7 +190,21 @@ export default async function handler(req,res) {
 
  if(!geo||geo.enabled!==true||typeof geo.centerLat!=="number"||typeof geo.centerLng!=="number"||typeof geo.radiusMetres!=="number") return res.status(503).json({error:"This depot GPS location has not been configured yet. Please speak to the depot team."});
  const metres=Math.round(distance(latitude,longitude,geo.centerLat,geo.centerLng)); if(metres>geo.radiusMetres) return res.status(403).json({error:"You are about "+metres+"m from the depot. Sign-on is only available within "+geo.radiusMetres+"m."});
- const fields={driverId:{stringValue:driverId},driverName:{stringValue:driver.name},depotSlug:{stringValue:depotSlug},depotName:{stringValue:geo.depotName||depotSlug},workDate:{stringValue:new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/London",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date())},createdAt:{integerValue:String(Date.now())},locationLat:{doubleValue:latitude},locationLng:{doubleValue:longitude},locationAccuracy:{doubleValue:accuracy},distanceMetres:{integerValue:String(metres)},geofenceRadiusMetres:{integerValue:String(geo.radiusMetres)},locationVerified:{booleanValue:true},deviceIdHash:{stringValue:createHash("sha256").update(deviceId).digest("hex")}};
- const saved=await fetch(base+"/ops_driver_sign_ons",{method:"POST",headers:{Authorization:"Bearer "+token,"Content-Type":"application/json"},body:JSON.stringify({fields})}); if(!saved.ok) throw new Error("The sign-on record could not be saved."); return res.status(200).json({ok:true,distanceMetres:metres});
+ const workDate=new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/London",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+ // Check legacy/random-ID records first so the first protected sign-on does not
+ // create a second entry for a driver who has already signed on today.
+ const prior=await fetch(base+":runQuery",{method:"POST",headers:{Authorization:"Bearer "+token,"Content-Type":"application/json"},body:JSON.stringify({structuredQuery:{from:[{collectionId:"ops_driver_sign_ons"}],where:{fieldFilter:{field:{fieldPath:"driverId"},op:"EQUAL",value:{stringValue:driverId}}}}})});
+ if(!prior.ok) throw new Error("Existing sign-on records could not be checked. Please try again.");
+ const priorRows=await prior.json();
+ const alreadyRecorded=(Array.isArray(priorRows)?priorRows:[]).some(row=>row.document&&decode(row.document.fields).workDate===workDate);
+ if(alreadyRecorded) return res.status(200).json({ok:true,alreadySignedOn:true,distanceMetres:metres});
+ // A deterministic document ID makes simultaneous taps and network retries
+ // atomic: Firestore accepts only the first create for this driver and date.
+ const documentId="signon_"+createHash("sha256").update(driverId+":"+workDate).digest("hex");
+ const fields={driverId:{stringValue:driverId},driverName:{stringValue:driver.name},depotSlug:{stringValue:depotSlug},depotName:{stringValue:geo.depotName||depotSlug},workDate:{stringValue:workDate},createdAt:{integerValue:String(Date.now())},locationLat:{doubleValue:latitude},locationLng:{doubleValue:longitude},locationAccuracy:{doubleValue:accuracy},distanceMetres:{integerValue:String(metres)},geofenceRadiusMetres:{integerValue:String(geo.radiusMetres)},locationVerified:{booleanValue:true},deviceIdHash:{stringValue:createHash("sha256").update(deviceId).digest("hex")}};
+ const saved=await fetch(base+"/ops_driver_sign_ons?documentId="+encodeURIComponent(documentId),{method:"POST",headers:{Authorization:"Bearer "+token,"Content-Type":"application/json"},body:JSON.stringify({fields})});
+ if(saved.status===409) return res.status(200).json({ok:true,alreadySignedOn:true,distanceMetres:metres});
+ if(!saved.ok) throw new Error("The sign-on record could not be saved. Please try again.");
+ return res.status(200).json({ok:true,alreadySignedOn:false,distanceMetres:metres});
  } catch(e) { return res.status(502).json({error:e instanceof Error?e.message:"Secure sign-on failed."}); }
 }

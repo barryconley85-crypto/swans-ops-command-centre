@@ -227,15 +227,19 @@ export function PublicDriverSignOn({ depot }: { depot: string }) {
   const [selected, setSelected] = useState("");
   const [pin, setPin] = useState("");
   const [done, setDone] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [alreadySignedOn, setAlreadySignedOn] = useState(false);
   const [error, setError] = useState("");
   const depotTitle = depotName(depot);
   useEffect(() => { if (!firebaseDb) return; getDocs(query(collection(firebaseDb, "ops_drivers"), where("active", "==", true))).then(snapshot => setDrivers(snapshot.docs.map(item => ({ _docId: item.id, ...item.data() })).filter((driver: any) => driver.depot === depot).sort((a: any, b: any) => a.name.localeCompare(b.name)))).catch(() => setError("The driver list could not be loaded.")); }, [depot]);
   const signOn = async () => {
+    if (submitting) return;
     const driver = drivers.find(item => item._docId === selected);
     if (!driver) return setError("Select your name to sign on.");
-    if (!/^\d{8}$/.test(pin)) return setError("Enter your personal 8-digit sign-on PIN.");
+    if (!/^\\d{8}$/.test(pin)) return setError("Enter your personal 8-digit sign-on PIN.");
     if (!navigator.geolocation) return setError("This phone does not support GPS location. Please tell the depot team.");
     setError("");
+    setSubmitting(true);
     navigator.geolocation.getCurrentPosition(async position => {
       try {
         const response = await fetch("/api/driver-sign-on", {
@@ -245,17 +249,20 @@ export function PublicDriverSignOn({ depot }: { depot: string }) {
         });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result.error || "Sign-on could not be verified. Please tell the depot team.");
+        setAlreadySignedOn(result.alreadySignedOn === true);
         setPin("");
         setDone(true);
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : "Sign-on could not be recorded. Please try again.");
+        setSubmitting(false);
       }
     }, reason => {
       setError(reason.code === 1 ? "Location permission is required. Allow location access in your phone settings and try again." : reason.code === 2 ? "Your phone could not determine its GPS location. Move outside and try again." : "GPS timed out. Please try again.");
+      setSubmitting(false);
     }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
   };
-  if (done) return <main className="flex min-h-screen items-center justify-center bg-[#F3F7FA] p-5"><div className="w-full max-w-md rounded-3xl border border-[#D8E7F0] bg-white p-8 text-center shadow-xl"><CheckCircle2 className="mx-auto h-14 w-14 text-[#3D8062]" /><h1 className="mt-5 text-2xl font-semibold text-[#102F46]">You are signed on</h1><p className="mt-2 text-sm text-[#5E7486]">{depotTitle} · {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p><p className="mt-5 text-xs text-[#8294A2]">You can close this page. The operations team can now see your sign-on.</p></div></main>;
-  return <main className="flex min-h-screen items-center justify-center bg-[#F3F7FA] p-5"><div className="w-full max-w-md rounded-3xl border border-[#D8E7F0] bg-white p-7 shadow-xl"><div className="flex items-center gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#E3F2F3] text-[#277F82]"><MapPin className="h-5 w-5" /></div><div><p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#70879A]">Swans Travel</p><h1 className="text-2xl font-semibold text-[#102F46]">Driver sign-on</h1></div></div><div className="mt-6 rounded-2xl bg-[#EEF5F9] p-4"><p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#70879A]">Depot</p><p className="mt-1 text-xl font-semibold text-[#173F56]">{depotTitle}</p></div><div className="mt-6 space-y-2"><Label htmlFor="driver">Select your name</Label><select id="driver" value={selected} onChange={event => setSelected(event.target.value)} className="h-12 w-full rounded-xl border border-[#C9D9E5] bg-white px-3 text-base"><option value="">Choose your name…</option>{drivers.map(driver => <option key={driver._docId} value={driver._docId}>{driver.name}</option>)}</select></div><div className="mt-4 space-y-2"><Label htmlFor="driver-pin">Your personal 8-digit PIN</Label><input id="driver-pin" type="password" inputMode="numeric" autoComplete="off" maxLength={8} value={pin} onChange={event => setPin(event.target.value.replace(/\D/g, "").slice(0, 8))} className="h-12 w-full rounded-xl border border-[#C9D9E5] bg-white px-3 text-base tracking-[0.25em]" placeholder="Enter your PIN" /></div>{error ? <p className="mt-4 rounded-xl bg-[#FFF0EE] p-3 text-xs text-[#A84237]">{error}</p> : null}<Button className="mt-6 h-12 w-full bg-[#167E8A] text-base hover:bg-[#126674]" onClick={() => void signOn()} disabled={!drivers.length}>Sign on now</Button><p className="mt-4 text-center text-[11px] leading-5 text-[#8294A2]">Enter your personal PIN. Your live GPS location is checked against this depot before sign-on is accepted.</p></div></main>;
+  if (done) return <main className="flex min-h-screen items-center justify-center bg-[#F3F7FA] p-5"><div className="w-full max-w-md rounded-3xl border border-[#D8E7F0] bg-white p-8 text-center shadow-xl"><CheckCircle2 className="mx-auto h-14 w-14 text-[#3D8062]" /><h1 className="mt-5 text-2xl font-semibold text-[#102F46]">{alreadySignedOn ? "You are already signed on" : "You are signed on"}</h1><p className="mt-2 text-sm text-[#5E7486]">{depotTitle} · {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p><p className="mt-5 text-xs text-[#8294A2]">{alreadySignedOn ? "Your existing sign-on was kept. No second record has been created." : "You can close this page. The operations team can now see your sign-on."}</p></div></main>;
+  return <main className="flex min-h-screen items-center justify-center bg-[#F3F7FA] p-5"><div className="w-full max-w-md rounded-3xl border border-[#D8E7F0] bg-white p-7 shadow-xl"><div className="flex items-center gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#E3F2F3] text-[#277F82]"><MapPin className="h-5 w-5" /></div><div><p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#70879A]">Swans Travel</p><h1 className="text-2xl font-semibold text-[#102F46]">Driver sign-on</h1></div></div><div className="mt-6 rounded-2xl bg-[#EEF5F9] p-4"><p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#70879A]">Depot</p><p className="mt-1 text-xl font-semibold text-[#173F56]">{depotTitle}</p></div><div className="mt-6 space-y-2"><Label htmlFor="driver">Select your name</Label><select id="driver" value={selected} onChange={event => setSelected(event.target.value)} className="h-12 w-full rounded-xl border border-[#C9D9E5] bg-white px-3 text-base"><option value="">Choose your name…</option>{drivers.map(driver => <option key={driver._docId} value={driver._docId}>{driver.name}</option>)}</select></div><div className="mt-4 space-y-2"><Label htmlFor="driver-pin">Your personal 8-digit PIN</Label><input id="driver-pin" type="password" inputMode="numeric" autoComplete="off" maxLength={8} value={pin} onChange={event => setPin(event.target.value.replace(/\D/g, "").slice(0, 8))} className="h-12 w-full rounded-xl border border-[#C9D9E5] bg-white px-3 text-base tracking-[0.25em]" placeholder="Enter your PIN" /></div>{error ? <p className="mt-4 rounded-xl bg-[#FFF0EE] p-3 text-xs text-[#A84237]">{error}</p> : null}<Button className="mt-6 h-12 w-full bg-[#167E8A] text-base hover:bg-[#126674]" onClick={() => void signOn()} disabled={!drivers.length || submitting}>{submitting ? "Checking location and signing on…" : "Sign on now"}</Button><p className="mt-4 text-center text-[11px] leading-5 text-[#8294A2]">Enter your personal PIN. Your live GPS location is checked against this depot before sign-on is accepted.</p></div></main>;
 }
 
 export { depots };
