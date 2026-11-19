@@ -177,9 +177,9 @@ export default function Tasks() {
   const { user } = useAuth();
   // Preserve the selected work date across page remounts and workspace refreshes.
   const initialDate = new URLSearchParams(window.location.search).get("date");
-  const [selectedDate, setSelectedDate] = useState(() => initialDate && /^\\d{4}-\\d{2}-\\d{2}$/.test(initialDate) ? initialDate : localDateKey());
+  const [selectedDate, setSelectedDate] = useState(() => initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate) ? initialDate : localDateKey());
   const selectTaskDate = (date: string) => {
-    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
     setSelectedDate(date);
     const url = new URL(window.location.href);
     url.searchParams.set("date", date);
