@@ -35,9 +35,30 @@ function DashboardPage({ children }: { children: React.ReactNode }) {
   return <DashboardLayout>{children}</DashboardLayout>;
 }
 
-function ComplianceRoute() {
-  return <DashboardPage><ComplianceCentre /></DashboardPage>;
-}
+// Keep route component identities stable. WorkspaceContext updates whenever a
+// Firestore collection changes, so Router can render frequently. Inline route
+// component functions are recreated on every render, which makes Wouter
+// remount the active page and discard unsaved form input.
+function HomeRoute() { return <DashboardPage><Home /></DashboardPage>; }
+function ExceptionsRoute() { return <DashboardPage><Exceptions /></DashboardPage>; }
+function MyShiftRoute() { return <DashboardPage><MyShift /></DashboardPage>; }
+function ShiftCheckRoute() { return <DashboardPage><ShiftCheck /></DashboardPage>; }
+function ProfileRoute() { return <DashboardPage><Profile /></DashboardPage>; }
+function ActivityRoute() { return <DashboardPage><ActivityHistory /></DashboardPage>; }
+function HelpRoute() { return <DashboardPage><HelpRequests /></DashboardPage>; }
+function TasksRoute() { return <DashboardPage><Tasks /></DashboardPage>; }
+function RotaRoute() { return <DashboardPage><Rota /></DashboardPage>; }
+function OnCallRoute() { return <DashboardPage><OnCallPortal /></DashboardPage>; }
+function ChatRoute() { return <DashboardPage><TeamChat /></DashboardPage>; }
+function HandoverRoute() { return <DashboardPage><Handovers /></DashboardPage>; }
+function IssuesRoute() { return <DashboardPage><Issues /></DashboardPage>; }
+function ComplaintsRoute() { return <DashboardPage><Complaints /></DashboardPage>; }
+function ReportsRoute() { return <DashboardPage><Reports /></DashboardPage>; }
+function PeopleRoute() { return <DashboardPage><People /></DashboardPage>; }
+function DriverSignOnRoute() { return <DashboardPage><DriverSignOn /></DashboardPage>; }
+function DriverAttendanceRoute() { return <DashboardPage><DriverAttendance /></DashboardPage>; }
+function ComplianceRoute() { return <DashboardPage><ComplianceCentre /></DashboardPage>; }
+function TrainingRoute() { return <DashboardPage><Training /></DashboardPage>; }
 
 function Router() {
   const { profile } = useWorkspace();
@@ -47,52 +68,42 @@ function Router() {
   // when the browser is already signed in as a restricted depot supervisor.
   if (location === "/vehicle-familiarisation") return <PublicVehicleFamiliarisation />;
   if (profile?.memberRole === "depot_supervisor") return <CheltenhamSupervisor />;
-  // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
       <Route path={"/cheltenham-supervisor"} component={CheltenhamSupervisor} />
-      <Route path={"/"} component={() => <DashboardPage><Home /></DashboardPage>} />
-      <Route path={"/exceptions"} component={() => <DashboardPage><Exceptions /></DashboardPage>} />
-      <Route path={"/my-shift"} component={() => <DashboardPage><MyShift /></DashboardPage>} />
-      <Route path={"/shift-check"} component={() => <DashboardPage><ShiftCheck /></DashboardPage>} />
-      <Route path={"/profile"} component={() => <DashboardPage><Profile /></DashboardPage>} />
-      <Route path={"/activity"} component={() => <DashboardPage><ActivityHistory /></DashboardPage>} />
-      <Route path={"/help"} component={() => <DashboardPage><HelpRequests /></DashboardPage>} />
-      <Route path={"/tasks"} component={() => <DashboardPage><Tasks /></DashboardPage>} />
-      <Route path={"/rota"} component={() => <DashboardPage><Rota /></DashboardPage>} />
-      <Route path={"/on-call"} component={() => <DashboardPage><OnCallPortal /></DashboardPage>} />
+      <Route path={"/"} component={HomeRoute} />
+      <Route path={"/exceptions"} component={ExceptionsRoute} />
+      <Route path={"/my-shift"} component={MyShiftRoute} />
+      <Route path={"/shift-check"} component={ShiftCheckRoute} />
+      <Route path={"/profile"} component={ProfileRoute} />
+      <Route path={"/activity"} component={ActivityRoute} />
+      <Route path={"/help"} component={HelpRoute} />
+      <Route path={"/tasks"} component={TasksRoute} />
+      <Route path={"/rota"} component={RotaRoute} />
+      <Route path={"/on-call"} component={OnCallRoute} />
       <Route path={"/quick-on-call"} component={QuickOnCall} />
       <Route path={"/driver-sign-on/:depot"} component={props => <PublicDriverSignOn depot={props.params.depot} />} />
-      <Route path={"/chat"} component={() => <DashboardPage><TeamChat /></DashboardPage>} />
-      <Route path={"/handover"} component={() => <DashboardPage><Handovers /></DashboardPage>} />
-      <Route path={"/issues"} component={() => <DashboardPage><Issues /></DashboardPage>} />
-      <Route path={"/complaints"} component={() => <DashboardPage><Complaints /></DashboardPage>} />
-      <Route path={"/reports"} component={() => <DashboardPage><Reports /></DashboardPage>} />
-      <Route path={"/people"} component={() => <DashboardPage><People /></DashboardPage>} />
-      <Route path={"/driver-sign-on"} component={() => <DashboardPage><DriverSignOn /></DashboardPage>} />
-      <Route path={"/driver-attendance"} component={() => <DashboardPage><DriverAttendance /></DashboardPage>} />
+      <Route path={"/chat"} component={ChatRoute} />
+      <Route path={"/handover"} component={HandoverRoute} />
+      <Route path={"/issues"} component={IssuesRoute} />
+      <Route path={"/complaints"} component={ComplaintsRoute} />
+      <Route path={"/reports"} component={ReportsRoute} />
+      <Route path={"/people"} component={PeopleRoute} />
+      <Route path={"/driver-sign-on"} component={DriverSignOnRoute} />
+      <Route path={"/driver-attendance"} component={DriverAttendanceRoute} />
       <Route path={"/compliance"} component={ComplianceRoute} />
       <Route path={"/vehicle-familiarisation"} component={PublicVehicleFamiliarisation} />
-      <Route path={"/training"} component={() => <DashboardPage><Training /></DashboardPage>} />
+      <Route path={"/training"} component={TrainingRoute} />
       <Route path={"/404"} component={NotFound} />
-      {/* Final fallback route */}
       <Route component={NotFound} />
     </Switch>
   );
 }
 
-// NOTE: About Theme
-// - First choose a default theme according to your design style (dark or light bg), than change color palette in index.css
-//   to keep consistent foreground/background color across components
-// - If you want to make theme switchable, pass `switchable` ThemeProvider and use `useTheme` hook
-
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider
-        defaultTheme="light"
-        // switchable
-      >
+      <ThemeProvider defaultTheme="light">
         <TooltipProvider>
           <Toaster />
           <Router />
