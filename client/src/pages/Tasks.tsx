@@ -81,31 +81,33 @@ function TaskDetail({ task, selectedDate, isManager = false, members = [] }: { t
   const assignmentMutation = trpc.operations.tasks.assign.useMutation({
     onSuccess: async (_result, variables) => {
       await utils.operations.tasks.list.invalidate({ date: selectedDate });
-      const previousOwnerId = task.assignedTeamMemberId ?? null;
-      const newOwnerId = variables.assignedTeamMemberId ?? null;
-      if (newOwnerId && newOwnerId !== previousOwnerId) {
-        const recipient = teamMembers.find((member: any) => Number(member.id) === Number(newOwnerId));
+      const assignedId = variables?.assignedTeamMemberId ?? null;
+      const previousId = task?.assignedTeamMemberId ?? null;
+      if (assignedId && assignedId !== previousId) {
+        const recipient = teamMembers.find((member: any) => Number(member.id) === Number(assignedId));
         if (!recipient?.email) {
           toast.warning("Task owner updated, but no email was sent because the assigned team member has no email address in the team directory.");
-        } else if (!authUser || !firebaseAuth?.currentUser) {
+          return;
+        }
+        if (!firebaseAuth?.currentUser) {
           toast.warning("Task owner updated, but the email alert could not be authenticated. Please sign in again.");
-        } else {
-          try {
-            const idToken = await firebaseAuth.currentUser.getIdToken();
-            const emailResponse = await fetch("/api/task-assignment-email", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", Authorization: "Bearer " + idToken },
-              body: JSON.stringify({ recipientEmail: recipient.email, taskTitle: task.title, detail: task.detail || "", dueAt: task.dueAt ?? null }),
-            });
-            const emailResult = await emailResponse.json().catch(() => ({}));
-            if (!emailResponse.ok || emailResult.emailStatus !== "sent") {
-              toast.warning("Task owner updated, but the email alert was not sent: " + (emailResult.error || "Email service unavailable."));
-            } else {
-              toast.success("Task owner updated and assignment email sent.");
-            }
-          } catch (error) {
-            toast.warning("Task owner updated, but the email alert failed: " + (error instanceof Error ? error.message : "Email service unavailable."));
+          return;
+        }
+        try {
+          const idToken = await firebaseAuth.currentUser.getIdToken();
+          const emailResponse = await fetch("/api/task-assignment-email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: "Bearer " + idToken },
+            body: JSON.stringify({ recipientEmail: recipient.email, taskTitle: task?.title || "Assigned task", detail: task?.detail || "", dueAt: task?.dueAt ?? null }),
+          });
+          const emailResult = await emailResponse.json().catch(() => ({}));
+          if (!emailResponse.ok || emailResult.emailStatus !== "sent") {
+            toast.warning("Task owner updated, but the email alert was not sent: " + (emailResult.error || "Email service unavailable."));
+          } else {
+            toast.success("Task owner updated and assignment email sent.");
           }
+        } catch (error) {
+          toast.warning("Task owner updated, but the email alert failed: " + (error instanceof Error ? error.message : "Email service unavailable."));
         }
       } else {
         toast.success("Task owner updated.");
