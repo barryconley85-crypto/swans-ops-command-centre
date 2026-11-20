@@ -22,7 +22,7 @@ type WorkspaceContextValue = {
   authUser: User | null; profile: Member | null; loading: boolean; error: Error | null; state: State; refresh: () => Promise<void>;
   registerDemand: (id: string, collections: WorkspaceCollection[], filters?: WorkspaceFilters) => void; unregisterDemand: (id: string) => void;
   signIn: (email: string, password: string) => Promise<void>; signUp: (name: string, email: string, password: string) => Promise<void>; resetPassword: (email: string) => Promise<void>; logout: () => Promise<void>;
-  add: (collectionName: string, value: Record<string, unknown>) => Promise<any>; patch: (collectionName: string, id: string, value: Record<string, unknown>) => Promise<void>; remove: (collectionName: string, id: string) => Promise<void>; addTaskResource: (input: TaskResourceInput) => Promise<TaskResource>; removeTaskResource: (resource: TaskResource) => Promise<void>; createTeamMember: (value: Record<string, unknown>) => Promise<any>; cancelTeamInvitation: (email: string) => Promise<void>;
+  add: (collectionName: string, value: Record<string, unknown>) => Promise<any>; sendTaskAssignmentEmail: (task: Record<string, unknown>) => Promise<{ sent: boolean; error?: string }>; patch: (collectionName: string, id: string, value: Record<string, unknown>) => Promise<void>; remove: (collectionName: string, id: string) => Promise<void>; addTaskResource: (input: TaskResourceInput) => Promise<TaskResource>; removeTaskResource: (resource: TaskResource) => Promise<void>; createTeamMember: (value: Record<string, unknown>) => Promise<any>; cancelTeamInvitation: (email: string) => Promise<void>;
 };
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
@@ -105,15 +105,23 @@ async function ensureMemberProfile(database: NonNullable<typeof firebaseDb>, use
   return memberProfile;
 }
 
-async function queueTaskAssignmentEmail(authUser: User | null, task: Record<string, unknown>) {
-  const recipientEmail = typeof task.assignedEmail === "string" ? task.assignedEmail : "";
+async function queueTaskAssignmentEmail(authUser: User | null, task: Record<string, unknown>): Promise<{ sent: boolean; error?: string }> {
+  const recipientEmail = typeof task.assignedEmail === "string" ? task.assignedEmail.trim() : "";
   const taskTitle = typeof task.title === "string" ? task.title : "";
-  if (!authUser || !recipientEmail || !taskTitle) return;
+  if (!authUser) return { sent: false, error: "You are not signed in to the email service." };
+  if (!recipientEmail || !taskTitle) return { sent: false, error: "The task is missing its assigned email address or title." };
   try {
     const idToken = await authUser.getIdToken();
-    await fetch("/api/task-assignment-email", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ recipientEmail, taskTitle, detail: typeof task.detail === "string" ? task.detail : "", dueAt: typeof task.dueAt === "number" ? task.dueAt : null }) });
-  } catch {
-    // In-app notifications remain available even when the optional external email relay is unavailable.
+    const response = await fetch("/api/task-assignment-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+      body: JSON.stringify({ recipientEmail, taskTitle, detail: typeof task.detail === "string" ? task.detail : "", dueAt: typeof task.dueAt === "number" ? task.dueAt : null }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result.emailStatus !== "sent") return { sent: false, error: result.error || `Email service returned ${response.status}.` };
+    return { sent: true };
+  } catch (error) {
+    return { sent: false, error: error instanceof Error ? error.message : "The email service could not be reached." };
   }
 }
 
@@ -300,6 +308,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const resetPassword = useCallback(async (email: string) => { if (!firebaseAuth) throw new Error("Firebase is not configured yet."); await sendPasswordResetEmail(firebaseAuth, email.trim().toLowerCase()); }, []);
   const logout = useCallback(async () => { if (firebaseAuth) await signOut(firebaseAuth); }, []);
   const writeAudit = useCallback((action: "created" | "updated" | "deleted", collectionName: string, targetId: string, value: Record<string, unknown> = {}) => { if (!firebaseDb || !authUser || !profile || !activitySummary || !collectionMap[collectionName]) return; void addDoc(collection(firebaseDb, "ops_audit_logs"), { actorUserId: authUser.uid, actorName: profile.displayName, actorInitials: profile.initials, actorColour: profile.colour, action, targetType: collectionName, targetId, summary: activitySummary(action, collectionName, value), createdAt: now() }); }, [authUser, profile]);
+  const sendTaskAssignmentEmail = useCallback((task: Record<string, unknown>) => queueTaskAssignmentEmail(authUser, task), [authUser]);
   const add = useCallback(async (collectionName: string, value: Record<string, unknown>) => { if (!firebaseDb) throw new Error("Firebase is not configured yet."); const payload = omitUndefinedFields({ ...value, createdAt: now(), updatedAt: now() }); const result = await addDoc(collection(firebaseDb, collectionMap[collectionName]), payload); if (collectionName !== "auditLogs" && collectionName !== "notifications") writeAudit("created", collectionName, result.id, payload); if (collectionName === "tasks" && typeof payload.assignedEmail === "string" && payload.assignedEmail) { try { const createdAt = now(); await addDoc(collection(firebaseDb, collectionMap.notifications), buildTaskAssignmentNotification({ id: typeof payload.id === "number" ? payload.id : null, assignedEmail: payload.assignedEmail, title: String(payload.title || "A new task") }, numericId(), createdAt)); } finally { void queueTaskAssignmentEmail(authUser, payload); } } return { _docId: result.id, ...payload }; }, [authUser, writeAudit]);
   const patch = useCallback(async (collectionName: string, id: string, value: Record<string, unknown>) => { if (!firebaseDb) throw new Error("Firebase is not configured yet."); const changes = omitUndefinedFields({ ...value, updatedAt: now() }); await updateDoc(doc(firebaseDb, collectionMap[collectionName], id), changes); if (collectionName !== "auditLogs" && collectionName !== "notifications" && collectionName !== "presence") writeAudit("updated", collectionName, id, changes); if (collectionName === "members" && id === authUser?.uid) setProfile(current => current ? { ...current, ...changes } as Member : current); }, [authUser, writeAudit]);
   const remove = useCallback(async (collectionName: string, id: string) => { if (!firebaseDb) throw new Error("Firebase is not configured yet."); await deleteDoc(doc(firebaseDb, collectionMap[collectionName], id)); if (collectionName !== "auditLogs" && collectionName !== "notifications") writeAudit("deleted", collectionName, id); }, [writeAudit]);
@@ -321,7 +330,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [profile, writeAudit]);
   const createTeamMember = useCallback(async (value: Record<string, unknown>) => { if (!firebaseDb || !profile || profile.memberRole !== "lead") throw new Error("Only the operations lead can add a team member."); const email = String(value.email || "").trim().toLowerCase(); if (!email.endsWith("@swanstravel.com")) throw new Error("Use the colleague’s Swans Travel work email."); const memberId = numericId(); const invitation: Member & { createdAt: number; createdBy: string; depotSlug?: string } = { id: memberId, userId: "", email, displayName: String(value.displayName), jobTitle: String(value.jobTitle), memberRole: value.memberRole as Member["memberRole"], initials: String(value.initials), colour: String(value.colour), status: "invited", ...(value.depotSlug ? { depotSlug: String(value.depotSlug) } : {}), createdAt: now(), createdBy: profile.userId }; await setDoc(doc(firebaseDb, "ops_invites", email), invitation); writeAudit("created", "members", email, invitation); setInvitations(current => [...current.filter(member => member.email !== email), invitation]); return invitation; }, [profile, writeAudit]);
   const cancelTeamInvitation = useCallback(async (email: string) => { if (!firebaseDb || profile?.memberRole !== "lead") throw new Error("Only the operations lead can cancel an invitation."); await deleteDoc(doc(firebaseDb, "ops_invites", email)); writeAudit("deleted", "members", email, { email }); setInvitations(current => current.filter(member => member.email !== email)); }, [profile, writeAudit]);
-  const value = useMemo(() => ({ authUser, profile, loading, error, state: workspaceState, refresh, registerDemand, unregisterDemand, signIn, signUp, resetPassword, logout, add, patch, remove, addTaskResource, removeTaskResource, createTeamMember, cancelTeamInvitation }), [authUser, profile, loading, error, workspaceState, refresh, registerDemand, unregisterDemand, signIn, signUp, resetPassword, logout, add, patch, remove, addTaskResource, removeTaskResource, createTeamMember, cancelTeamInvitation]); return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
+  const value = useMemo(() => ({ authUser, profile, loading, error, state: workspaceState, refresh, registerDemand, unregisterDemand, signIn, signUp, resetPassword, logout, add, sendTaskAssignmentEmail, patch, remove, addTaskResource, removeTaskResource, createTeamMember, cancelTeamInvitation }), [authUser, profile, loading, error, workspaceState, refresh, registerDemand, unregisterDemand, signIn, signUp, resetPassword, logout, add, patch, remove, addTaskResource, removeTaskResource, createTeamMember, cancelTeamInvitation]); return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }
 export function useWorkspace(collections: WorkspaceCollection[] = [], filters: WorkspaceFilters = {}) { const context = useContext(WorkspaceContext); const demandId = useId(); const collectionsSignature = Array.from(new Set(collections)).sort().join(","); const filtersSignature = JSON.stringify(filters); const registerDemand = context?.registerDemand; const unregisterDemand = context?.unregisterDemand; useEffect(() => { const requested = collectionsSignature ? collectionsSignature.split(",") as WorkspaceCollection[] : []; registerDemand?.(demandId, requested, JSON.parse(filtersSignature)); return () => unregisterDemand?.(demandId); }, [registerDemand, unregisterDemand, demandId, collectionsSignature, filtersSignature]); if (!context) throw new Error("WorkspaceProvider is missing."); return context; }
 export function requireLead(profile: Member | null) { if (!profile || profile.memberRole !== "lead") throw new Error("Only the operations lead can perform that action."); }
