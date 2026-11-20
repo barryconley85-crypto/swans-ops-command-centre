@@ -99,6 +99,23 @@ export const operationsRouter = router({
         }),
       )
       .mutation(({ ctx, input }) => db.createDailyTask({ ...input, createdByUserId: ctx.user.id })),
+    assign: managerProcedure
+      .input(z.object({
+        taskId: z.number().int().positive(),
+        assignedTeamMemberId: z.number().int().positive().nullable(),
+      }))
+      .mutation(({ ctx, input }) => db.assignDailyTask({ ...input, actorUserId: ctx.user.id })),
+    edit: managerProcedure
+      .input(z.object({
+        taskId: z.number().int().positive(),
+        workDate: dateInput,
+        title: z.string().min(3).max(240),
+        detail: z.string().max(2000).nullable(),
+        priority,
+        dueAt: z.number().int().positive().nullable(),
+        assignedTeamMemberId: z.number().int().positive().nullable(),
+      }))
+      .mutation(({ ctx, input }) => db.editDailyTask({ ...input, actorUserId: ctx.user.id })),
     updateStatus: teamMemberProcedure
       .input(
         z.object({
