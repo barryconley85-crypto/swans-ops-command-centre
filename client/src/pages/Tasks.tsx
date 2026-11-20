@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ColleagueMarker } from "@/components/ColleagueMarker";
 import { WeeklyTaskPlanner, type PlannerTask } from "@/components/WeeklyTaskPlanner";
 import { trpc } from "@/lib/trpc";
+import { firebaseAuth } from "@/lib/firebase";
 import { addDaysToDateKey, compactTime, dateTitle, labelForStatus, localDateKey, priorityStyle, statusStyle } from "@/lib/operations";
 import { format } from "date-fns";
 import { Check, ChevronLeft, ChevronRight, CircleAlert, ClipboardCheck, Clock3, ExternalLink, FileText, Link, MessageSquareText, Pencil, Plus, RotateCcw, UsersRound, Save, Sparkles, Trash2, X } from "lucide-react";
@@ -49,7 +50,7 @@ function TaskStatusBadge({ status }: { status: TaskRow["status"] }) {
 
 function TaskDetail({ task, selectedDate, isManager = false, members = [] }: { task: TaskRow; selectedDate: string; isManager?: boolean; members?: any[] }) {
   const utils = trpc.useUtils();
-  const { state, addTaskResource, removeTaskResource } = useWorkspace();
+  const { state, authUser, addTaskResource, removeTaskResource } = useWorkspace();
   const { user: currentUser } = useAuth();
   const canManageTasks = isManager || Boolean(currentUser?.canManageOperations);
   const [comment, setComment] = useState("");
@@ -86,7 +87,39 @@ function TaskDetail({ task, selectedDate, isManager = false, members = [] }: { t
     onError: error => toast.error(error.message),
   });
   const editMutation = trpc.operations.tasks.edit.useMutation({
-    onSuccess: async () => { await utils.operations.tasks.list.invalidate({ date: selectedDate }); setEditing(false); toast.success("Task updated."); },
+    onSuccess: async (_result, variables) => {
+      await utils.operations.tasks.list.invalidate({ date: selectedDate });
+      setEditing(false);
+      const previousOwnerId = task.assignedTeamMemberId ?? null;
+      const newOwnerId = variables.assignedTeamMemberId ?? null;
+      if (newOwnerId && newOwnerId !== previousOwnerId) {
+        const recipient = teamMembers.find((member: any) => Number(member.id) === Number(newOwnerId));
+        if (!recipient?.email) {
+          toast.warning("Task updated, but no email was sent because the assigned team member has no email address in the team directory.");
+        } else if (!authUser || !firebaseAuth?.currentUser) {
+          toast.warning("Task updated, but the email alert could not be authenticated. Please sign in again.");
+        } else {
+          try {
+            const idToken = await firebaseAuth.currentUser.getIdToken();
+            const emailResponse = await fetch("/api/task-assignment-email", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: "Bearer " + idToken },
+              body: JSON.stringify({ recipientEmail: recipient.email, taskTitle: variables.title, detail: variables.detail || "", dueAt: variables.dueAt ?? null }),
+            });
+            const emailResult = await emailResponse.json().catch(() => ({}));
+            if (!emailResponse.ok || emailResult.emailStatus !== "sent") {
+              toast.warning("Task updated, but the email alert was not sent: " + (emailResult.error || "Email service unavailable."));
+            } else {
+              toast.success("Task updated and assignment email sent.");
+            }
+          } catch (error) {
+            toast.warning("Task updated, but the email alert failed: " + (error instanceof Error ? error.message : "Email service unavailable."));
+          }
+        }
+      } else {
+        toast.success("Task updated.");
+      }
+    },
     onError: error => toast.error(error.message),
   });
   const deleteMutation = trpc.operations.tasks.remove.useMutation({
