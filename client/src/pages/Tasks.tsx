@@ -81,8 +81,7 @@ function TaskDetail({ task, selectedDate, isManager = false, members = [] }: { t
     onSuccess: async (_result, variables) => {
       await utils.operations.tasks.list.invalidate({ date: selectedDate });
       const assignedId = variables?.assignedTeamMemberId ?? null;
-      const previousId = task?.assignedTeamMemberId ?? null;
-      if (assignedId && assignedId !== previousId) {
+      if (assignedId) {
         const recipient = teamMembers.find((member: any) => Number(member.id) === Number(assignedId));
         if (!recipient?.email) {
           toast.warning("Task owner updated, but the team directory has no email address for this person.");
