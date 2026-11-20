@@ -155,6 +155,61 @@ export async function createDailyTask(input: {
   return { id: taskId };
 }
 
+export async function assignDailyTask(input: { taskId: number; assignedTeamMemberId: number | null; actorUserId: number }) {
+  const database = await requireDb();
+  const existing = await database.select({ id: dailyTasks.id }).from(dailyTasks).where(eq(dailyTasks.id, input.taskId)).limit(1);
+  if (!existing.length) throw new Error("This task could not be found. Refresh the task board and try again.");
+  let ownerName = "Unassigned";
+  if (input.assignedTeamMemberId !== null) {
+    const member = await database.select({ id: teamMembers.id, displayName: teamMembers.displayName }).from(teamMembers).where(eq(teamMembers.id, input.assignedTeamMemberId)).limit(1);
+    if (!member.length) throw new Error("The selected team member could not be found.");
+    ownerName = member[0].displayName;
+  }
+  await database.update(dailyTasks).set({ assignedTeamMemberId: input.assignedTeamMemberId }).where(eq(dailyTasks.id, input.taskId));
+  const saved = await database.select({ assignedTeamMemberId: dailyTasks.assignedTeamMemberId }).from(dailyTasks).where(eq(dailyTasks.id, input.taskId)).limit(1);
+  if (!saved.length || saved[0].assignedTeamMemberId !== input.assignedTeamMemberId) {
+    throw new Error("The task owner was not saved. Please try again.");
+  }
+  await database.insert(taskActivity).values({
+    taskId: input.taskId,
+    action: "commented",
+    body: input.assignedTeamMemberId === null ? "Task unassigned." : `Task assigned to ${ownerName}.`,
+    actorUserId: input.actorUserId,
+  });
+  return { success: true, taskId: input.taskId, assignedTeamMemberId: input.assignedTeamMemberId };
+}
+
+export async function editDailyTask(input: {
+  taskId: number; workDate: string; title: string; detail: string | null;
+  priority: "low" | "normal" | "high" | "critical"; dueAt: number | null;
+  assignedTeamMemberId: number | null; actorUserId: number;
+}) {
+  const database = await requireDb();
+  const existing = await database.select({ id: dailyTasks.id }).from(dailyTasks).where(eq(dailyTasks.id, input.taskId)).limit(1);
+  if (!existing.length) throw new Error("This task could not be found. Refresh the task board and try again.");
+  if (input.assignedTeamMemberId !== null) {
+    const member = await database.select({ id: teamMembers.id }).from(teamMembers).where(eq(teamMembers.id, input.assignedTeamMemberId)).limit(1);
+    if (!member.length) throw new Error("The selected task owner could not be found.");
+  }
+  await database.update(dailyTasks).set({
+    workDate: input.workDate,
+    title: input.title,
+    detail: input.detail,
+    priority: input.priority,
+    dueAt: input.dueAt,
+    assignedTeamMemberId: input.assignedTeamMemberId,
+  }).where(eq(dailyTasks.id, input.taskId));
+  const saved = await database.select({ id: dailyTasks.id, title: dailyTasks.title }).from(dailyTasks).where(eq(dailyTasks.id, input.taskId)).limit(1);
+  if (!saved.length || saved[0].title !== input.title) throw new Error("The task changes were not saved. Please try again.");
+  await database.insert(taskActivity).values({
+    taskId: input.taskId,
+    action: "commented",
+    body: "Task details updated.",
+    actorUserId: input.actorUserId,
+  });
+  return { success: true, taskId: input.taskId };
+}
+
 export async function updateDailyTaskStatus(input: {
   taskId: number; status: "pending" | "in_progress" | "blocked" | "complete"; actorTeamMemberId?: number; actorUserId: number; note?: string;
 }) {
