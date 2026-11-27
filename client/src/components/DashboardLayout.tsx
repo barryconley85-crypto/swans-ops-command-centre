@@ -352,9 +352,10 @@ function NotificationCentre() {
   useEffect(() => {
     if (notifications.isLoading) return;
     const fresh = hydrated.current ? (notifications.data || []).filter((item: any) => !item.readAt && !seenIds.current.has(item.id)) : [];
-    fresh.forEach((item: any) => toast(item.title, { description: item.body, duration: 5000 }));
-    if (fresh.length) playAlertChime();
-    if (fresh.length && desktopEnabled && document.visibilityState !== "visible") {
+    // Ignore bulk backfill/initial snapshot batches to prevent hundreds of pop-ups on sign-in.
+    if (fresh.length > 0 && fresh.length <= 3) fresh.forEach((item: any) => toast(item.title, { description: item.body, duration: 5000 }));
+    if (fresh.length > 0 && fresh.length <= 3) playAlertChime();
+    if (fresh.length > 0 && fresh.length <= 3 && desktopEnabled && document.visibilityState !== "visible") {
       fresh.forEach((item: any) => {
         const desktopAlert = new Notification(item.title, { body: item.body, icon: "/swans-travel-logo.png", tag: `ops-alert-${item.id}` });
         desktopAlert.onclick = () => { window.focus(); desktopAlert.close(); };
