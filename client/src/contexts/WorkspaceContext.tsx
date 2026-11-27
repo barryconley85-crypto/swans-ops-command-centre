@@ -1,7 +1,7 @@
 import { firebaseAuth, firebaseConfigured, firebaseDb } from "@/lib/firebase";
 import { omitUndefinedFields } from "@/lib/firestorePayload";
 import { buildTaskAssignmentNotification } from "@/lib/collaboration";
-import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, query, setDoc, updateDoc, where } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, setDoc, updateDoc, where } from "firebase/firestore";
 import { createUserWithEmailAndPassword, deleteUser, onAuthStateChanged, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signOut, type User } from "firebase/auth";
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { activitySummary } from "@/lib/auditHistory";
@@ -158,7 +158,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       const { keys, filter } = group;
       const baseCollection = collection(database, name);
       const source = name === "ops_notifications"
-        ? query(baseCollection, where("recipientEmail", "==", profile?.email || authUser.email || ""))
+        ? query(baseCollection, where("recipientEmail", "==", profile?.email || authUser.email || ""), orderBy("createdAt", "desc"), limit(30))
         : filter?.dates
           ? query(baseCollection, where("workDate", "in", filter.dates))
           : filter?.from && filter.through
@@ -234,7 +234,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       }
       const baseCollection = collection(database, name);
       const source = name === "ops_notifications"
-        ? query(baseCollection, where("recipientEmail", "==", profile.email))
+        ? query(baseCollection, where("recipientEmail", "==", profile.email), orderBy("createdAt", "desc"), limit(30))
         : filter?.dates
           ? query(baseCollection, where("workDate", "in", filter.dates))
           : filter?.from && filter.through
